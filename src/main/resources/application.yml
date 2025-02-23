@@ -2,8 +2,17 @@ spring:
   application:
     name: Mall
   datasource:
-    hikari:
-      username: root
-      password: 123456
-      driver-class-name: com.mysql.cj.jdbc.Driver
-      jdbc-url: jdbc:mysql://localhost:3306/mall?useSSL=false&serverTimezone=UTC
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/mall?useSSL=false&serverTimezone=UTC
+    username: root
+    password: 123456
+
+logging:
+  level:
+    org.springframework.web: DEBUG
+    com.xh.mall.mapper: TRACE
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  configuration:
+    mapUnderscoreToCamelCase: true

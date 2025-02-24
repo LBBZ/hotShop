@@ -4,6 +4,7 @@ import com.github.pagehelper.Page;
 import com.github.pagehelper.PageInfo;
 import com.xh.mall.entity.Product;
 import com.xh.mall.service.ProductService;
+import com.xh.mall.util.StoredProcedure;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -15,6 +16,8 @@ import java.util.List;
 public class ProductController {
     @Autowired
     private ProductService productService;
+    @Autowired
+    private StoredProcedure storedProcedure;
 
     @PostMapping("/add")
     public ResponseEntity<String> addProduct(@RequestBody Product product) {
@@ -35,6 +38,7 @@ public class ProductController {
     @DeleteMapping("/{id}")
     public ResponseEntity<String> deleteProduct(@PathVariable Long id) {
         productService.deleteProduct(id);
+        storedProcedure.resetAutoIncrement("product");
         return ResponseEntity.ok("商品删除成功");
     }
 

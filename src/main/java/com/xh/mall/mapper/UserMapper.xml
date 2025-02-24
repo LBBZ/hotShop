@@ -3,12 +3,24 @@
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.xh.mall.mapper.UserMapper">
+
     <insert id="insert" parameterType="com.xh.mall.entity.User">
         INSERT INTO user (username, password, email)
         VALUES (#{username}, #{password}, #{email})
     </insert>
 
-    <select id="findByUsername" resultType="com.xh.mall.entity.User">
+    <update id="update" parameterType="com.xh.mall.entity.User">
+        UPDATE user
+        SET username = #{username}, password = #{password}, email = #{email}
+        WHERE id = #{id}
+    </update>
+
+    <delete id="delete">
+        DELETE FROM user WHERE id = #{id}
+    </delete>
+
+    <select id="selectByUsername" resultType="com.xh.mall.entity.User">
         SELECT * FROM user WHERE username = #{username}
     </select>
+
 </mapper>

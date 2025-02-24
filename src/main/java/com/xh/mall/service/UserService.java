@@ -15,6 +15,6 @@ public class UserService {
     }
 
     public User getUserByUsername(String username) {
-        return userMapper.findByUsername(username);
+        return userMapper.selectByUsername(username);
     }
 }

@@ -1,6 +1,5 @@
 package com.xh.mall.controller;
 
-import com.github.pagehelper.Page;
 import com.github.pagehelper.PageInfo;
 import com.xh.mall.entity.Product;
 import com.xh.mall.service.ProductService;
@@ -56,7 +55,7 @@ public class ProductController {
         return ResponseEntity.ok(productService.getProductByPage(pageNum, pageSize, category));
     }
 
-    @GetMapping
+    @GetMapping("/all")
     public ResponseEntity<List<Product>> getAllProducts() {
         return ResponseEntity.ok(productService.getAllProducts());
     }

@@ -7,9 +7,10 @@ import java.util.List;
 
 @Mapper
 public interface ProductMapper {
-    void insert(Product product);
-    void update(Product product);
-    void delete(Long id);
+    int insert(Product product);
+    int update(Product product);
+    int reduceStock(Long productId, Integer quantity);
+    int delete(Long id);
     Product selectById(Long id);
     List<Product> selectAll();
     List<Product> selectByCategory(String category);

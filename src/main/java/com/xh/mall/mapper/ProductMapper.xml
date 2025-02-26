@@ -3,17 +3,21 @@
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.xh.mall.mapper.ProductMapper">
-    <insert id="insert" parameterType="com.xh.mall.entity.Product">
+    <insert id="insert" parameterType="com.xh.mall.entity.Product"
+            useGeneratedKeys="true" keyProperty="id">
         INSERT INTO product (name, price, stock, category, description)
         VALUES (#{name}, #{price}, #{stock}, #{category}, #{description})
     </insert>
-
     <update id="update" parameterType="com.xh.mall.entity.Product">
         UPDATE product
         SET name = #{name}, price = #{price}, stock = #{stock}, category = #{category}, description = #{description}
         WHERE id = #{id}
     </update>
-
+    <update id="reduceStock" parameterType="com.xh.mall.entity.Product">
+        UPDATE product
+        SET stock = stock - #{quantity}
+        WHERE id = #{productId} AND stock >= #{quantity}
+    </update>
     <delete id="delete">
         DELETE FROM product WHERE id = #{id}
     </delete>
@@ -21,12 +25,11 @@
     <select id="selectById" resultType="com.xh.mall.entity.Product">
         SELECT * FROM product WHERE id = #{id}
     </select>
-
     <select id="selectAll" resultType="com.xh.mall.entity.Product">
         SELECT * FROM product
     </select>
-
     <select id="selectByCategory" resultType="com.xh.mall.entity.Product">
         SELECT * FROM product WHERE category = #{category}
     </select>
+    
 </mapper>

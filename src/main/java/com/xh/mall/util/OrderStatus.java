@@ -1,5 +1,8 @@
 package com.xh.mall.util;
 
+import lombok.Getter;
+
+@Getter
 public enum OrderStatus {
     PENDING("待支付"),
     PAID("已支付"),
@@ -13,7 +16,4 @@ public enum OrderStatus {
         this.value = value;
     }
 
-    public String getValue() {
-        return value;
-    }
 }

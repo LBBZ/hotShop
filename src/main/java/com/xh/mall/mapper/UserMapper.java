@@ -1,6 +1,5 @@
 package com.xh.mall.mapper;
 
-import com.xh.mall.entity.Product;
 import com.xh.mall.entity.User;
 import org.apache.ibatis.annotations.Mapper;
 

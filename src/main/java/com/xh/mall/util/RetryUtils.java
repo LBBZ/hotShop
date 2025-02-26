@@ -40,7 +40,7 @@ public class RetryUtils {
     }
 
     @FunctionalInterface
-    public interface OrderOperation {
+    public interface OrderOperation {//此处报错是mybatis的bug,不必理会
         boolean attempt() throws InventoryShortageException; // 方法名改为 attempt
     }
 }

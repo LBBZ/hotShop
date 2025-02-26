@@ -1,7 +1,6 @@
 package com.xh.mall;
 
 import com.xh.mall.entity.Order;
-import com.xh.mall.entity.OrderItem;
 import com.xh.mall.entity.Product;
 import com.xh.mall.mapper.OrderMapper;
 import com.xh.mall.mapper.ProductMapper;
@@ -11,10 +10,6 @@ import com.xh.mall.util.OrderStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-
-import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.List;
 
 import static com.xh.mall.util.test.buildTestOrder.buildTestOrder;
 import static org.junit.jupiter.api.Assertions.assertNotNull;

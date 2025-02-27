@@ -1,4 +1,4 @@
-package com.xh.mall.util;
+package com.xh.mall.mapper;
 
 import org.apache.ibatis.annotations.Mapper;
 

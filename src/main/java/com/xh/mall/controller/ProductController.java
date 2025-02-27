@@ -3,7 +3,7 @@ package com.xh.mall.controller;
 import com.github.pagehelper.PageInfo;
 import com.xh.mall.entity.Product;
 import com.xh.mall.service.ProductService;
-import com.xh.mall.util.StoredProcedure;
+import com.xh.mall.mapper.StoredProcedure;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;

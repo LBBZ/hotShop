@@ -2,7 +2,7 @@
 <!DOCTYPE mapper
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.xh.mall.util.StoredProcedure">
+<mapper namespace="com.xh.mall.mapper.StoredProcedure">
 
     <select id="resetAutoIncrement" statementType="CALLABLE">
         {CALL delete_and_reset(#{tableName, jdbcType=VARCHAR})}

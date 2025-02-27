@@ -66,9 +66,6 @@ public class OrderService {
         return true;
     }
 
-    /**
-     * TODO: 待测试商品重试问题
-     */
     // 外层调用入口
     public String createOrder(Order order) {
         RetryUtils.executeWithRetry(

@@ -17,8 +17,12 @@ public interface OrderMapper {
     Order selectOrderById(String orderId);
     // 分页查询用户订单
     List<Order> selectOrdersByUserId(@Param("userId") Long userId,
-                                     @Param("offset") int offset,
-                                     @Param("limit") int limit);
+                                     @Param("orderOffset") int orderOffset,
+                                     @Param("orderLimit") int orderLimit,
+                                     @Param("itemOffset") int itemOffset,
+                                     @Param("itemLimit") int itemLimit
+
+    );
 
     int insertOrderItem(OrderItem item);
     @Options(useGeneratedKeys = true, keyProperty = "id")

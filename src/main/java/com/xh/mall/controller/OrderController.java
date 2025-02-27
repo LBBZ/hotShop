@@ -29,9 +29,11 @@ public class OrderController {
     @GetMapping("/user/{userId}")
     public ResponseEntity<List<Order>> getOrdersByUserId(
             @PathVariable Long userId,
-            @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "10") int size
+            @RequestParam(defaultValue = "1") int orderPage,
+            @RequestParam(defaultValue = "10") int orderPageSize,
+            @RequestParam(defaultValue = "1") int itemPage,
+            @RequestParam(defaultValue = "3") int itemPageSize
     ) {
-        return ResponseEntity.ok(orderService.getOrdersByUserId(userId, page, size));
+        return ResponseEntity.ok(orderService.getOrdersByUserId(userId, orderPage, orderPageSize, itemPage, itemPageSize));
     }
 }

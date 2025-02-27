@@ -11,11 +11,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
-import static com.xh.mall.util.test.buildTestOrder.buildTestOrder;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
-
 @SpringBootTest
 class MallApplicationTests {
 
@@ -41,17 +36,5 @@ class MallApplicationTests {
         order2.setStatus(OrderStatus.CANCELED);
         orderMapper.updateOrder(order2);
     }
-
-/*    @Test
-    void testRetryLogic() {
-        Order order = buildTestOrder();
-        // 模拟库存冲突（第一次失败，第二次成功）
-        when(productMapper.reduceStock(any(), any()))
-                .thenReturn(0)  // 第一次返回 0（失败）
-                .thenReturn(1); // 第二次返回 1（成功）
-
-        String orderId = orderService.createOrder(order);
-        assertNotNull(orderId);
-    }*/
 
 }

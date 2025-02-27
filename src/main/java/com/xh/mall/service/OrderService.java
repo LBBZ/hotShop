@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
@@ -21,10 +22,14 @@ import java.util.UUID;
 @Transactional
 public class OrderService {
 
+    private final OrderMapper orderMapper;
+    private final ProductMapper productMapper;
+
     @Autowired
-    OrderMapper orderMapper;
-    @Autowired
-    ProductMapper productMapper;
+    public OrderService(OrderMapper orderMapper, ProductMapper productMapper) {
+        this.orderMapper = orderMapper;
+        this.productMapper = productMapper;
+    }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean tryCreateOrder(Order order) {
@@ -61,6 +66,9 @@ public class OrderService {
         return true;
     }
 
+    /**
+     * TODO: 待测试商品重试问题
+     */
     // 外层调用入口
     public String createOrder(Order order) {
         RetryUtils.executeWithRetry(
@@ -75,9 +83,40 @@ public class OrderService {
         return orderMapper.selectOrderById(orderId);
     }
 
-    public List<Order> getOrdersByUserId(Long userId, int pageNum, int pageSize) {
-        int offset = (pageNum - 1) * pageSize;
-        return orderMapper.selectOrdersByUserId(userId, offset, pageSize);
+    /**
+     * 分页查询用户的订单及每个订单的分页订单项
+     * @param userId 用户ID
+     * @param orderPage 订单页码（从1开始）
+     * @param orderPageSize 每页订单数量
+     * @param itemPage 订单项页码（从1开始）
+     * @param itemPageSize 每页订单项数量
+     * @return 分页后的订单列表（每个订单包含分页的订单项）
+     */
+    public List<Order> getOrdersByUserId(Long userId,
+                                         int orderPage,
+                                         int orderPageSize,
+                                         int itemPage,
+                                         int itemPageSize) {
+        // 1. 计算分页偏移量
+        int orderOffset = (orderPage - 1) * orderPageSize;
+        int itemOffset = (itemPage - 1) * itemPageSize;
+
+        // 2. 调用Mapper查询数据
+        List<Order> orders = orderMapper.selectOrdersByUserId(
+                userId,
+                orderOffset,
+                orderPageSize,
+                itemOffset,
+                itemPageSize
+        );
+
+        // 3. 处理可能的空结果
+        if (orders == null) {
+            return Collections.emptyList();
+        }
+
+        // 4. 返回分页结果
+        return orders;
     }
 
 }

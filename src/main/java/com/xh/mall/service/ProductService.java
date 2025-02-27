@@ -11,8 +11,12 @@ import java.util.List;
 
 @Service
 public class ProductService {
+    private final ProductMapper productMapper;
+
     @Autowired
-    private ProductMapper productMapper;
+    public ProductService(ProductMapper productMapper) {
+        this.productMapper = productMapper;
+    }
 
     public void addProduct(Product product) {
         productMapper.insert(product);

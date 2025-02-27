@@ -24,6 +24,7 @@ public class RetryUtils {
                 }
             } catch (InventoryShortageException e) {
                 // 捕获特定异常，其他异常直接抛出
+                System.out.println("第 " + (attempts + 1) + " 次重试，原因: " + e.getMessage());
                 if (attempts == maxAttempts - 1) {
                     throw e;
                 }

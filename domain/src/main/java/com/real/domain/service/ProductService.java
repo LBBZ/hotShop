@@ -1,5 +1,6 @@
 package com.real.domain.service;
 
+import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
 import com.github.pagehelper.PageInfo;
 import com.real.domain.entity.Product;
@@ -39,13 +40,15 @@ public class ProductService {
     }
 
     public PageInfo<Product> getProductByPage(int pageNum, int pageSize, String category) {
-        PageHelper.startPage(pageNum, pageSize);
-        List<Product> products;
-        if (category != null&& !category.isEmpty()) {
-            products = productMapper.selectByCategory(category);
-        } else {
-            products = productMapper.selectAll();
+
+        try (Page<Object> ignored = PageHelper.startPage(pageNum, pageSize)) {
+            List<Product> products;
+            if (category != null&& !category.isEmpty()) {
+                products = productMapper.selectByCategory(category);
+            } else {
+                products = productMapper.selectAll();
+            }
+            return new PageInfo<>(products);
         }
-        return new PageInfo<>(products);
     }
 }

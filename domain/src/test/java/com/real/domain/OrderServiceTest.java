@@ -30,9 +30,11 @@ class OrderServiceTest {
     private OrderService orderService;
 
     @BeforeEach
-    void setUp() {
-        MockitoAnnotations.openMocks(this); // 初始化 Mock 对象
-        orderService = new OrderService(orderMapper, productMapper);
+    void setUp() throws Exception {
+        try (AutoCloseable ignored = MockitoAnnotations.openMocks(this)) {
+            // 初始化 Mock 对象
+            orderService = new OrderService(orderMapper, productMapper);
+        }
     }
 
     // 测试方法将在这里编写

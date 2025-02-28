@@ -6,12 +6,12 @@ public class RetryUtils {
 
     /**
      * 手动重试执行器
+     *
      * @param action      需要重试的业务逻辑（需返回布尔值表示是否成功）
      * @param maxAttempts 最大重试次数
      * @param delayMillis 重试间隔（毫秒）
-     * @return 最终执行结果
      */
-    public static boolean executeWithRetry(
+    public static void executeWithRetry(
             OrderOperation action,  // 使用新接口名
             int maxAttempts,
             long delayMillis
@@ -20,7 +20,7 @@ public class RetryUtils {
         while (attempts < maxAttempts) {
             try {
                 if (action.attempt()) {
-                    return true;
+                    return;
                 }
             } catch (InventoryShortageException e) {
                 // 捕获特定异常，其他异常直接抛出

@@ -81,6 +81,13 @@ public class OrderService {
     }
 
     /**
+     * 根据状态查询订单
+     */
+    public List<Order> getOrdersByStatus(OrderStatus status) {
+        return orderMapper.selectOrdersByOrderStatus(status);
+    }
+
+    /**
      * 分页查询用户的订单及每个订单的分页订单项
      * @param userId 用户ID
      * @param orderPage 订单页码（从1开始）

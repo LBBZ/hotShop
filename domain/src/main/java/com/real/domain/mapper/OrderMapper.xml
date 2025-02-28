@@ -79,6 +79,11 @@
         AND oip.rn &lt;= #{itemOffset} + #{itemLimit}
         ORDER BY po.created_at DESC, oip.id;
     </select>
+    <select id="selectOrdersByOrderStatus" resultType="Order">
+        SELECT *
+        FROM `order` o
+        WHERE o.status = #{status}
+    </select>
 
     <insert id="insertOrderItem" parameterType="OrderItem"
             useGeneratedKeys="true" keyProperty="id">

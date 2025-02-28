@@ -18,6 +18,11 @@
         SET stock = stock - #{quantity}
         WHERE id = #{productId} AND stock >= #{quantity}
     </update>
+    <update id="increaseStock" parameterType="Product">
+        UPDATE product
+        SET stock = stock + #{quantity}
+        WHERE id = #{productId}
+    </update>
     <delete id="delete">
         DELETE FROM product WHERE id = #{id}
     </delete>

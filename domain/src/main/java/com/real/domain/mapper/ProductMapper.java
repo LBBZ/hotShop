@@ -10,6 +10,7 @@ public interface ProductMapper {
     int insert(Product product);
     int update(Product product);
     int reduceStock(Long productId, Integer quantity);
+    int increaseStock(Long productId, Integer quantity);
     int delete(Long id);
     Product selectById(Long id);
     List<Product> selectAll();

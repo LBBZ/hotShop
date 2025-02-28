@@ -43,7 +43,7 @@
         <java.version>17</java.version>
         <spring-boot.version>3.4.3</spring-boot.version>
         <mybatis-spring-boot.version>3.0.4</mybatis-spring-boot.version>
-        <mysql-connector-j.version>9.1.0</mysql-connector-j.version>
+        <mysql-connector-j.version>9.2.0</mysql-connector-j.version>
         <lombok.version>1.18.36</lombok.version>
     </properties>
 

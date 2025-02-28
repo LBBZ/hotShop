@@ -37,6 +37,11 @@
             <groupId>com.mysql</groupId>
             <artifactId>mysql-connector-j</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+            <version>4.28.2</version> <!-- 确保使用最新版本 -->
+        </dependency>
 
         <!-- 分页查询插件 -->
         <dependency>

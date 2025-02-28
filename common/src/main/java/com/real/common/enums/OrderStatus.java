@@ -24,7 +24,6 @@ public enum OrderStatus {
             case SHIPPED -> newStatus == COMPLETED || newStatus == CANCELED;
             case COMPLETED -> false; // 已完成的订单不能再次转换
             case CANCELED -> false; // 已取消的订单不能再次转换
-            default -> false;
         };
     }
 }

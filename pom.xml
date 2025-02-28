@@ -8,12 +8,6 @@
     <version>0.0.1-SNAPSHOT</version>
     <name>hotShop</name>
     <description>hotShop</description>
-    <modules>
-        <module>common</module>
-        <module>domain</module>
-        <module>portal</module>
-        <module>admin</module>
-    </modules>
     <packaging>pom</packaging>
 
     <parent>
@@ -24,7 +18,12 @@
     </parent>
 
     <!-- 子模块列表 -->
-
+    <modules>
+        <module>common</module>
+        <module>domain</module>
+        <module>portal</module>
+        <module>admin</module>
+    </modules>
 
     <url/>
     <licenses>

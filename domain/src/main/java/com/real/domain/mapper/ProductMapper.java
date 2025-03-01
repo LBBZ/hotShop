@@ -1,13 +1,9 @@
 package com.real.domain.mapper;
 
-import com.real.common.enums.OrderStatus;
-import com.real.domain.entity.Order;
 import com.real.domain.entity.Product;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import java.util.List;
 
 @Mapper

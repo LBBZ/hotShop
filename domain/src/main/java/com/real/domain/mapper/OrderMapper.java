@@ -7,6 +7,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Options;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Mapper
@@ -15,6 +16,7 @@ public interface OrderMapper {
     int insertOrder(Order order);
     int updateOrder(Order order);
     Order selectOrderById(String orderId);
+
     // 根据订单状态查询订单
     List<Order> selectOrdersByOrderStatus(OrderStatus status);
     // 分页查询用户订单
@@ -24,6 +26,12 @@ public interface OrderMapper {
                                      @Param("itemOffset") int itemOffset,
                                      @Param("itemLimit") int itemLimit
 
+    );
+    List<Order> selectOrdersByConditions(
+            @Param("userId") Long userId,
+            @Param("status") OrderStatus status,
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime
     );
 
     int insertOrderItem(OrderItem item);

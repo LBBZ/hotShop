@@ -1,4 +1,4 @@
-package com.real.domain.service;
+package com.real.domain.service.baseService;
 
 
 import com.real.domain.entity.User;

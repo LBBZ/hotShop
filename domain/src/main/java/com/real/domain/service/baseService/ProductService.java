@@ -1,4 +1,4 @@
-package com.real.domain.service;
+package com.real.domain.service.baseService;
 
 import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
@@ -8,6 +8,7 @@ import com.real.domain.mapper.ProductMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Service
@@ -22,11 +23,9 @@ public class ProductService {
     public void addProduct(Product product) {
         productMapper.insert(product);
     }
-
     public void updateProduct(Product product) {
         productMapper.update(product);
     }
-
     public void deleteProduct(Long id) {
         productMapper.delete(id);
     }
@@ -34,11 +33,9 @@ public class ProductService {
     public Product getProductById(Long id) {
         return productMapper.selectById(id);
     }
-
     public List<Product> getAllProducts() {
         return productMapper.selectAll();
     }
-
     public PageInfo<Product> getProductByPage(int pageNum, int pageSize, String category) {
 
         try (Page<Object> ignored = PageHelper.startPage(pageNum, pageSize)) {
@@ -51,4 +48,9 @@ public class ProductService {
             return new PageInfo<>(products);
         }
     }
+    public List<Product> getProductsByConditions(String keyword, String category, Long minPrice, Long maxPrice) {
+        return productMapper.selectProductsByConditions(keyword, category, minPrice, maxPrice);
+    }
+
+
 }

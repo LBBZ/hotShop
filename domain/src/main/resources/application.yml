@@ -17,6 +17,7 @@ logging:
     com.xh.mall.mapper: TRACE
 
 mybatis:
+  mapper-locations: classpath*:mapper/*.xml
   type-aliases-package: com.real.domain.entity
   configuration:
     mapUnderscoreToCamelCase: true

@@ -2,8 +2,8 @@ package com.real.portal.job;
 
 import com.real.common.enums.OrderStatus;
 import com.real.domain.entity.Order;
-import com.real.domain.service.OrderService;
-import com.real.domain.service.OrderStateService;
+import com.real.domain.service.baseService.OrderService;
+import com.real.domain.service.orderStateService.OrderStateService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -17,6 +17,10 @@ import java.util.stream.Collectors;
 @Component
 @EnableScheduling
 public class OrderTimeoutJob {
+    /*添加商品和订单的复杂状态查询
+            添加商品的关键字模糊查询
+    修复bug
+            微调代码结构*/
 
     private final OrderStateService orderStateService;
     private final OrderService orderService;

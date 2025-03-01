@@ -14,7 +14,6 @@
                 ofType="OrderItem"
                 resultMap="orderItemResultMap"/>
     </resultMap>
-
     <resultMap id="orderItemResultMap" type="OrderItem">
         <id property="id" column="item_id"/>
         <result property="orderId" column="order_id"/>
@@ -83,6 +82,36 @@
         SELECT *
         FROM `order` o
         WHERE o.status = #{status}
+    </select>
+    <select id="selectOrdersByConditions" resultMap="orderResultMap">
+        SELECT
+            o.id AS order_id,
+            o.user_id,
+            o.total_amount,
+            o.status,
+            o.created_at,
+            oi.id AS item_id,
+            oi.order_id,
+            oi.product_id,
+            oi.quantity,
+            oi.price
+        FROM `order` o
+        LEFT JOIN order_item oi ON o.id = oi.order_id
+        <where>
+            1 = 1
+            <if test="userId != null">
+                AND o.user_id = #{userId}
+            </if>
+            <if test="status != null">
+                AND o.status = #{status}
+            </if>
+            <if test="startTime != null">
+                AND o.created_at &gt;= #{startTime}
+            </if>
+            <if test="endTime != null">
+                AND o.created_at &lt;= #{endTime}
+            </if>
+        </where>
     </select>
 
     <insert id="insertOrderItem" parameterType="OrderItem"

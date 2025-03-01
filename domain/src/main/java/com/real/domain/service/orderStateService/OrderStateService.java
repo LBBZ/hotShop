@@ -1,4 +1,4 @@
-package com.real.domain.service;
+package com.real.domain.service.orderStateService;
 
 import com.real.common.enums.OrderStatus;
 import com.real.common.exception.InventoryShortageException;
@@ -14,21 +14,37 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.util.Collections;
-import java.util.List;
 import java.util.UUID;
 
+// OrderStateService.java (领域服务)
 @Service
-@Transactional
-public class OrderService {
+public class OrderStateService {
 
     private final OrderMapper orderMapper;
     private final ProductMapper productMapper;
 
     @Autowired
-    public OrderService(OrderMapper orderMapper, ProductMapper productMapper) {
-        this.orderMapper = orderMapper;
+    public OrderStateService(OrderMapper orderMapper, ProductMapper productMapper) {
         this.productMapper = productMapper;
+        this.orderMapper = orderMapper;
+    }
+
+    /**
+     * 订单状态流转（如支付、取消）
+     * 包含数据库stock和order更新操作
+     */
+    @Transactional
+    public void changeOrderStatus(Order order, OrderStatus newStatus) {
+        // 校验状态流转合法性（如"待支付"只能转"已支付"或"已取消"）
+        if (!order.getStatus().canTransitionTo(newStatus)) {
+            throw new IllegalStateException("订单状态流转非法");
+        }
+        order.setStatus(newStatus);
+        orderMapper.updateOrder(order);
+        // 触发状态变更事件（如库存释放）
+        if (newStatus == OrderStatus.CANCELED) {
+            releaseStock(order);
+        }
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -66,7 +82,9 @@ public class OrderService {
         return true;
     }
 
-    // 外层调用入口
+    /**
+     * 创建订单
+     */
     public String createOrder(Order order) {
         RetryUtils.executeWithRetry(
                 () -> tryCreateOrder(order),  // 调用带事务的方法
@@ -76,51 +94,54 @@ public class OrderService {
         return order.getId();
     }
 
-    public Order getOrderById(String orderId) {
-        return orderMapper.selectOrderById(orderId);
-    }
-
     /**
-     * 根据状态查询订单
+     * 支付订单
      */
-    public List<Order> getOrdersByStatus(OrderStatus status) {
-        return orderMapper.selectOrdersByOrderStatus(status);
-    }
-
-    /**
-     * 分页查询用户的订单及每个订单的分页订单项
-     * @param userId 用户ID
-     * @param orderPage 订单页码（从1开始）
-     * @param orderPageSize 每页订单数量
-     * @param itemPage 订单项页码（从1开始）
-     * @param itemPageSize 每页订单项数量
-     * @return 分页后的订单列表（每个订单包含分页的订单项）
-     */
-    public List<Order> getOrdersByUserId(Long userId,
-                                         int orderPage,
-                                         int orderPageSize,
-                                         int itemPage,
-                                         int itemPageSize) {
-        // 1. 计算分页偏移量
-        int orderOffset = (orderPage - 1) * orderPageSize;
-        int itemOffset = (itemPage - 1) * itemPageSize;
-
-        // 2. 调用Mapper查询数据
-        List<Order> orders = orderMapper.selectOrdersByUserId(
-                userId,
-                orderOffset,
-                orderPageSize,
-                itemOffset,
-                itemPageSize
-        );
-
-        // 3. 处理可能的空结果
-        if (orders == null) {
-            return Collections.emptyList();
+    @Transactional
+    public void payOrder(String orderId) {
+        Order order = orderMapper.selectOrderById(orderId);
+        if (order.getStatus().canTransitionTo(OrderStatus.PAID)) {
+            order.setStatus(OrderStatus.PAID);
+            orderMapper.updateOrder(order);
         }
+        throw new IllegalStateException("订单当前状态不可支付");
+    }
 
-        // 4. 返回分页结果
-        return orders;
+    /**
+     * 取消订单
+     */
+    @Transactional
+    public void cancelOrder(String orderId) {
+        Order order = orderMapper.selectOrderById(orderId);
+        if (order.getStatus().canTransitionTo(OrderStatus.CANCELED)) {
+            order.setStatus(OrderStatus.CANCELED);
+            orderMapper.updateOrder(order);
+            // 释放库存
+            releaseStock(order);
+        }
+        throw new IllegalStateException("订单当前状态不可取消");
+    }
+
+    /**
+     * 完成订单
+     */
+    @Transactional
+    public void completeOrder(String orderId) {
+        Order order = orderMapper.selectOrderById(orderId);
+        if (order.getStatus().canTransitionTo(OrderStatus.COMPLETED)) {
+            order.setStatus(OrderStatus.COMPLETED);
+            orderMapper.updateOrder(order);
+        }
+        throw new IllegalStateException("订单当前状态不可取消");
+    }
+
+    /**
+     * 释放库存
+     */
+    private void releaseStock(Order order) {
+        order.getItems().forEach(item ->
+                productMapper.increaseStock(item.getProductId(), item.getQuantity())
+        );
     }
 
 }

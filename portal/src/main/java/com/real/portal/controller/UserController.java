@@ -2,7 +2,7 @@ package com.real.portal.controller;
 
 
 import com.real.domain.entity.User;
-import com.real.domain.service.UserService;
+import com.real.domain.service.baseService.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;

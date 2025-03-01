@@ -8,6 +8,9 @@
         INSERT INTO product (name, price, stock, category, description)
         VALUES (#{name}, #{price}, #{stock}, #{category}, #{description})
     </insert>
+    <delete id="delete">
+        DELETE FROM product WHERE id = #{id}
+    </delete>
     <update id="update" parameterType="Product">
         UPDATE product
         SET name = #{name}, price = #{price}, stock = #{stock}, category = #{category}, description = #{description}
@@ -23,9 +26,6 @@
         SET stock = stock + #{quantity}
         WHERE id = #{productId}
     </update>
-    <delete id="delete">
-        DELETE FROM product WHERE id = #{id}
-    </delete>
 
     <select id="selectById" resultType="Product">
         SELECT * FROM product WHERE id = #{id}
@@ -36,5 +36,31 @@
     <select id="selectByCategory" resultType="Product">
         SELECT * FROM product WHERE category = #{category}
     </select>
-    
+    <select id="selectProductsByConditions" resultType="Product">
+        SELECT
+            id,
+            name,
+            price,
+            stock,
+            category,
+            description,
+            created_at
+        FROM product
+        <where>
+            1 = 1
+            <if test="keyword != null and keyword != ''">
+                AND name LIKE CONCAT('%', #{keyword}, '%')
+            </if>
+            <if test="category != null and category != ''">
+                AND category = #{category}
+            </if>
+            <if test="minPrice != null">
+                AND price &gt;= #{minPrice}
+            </if>
+            <if test="maxPrice != null">
+                AND price &lt;= #{maxPrice}
+            </if>
+        </where>
+    </select>
+
 </mapper>

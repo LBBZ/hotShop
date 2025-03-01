@@ -9,14 +9,14 @@
         INSERT INTO `user` (username, password, email)
         VALUES (#{username}, #{password}, #{email})
     </insert>
+    <delete id="delete">
+        DELETE FROM `user` WHERE id = #{id}
+    </delete>
     <update id="update" parameterType="User">
         UPDATE `user`
         SET username = #{username}, password = #{password}, email = #{email}
         WHERE id = #{id}
     </update>
-    <delete id="delete">
-        DELETE FROM `user` WHERE id = #{id}
-    </delete>
 
     <select id="selectByUsername" resultType="User">
         SELECT * FROM `user` WHERE username = #{username}

@@ -3,11 +3,12 @@ package com.real.portal.controller;
 import com.github.pagehelper.PageInfo;
 import com.real.domain.entity.Product;
 import com.real.domain.mapper.StoredProcedure;
-import com.real.domain.service.ProductService;
+import com.real.domain.service.baseService.ProductService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @RestController
@@ -63,4 +64,16 @@ public class ProductController {
     public ResponseEntity<List<Product>> getAllProducts() {
         return ResponseEntity.ok(productService.getAllProducts());
     }
+
+    @GetMapping("/search")
+    public ResponseEntity<List<Product>> searchProducts(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) Long minPrice,
+            @RequestParam(required = false) Long maxPrice
+    ) {
+        List<Product> products = productService.getProductsByConditions(keyword, category, minPrice, maxPrice);
+        return ResponseEntity.ok(products);
+    }
+
 }

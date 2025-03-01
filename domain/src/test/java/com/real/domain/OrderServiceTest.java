@@ -6,7 +6,8 @@ import com.real.domain.entity.OrderItem;
 import com.real.domain.entity.Product;
 import com.real.domain.mapper.OrderMapper;
 import com.real.domain.mapper.ProductMapper;
-import com.real.domain.service.OrderService;
+import com.real.domain.service.baseService.OrderService;
+import com.real.domain.service.orderStateService.OrderStateService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
@@ -23,17 +24,17 @@ import static org.mockito.Mockito.times;
 class OrderServiceTest {
     @Mock
     private ProductMapper productMapper;
-
     @Mock
     private OrderMapper orderMapper;
-
+    private OrderStateService orderStateService;
     private OrderService orderService;
 
     @BeforeEach
     void setUp() throws Exception {
         try (AutoCloseable ignored = MockitoAnnotations.openMocks(this)) {
             // 初始化 Mock 对象
-            orderService = new OrderService(orderMapper, productMapper);
+            orderService = new OrderService(orderMapper);
+            orderStateService = new OrderStateService(orderMapper, productMapper);
         }
     }
 
@@ -75,7 +76,7 @@ class OrderServiceTest {
         when(productMapper.selectById(1002L)).thenReturn(new Product(1002L, "商品B", new BigDecimal("100.00"), 5, null, null, null));
 
         // 3. 执行测试
-        String orderId = orderService.createOrder(order);
+        String orderId = orderStateService.createOrder(order);
 
         // 4. 验证结果
         assertNotNull(orderId);
@@ -93,7 +94,7 @@ class OrderServiceTest {
         when(productMapper.reduceStock(1001L, 2)).thenReturn(0); // 库存不足返回 0
 
         // 验证是否抛出异常
-        assertThrows(InventoryShortageException.class, () -> orderService.createOrder(order));
+        assertThrows(InventoryShortageException.class, () -> orderStateService.createOrder(order));
     }
 
     @Test
@@ -115,7 +116,7 @@ class OrderServiceTest {
         when(productMapper.reduceStock(1002L, 1)).thenReturn(1);
 
         // 执行并验证
-        assertDoesNotThrow(() -> orderService.createOrder(order));
+        assertDoesNotThrow(() -> orderStateService.createOrder(order));
         verify(productMapper, times(2)).reduceStock(1001L, 2); // 验证重试次数
     }
 

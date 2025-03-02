@@ -32,27 +32,27 @@ class OrderServiceTest {
     @BeforeEach
     void setUp() throws Exception {
         try (AutoCloseable ignored = MockitoAnnotations.openMocks(this)) {
-            // ³õÊ¼»¯ Mock ¶ÔÏó
+            // åˆå§‹åŒ– Mock å¯¹è±¡
             orderService = new OrderService(orderMapper);
             orderStateService = new OrderStateService(orderMapper, productMapper);
         }
     }
 
-    // ²âÊÔ·½·¨½«ÔÚÕâÀï±àĞ´
+    // æµ‹è¯•æ–¹æ³•å°†åœ¨è¿™é‡Œç¼–å†™
     private Order buildTestOrder() {
         Order order = new Order();
         order.setUserId(1L);
 
-        // Ìí¼ÓÁ½¸ö¶©µ¥Ïî
+        // æ·»åŠ ä¸¤ä¸ªè®¢å•é¡¹
         OrderItem item1 = new OrderItem();
         item1.setProductId(1001L);
         item1.setQuantity(2);
-        item1.setPrice(new BigDecimal("50.00")); // ¼ÙÉèÉÌÆ·µ¥¼Û 50 Ôª
+        item1.setPrice(new BigDecimal("50.00")); // å‡è®¾å•†å“å•ä»· 50 å…ƒ
 
         OrderItem item2 = new OrderItem();
         item2.setProductId(1002L);
         item2.setQuantity(1);
-        item2.setPrice(new BigDecimal("100.00")); // ¼ÙÉèÉÌÆ·µ¥¼Û 100 Ôª
+        item2.setPrice(new BigDecimal("100.00")); // å‡è®¾å•†å“å•ä»· 100 å…ƒ
 
         order.setItems(Arrays.asList(item1, item2));
         return order;
@@ -67,18 +67,18 @@ class OrderServiceTest {
 
     @Test
     void testCreateOrder_Success() {
-        // 1. ×¼±¸²âÊÔÊı¾İ
+        // 1. å‡†å¤‡æµ‹è¯•æ•°æ®
         Order order = buildTestOrder();
 
-        // 2. Ä£ÄâÊı¾İ¿â²Ù×÷
+        // 2. æ¨¡æ‹Ÿæ•°æ®åº“æ“ä½œ
         when(productMapper.reduceStock(any(Long.class), any(Integer.class))).thenReturn(1);
-        when(productMapper.selectById(1001L)).thenReturn(new Product(1001L, "ÉÌÆ·A", new BigDecimal("50.00"), 10, null, null, null));
-        when(productMapper.selectById(1002L)).thenReturn(new Product(1002L, "ÉÌÆ·B", new BigDecimal("100.00"), 5, null, null, null));
+        when(productMapper.selectById(1001L)).thenReturn(new Product(1001L, "å•†å“A", new BigDecimal("50.00"), 10, null, null, null));
+        when(productMapper.selectById(1002L)).thenReturn(new Product(1002L, "å•†å“B", new BigDecimal("100.00"), 5, null, null, null));
 
-        // 3. Ö´ĞĞ²âÊÔ
+        // 3. æ‰§è¡Œæµ‹è¯•
         String orderId = orderStateService.createOrder(order);
 
-        // 4. ÑéÖ¤½á¹û
+        // 4. éªŒè¯ç»“æœ
         assertNotNull(orderId);
         verify(orderMapper, times(1)).insertOrder(any(Order.class));
         verify(orderMapper, times(2)).insertOrderItem(any(OrderItem.class));
@@ -88,12 +88,12 @@ class OrderServiceTest {
     void testCreateOrder_InventoryShortage() {
         Order order = buildTestOrder();
 
-        // Ä£ÄâÉÌÆ·¿â´æ²»×ã
-        Product product = new Product(1001L, "ÉÌÆ·A", new BigDecimal("50.00"), 1, null, null, null);
+        // æ¨¡æ‹Ÿå•†å“åº“å­˜ä¸è¶³
+        Product product = new Product(1001L, "å•†å“A", new BigDecimal("50.00"), 1, null, null, null);
         when(productMapper.selectById(1001L)).thenReturn(product);
-        when(productMapper.reduceStock(1001L, 2)).thenReturn(0); // ¿â´æ²»×ã·µ»Ø 0
+        when(productMapper.reduceStock(1001L, 2)).thenReturn(0); // åº“å­˜ä¸è¶³è¿”å› 0
 
-        // ÑéÖ¤ÊÇ·ñÅ×³öÒì³£
+        // éªŒè¯æ˜¯å¦æŠ›å‡ºå¼‚å¸¸
         assertThrows(InventoryShortageException.class, () -> orderStateService.createOrder(order));
     }
 
@@ -101,23 +101,23 @@ class OrderServiceTest {
     void testCreateOrder_RetryOnConflict() {
         Order order = buildTestOrder();
 
-        // Ä£ÄâÉÌÆ·Êı¾İ
-        Product product1 = new Product(1001L, "ÉÌÆ·A", new BigDecimal("50.00"), 10, null, null, null);
-        Product product2 = new Product(1002L, "ÉÌÆ·B", new BigDecimal("100.00"), 5, null, null, null);
+        // æ¨¡æ‹Ÿå•†å“æ•°æ®
+        Product product1 = new Product(1001L, "å•†å“A", new BigDecimal("50.00"), 10, null, null, null);
+        Product product2 = new Product(1002L, "å•†å“B", new BigDecimal("100.00"), 5, null, null, null);
 
-        // ¹Ø¼üĞŞ¸´£ºÄ£Äâ selectById ·µ»ØÖµ
+        // å…³é”®ä¿®å¤ï¼šæ¨¡æ‹Ÿ selectById è¿”å›å€¼
         when(productMapper.selectById(1001L)).thenReturn(product1);
         when(productMapper.selectById(1002L)).thenReturn(product2);
 
-        // Ä£Äâ¿â´æ¿Û¼õĞĞÎª£ºµÚÒ»´Î³åÍ»£¬µÚ¶ş´Î³É¹¦
+        // æ¨¡æ‹Ÿåº“å­˜æ‰£å‡è¡Œä¸ºï¼šç¬¬ä¸€æ¬¡å†²çªï¼Œç¬¬äºŒæ¬¡æˆåŠŸ
         when(productMapper.reduceStock(1001L, 2))
-                .thenReturn(0)  // µÚÒ»´Î³åÍ»
-                .thenReturn(1); // µÚ¶ş´Î³É¹¦
+                .thenReturn(0)  // ç¬¬ä¸€æ¬¡å†²çª
+                .thenReturn(1); // ç¬¬äºŒæ¬¡æˆåŠŸ
         when(productMapper.reduceStock(1002L, 1)).thenReturn(1);
 
-        // Ö´ĞĞ²¢ÑéÖ¤
+        // æ‰§è¡Œå¹¶éªŒè¯
         assertDoesNotThrow(() -> orderStateService.createOrder(order));
-        verify(productMapper, times(2)).reduceStock(1001L, 2); // ÑéÖ¤ÖØÊÔ´ÎÊı
+        verify(productMapper, times(2)).reduceStock(1001L, 2); // éªŒè¯é‡è¯•æ¬¡æ•°
     }
 
 }

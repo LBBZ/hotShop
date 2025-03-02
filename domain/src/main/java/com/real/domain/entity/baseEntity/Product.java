@@ -1,4 +1,4 @@
-package com.real.domain.entity;
+package com.real.domain.entity.baseEntity;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

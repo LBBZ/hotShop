@@ -80,29 +80,12 @@
                 <version>${mybatis-spring-boot.version}</version>
             </dependency>
 
-            <!-- DevTools -->
-            <dependency>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-devtools</artifactId>
-                <version>${spring-boot.version}</version>
-                <scope>runtime</scope>
-                <optional>true</optional>
-            </dependency>
-
             <!-- MySQL -->
             <dependency>
                 <groupId>com.mysql</groupId>
                 <artifactId>mysql-connector-j</artifactId>
                 <version>${mysql-connector-j.version}</version>
                 <scope>runtime</scope>
-            </dependency>
-
-            <!-- Lombok -->
-            <dependency>
-                <groupId>org.projectlombok</groupId>
-                <artifactId>lombok</artifactId>
-                <version>${lombok.version}</version>
-                <optional>true</optional>
             </dependency>
 
             <!-- 分页查询插件 -->
@@ -166,6 +149,21 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
+        </dependency>
+        <!-- DevTools -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-devtools</artifactId>
+            <version>${spring-boot.version}</version>
+            <scope>runtime</scope>
+            <optional>true</optional>
+        </dependency>
+        <!-- Lombok -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+            <version>${lombok.version}</version>
         </dependency>
 
         <dependency>

@@ -1,4 +1,4 @@
-package com.real.portal.controller;
+package com.real.admin.controller;
 
 import com.github.pagehelper.PageInfo;
 import com.real.domain.entity.baseEntity.Product;
@@ -12,14 +12,38 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/products")
+@RequestMapping("/admin/products")
+@PreAuthorize("hasRole('ADMIN')")
 public class ProductController {
-
     private final ProductService productService;
-
+    private final StoredProcedure storedProcedure;
     @Autowired
     public ProductController(ProductService productService, StoredProcedure storedProcedure) {
         this.productService = productService;
+        this.storedProcedure = storedProcedure;
+    }
+
+    @PostMapping("/add")
+    public ResponseEntity<String> addProduct(@RequestBody Product product) {
+        productService.addProduct(product);
+        return ResponseEntity.ok("商品添加成功");
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<String> updateProduct(
+            @PathVariable Long id,
+            @RequestBody Product product
+    ) {
+        product.setId(id);
+        productService.updateProduct(product);
+        return ResponseEntity.ok("商品更新成功");
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<String> deleteProduct(@PathVariable Long id) {
+        productService.deleteProduct(id);
+        storedProcedure.resetAutoIncrement("product");
+        return ResponseEntity.ok("商品删除成功");
     }
 
     @GetMapping("/{id}")
@@ -28,17 +52,17 @@ public class ProductController {
         return ResponseEntity.ok(product);
     }
 
+    @GetMapping("/all")
+    public ResponseEntity<List<Product>> getAllProducts() {
+        return ResponseEntity.ok(productService.getAllProducts());
+    }
+
     @GetMapping("/page")
     public ResponseEntity<PageInfo<Product>> getProductPage(
             @RequestParam(defaultValue = "1") int pageNum,
             @RequestParam(defaultValue = "10") int pageSize,
             @RequestParam(required = false) String category) {
         return ResponseEntity.ok(productService.getProductByPage(pageNum, pageSize, category));
-    }
-
-    @GetMapping("/all")
-    public ResponseEntity<List<Product>> getAllProducts() {
-        return ResponseEntity.ok(productService.getAllProducts());
     }
 
     @GetMapping("/search")

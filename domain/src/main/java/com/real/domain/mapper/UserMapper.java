@@ -1,6 +1,6 @@
 package com.real.domain.mapper;
 
-import com.real.domain.entity.User;
+import com.real.domain.entity.baseEntity.User;
 import org.apache.ibatis.annotations.Mapper;
 
 import java.util.List;

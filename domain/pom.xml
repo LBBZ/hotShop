@@ -12,7 +12,6 @@
     <artifactId>domain</artifactId>
 
     <dependencies>
-        <!-- 依赖 common -->
         <dependency>
             <groupId>com.real</groupId>
             <artifactId>common</artifactId>

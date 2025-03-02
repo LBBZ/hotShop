@@ -11,3 +11,9 @@
 - Product 
 - Order
 
+## `技术架构`
+- springboot mysql  mybatis
+- 嵌入springSecurity JWT
+- 采取双令牌机制，自动刷新令牌
+
+## `业务架构`

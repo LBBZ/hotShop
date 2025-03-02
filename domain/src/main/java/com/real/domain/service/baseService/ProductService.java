@@ -3,7 +3,7 @@ package com.real.domain.service.baseService;
 import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
 import com.github.pagehelper.PageInfo;
-import com.real.domain.entity.Product;
+import com.real.domain.entity.baseEntity.Product;
 import com.real.domain.mapper.ProductMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;

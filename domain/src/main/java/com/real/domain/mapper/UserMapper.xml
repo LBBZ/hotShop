@@ -28,12 +28,12 @@
         SELECT * FROM `user` WHERE username = #{username}
     </select>
     <select id="existsByUsername" parameterType="String" resultType="Boolean">
-        SELECT COUNT(*) > 0 AS exists
+        SELECT COUNT(*) > 0 AS user_exists
         FROM `user`
         WHERE `username` = #{username}
     </select>
     <select id="existsByEmail" parameterType="String" resultType="Boolean">
-        SELECT COUNT(*) > 0 AS exists
+        SELECT COUNT(*) > 0 AS user_exists
         FROM `user`
         WHERE `email` = #{email}
     </select>

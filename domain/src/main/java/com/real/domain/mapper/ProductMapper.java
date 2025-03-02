@@ -1,6 +1,6 @@
 package com.real.domain.mapper;
 
-import com.real.domain.entity.Product;
+import com.real.domain.entity.baseEntity.Product;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 

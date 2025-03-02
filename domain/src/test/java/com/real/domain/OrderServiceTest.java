@@ -1,9 +1,9 @@
 package com.real.domain;
 
 import com.real.common.exception.InventoryShortageException;
-import com.real.domain.entity.Order;
-import com.real.domain.entity.OrderItem;
-import com.real.domain.entity.Product;
+import com.real.domain.entity.baseEntity.Order;
+import com.real.domain.entity.baseEntity.OrderItem;
+import com.real.domain.entity.baseEntity.Product;
 import com.real.domain.mapper.OrderMapper;
 import com.real.domain.mapper.ProductMapper;
 import com.real.domain.service.baseService.OrderService;

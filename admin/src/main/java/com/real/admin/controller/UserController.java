@@ -1,4 +1,4 @@
-package com.real.portal.controller;
+package com.real.admin.controller;
 
 
 import com.real.domain.entity.baseEntity.User;
@@ -9,11 +9,13 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/users")
-@PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
+@RequestMapping("/admin/users")
+@PreAuthorize("hasRole('ADMIN')")
 public class UserController {
 
     private final UserService userService;
@@ -23,24 +25,12 @@ public class UserController {
     }
 
 
-    @GetMapping("/me")
-    public ResponseEntity<User> getCurrentUser(
+    @GetMapping("/all")
+    public ResponseEntity<String> getUsers(
             @AuthenticationPrincipal UserDetails userDetails) {
 
-        User user = userService.getUserByUsername(userDetails.getUsername());
-        if (user == null) {
-            throw new UsernameNotFoundException("User not found");
-        }
 
-        User response = User.builder()
-                .id(user.getId())
-                .username(user.getUsername())
-                .email(user.getEmail())
-                .role(user.getRole())
-                .createdAt(user.getCreatedAt())
-                .build();
-
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(" ");
     }
 }
 

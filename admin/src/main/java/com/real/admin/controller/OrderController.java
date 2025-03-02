@@ -1,62 +1,53 @@
-package com.real.portal.controller;
+package com.real.admin.controller;
 
 import com.real.common.enums.OrderStatus;
 import com.real.domain.entity.baseEntity.Order;
-import com.real.domain.security.entity.CustomUserDetails;
 import com.real.domain.service.baseService.OrderService;
 import com.real.domain.service.orderStateService.OrderStateService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
-@RequestMapping("/orders")
-@PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
+@RequestMapping("/admin/orders")
+@PreAuthorize("hasRole('ADMIN')")
 public class OrderController {
-
     private final OrderService orderService;
-    private final OrderStateService orderStateService;
-
     @Autowired
     public OrderController(OrderService orderService, OrderStateService orderStateService) {
         this.orderService = orderService;
-        this.orderStateService = orderStateService;
     }
 
-    @PostMapping("/add")
-    public ResponseEntity<String> createOrder(@AuthenticationPrincipal CustomUserDetails customUserDetails,
-                                              @RequestBody Order order) {
-        order.setUserId(customUserDetails.getId());
-        String orderId = orderStateService.createOrder(order);
-        return ResponseEntity.ok("订单创建成功，订单号: " + orderId);
+    @GetMapping("/{orderId}")
+    public ResponseEntity<Order> getOrder(@PathVariable String orderId) {
+        return ResponseEntity.ok(orderService.getOrderById(orderId));
     }
 
-    @GetMapping("/page")
+    @GetMapping("/user/{userId}")
     public ResponseEntity<List<Order>> getOrdersByUserId(
-            @AuthenticationPrincipal CustomUserDetails customUserDetails,
+            @PathVariable Long userId,
             @RequestParam(defaultValue = "1") int orderPage,
             @RequestParam(defaultValue = "10") int orderPageSize,
             @RequestParam(defaultValue = "1") int itemPage,
             @RequestParam(defaultValue = "3") int itemPageSize
     ) {
-        return ResponseEntity.ok(orderService.getOrdersByUserId(customUserDetails.getId(), orderPage, orderPageSize, itemPage, itemPageSize));
+        return ResponseEntity.ok(orderService.getOrdersByUserId(userId, orderPage, orderPageSize, itemPage, itemPageSize));
     }
 
     @GetMapping("/search")
     public ResponseEntity<List<Order>> getOrders(
-            @AuthenticationPrincipal CustomUserDetails customUserDetails,
+            @RequestParam(required = false) Long userId,
             @RequestParam(required = false) String statusStr,
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime startTime,
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime endTime
     ) {
         OrderStatus status = OrderStatus.strTransitionToEnums(statusStr);
-        List<Order> orders = orderService.getOrdersByConditions(customUserDetails.getId(), status, startTime, endTime);
+        List<Order> orders = orderService.getOrdersByConditions(userId, status, startTime, endTime);
         return ResponseEntity.ok(orders);
     }
 }

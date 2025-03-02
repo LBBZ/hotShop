@@ -3,7 +3,6 @@ package com.real.admin.controller;
 import com.real.common.enums.OrderStatus;
 import com.real.domain.entity.baseEntity.Order;
 import com.real.domain.service.baseService.OrderService;
-import com.real.domain.service.orderStateService.OrderStateService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -19,7 +18,7 @@ import java.util.List;
 public class OrderController {
     private final OrderService orderService;
     @Autowired
-    public OrderController(OrderService orderService, OrderStateService orderStateService) {
+    public OrderController(OrderService orderService) {
         this.orderService = orderService;
     }
 

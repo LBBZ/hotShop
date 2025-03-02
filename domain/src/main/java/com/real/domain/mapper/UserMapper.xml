@@ -6,11 +6,14 @@
 
     <insert id="insert" parameterType="User"
             useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO `user` (username, password, email)
-        VALUES (#{username}, #{password}, #{email})
+        INSERT INTO `user` (username, password, email, role)
+        VALUES (#{username}, #{password}, #{email}, #{role})
     </insert>
     <delete id="delete">
         DELETE FROM `user` WHERE id = #{id}
+    </delete>
+    <delete id="deleteByUsername">
+        DELETE FROM `user` WHERE `username` = #{username}
     </delete>
     <update id="update" parameterType="User">
         UPDATE `user`
@@ -18,8 +21,21 @@
         WHERE id = #{id}
     </update>
 
+    <select id="selectAll" resultType="User">
+        SELECT * FROM `user`
+    </select>
     <select id="selectByUsername" resultType="User">
         SELECT * FROM `user` WHERE username = #{username}
+    </select>
+    <select id="existsByUsername" parameterType="String" resultType="Boolean">
+        SELECT COUNT(*) > 0 AS exists
+        FROM `user`
+        WHERE `username` = #{username}
+    </select>
+    <select id="existsByEmail" parameterType="String" resultType="Boolean">
+        SELECT COUNT(*) > 0 AS exists
+        FROM `user`
+        WHERE `email` = #{email}
     </select>
 
 </mapper>

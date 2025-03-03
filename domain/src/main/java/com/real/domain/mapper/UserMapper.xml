@@ -27,6 +27,30 @@
     <select id="selectByUsername" resultType="User">
         SELECT * FROM `user` WHERE username = #{username}
     </select>
+    <select id="selectUsersByConditions" resultType="User">
+        SELECT *
+        FROM user
+        WHERE 1=1
+        <if test="id != null">
+            AND id = #{id}
+        </if>
+        <if test="username != null and username != ''">
+            AND username = #{username}
+        </if>
+        <if test="email != null and email != ''">
+            AND email = #{email}
+        </if>
+        <if test="role != null">
+            AND role = #{role}
+        </if>
+        <if test="startTime != null">
+            AND created_at >= #{startTime}
+        </if>
+        <if test="endTime != null">
+            AND created_at <= #{endTime}
+        </if>
+    </select>
+
     <select id="existsByUsername" parameterType="String" resultType="Boolean">
         SELECT COUNT(*) > 0 AS user_exists
         FROM `user`

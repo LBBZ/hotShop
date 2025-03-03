@@ -1,6 +1,5 @@
 package com.real.admin.controller;
 
-
 import com.real.domain.service.baseService.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -21,7 +20,6 @@ public class UserController {
     public UserController(UserService userService) {
         this.userService = userService;
     }
-
 
     @GetMapping("/all")
     public ResponseEntity<String> getUsers(

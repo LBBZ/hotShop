@@ -39,12 +39,6 @@ public class UserDetailsServiceImpl implements UserDetailsService {
                 user.getPassword(),
                 authorities
         );
-
-//        return new org.springframework.security.core.userdetails.User(
-//                user.getUsername(),
-//                user.getPassword(),
-//                authorities
-//        );
     }
 
     private Collection<? extends GrantedAuthority> mapRolesToAuthorities(Role role) {

@@ -17,16 +17,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.AuthenticationException;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
-import
+
 import java.time.Duration;
-import java.util.HashMap;
 import java.util.Map;
 
 @RestController
@@ -34,14 +31,14 @@ import java.util.Map;
 public class AuthController {
     private final AuthenticationManager authenticationManager;
     private final JwtTokenUtil jwtTokenUtil;
-    private final UserDetailsService userDetailsService;
     private final UserService userService;
+    private final UserDetailsService userDetailsService;
     @Autowired
     public AuthController(AuthenticationManager authenticationManager, JwtTokenUtil jwtTokenUtil, UserDetailsService userDetailsService, UserService userService) {
         this.authenticationManager = authenticationManager;
         this.jwtTokenUtil = jwtTokenUtil;
-        this.userDetailsService = userDetailsService;
         this.userService = userService;
+        this.userDetailsService = userDetailsService;
     }
 
     @PostMapping("/register")
@@ -86,12 +83,14 @@ public class AuthController {
         String accessToken = jwtTokenUtil.generateAccessToken(customUserDetails);
         String refreshToken = jwtTokenUtil.generateRefreshToken(customUserDetails);
 
-        User user = userService.getUserByUsername(request.getUsername());
-
         // 4. 返回响应（刷新令牌建议通过Cookie返回）
+        User user = userService.getUserByUsername(request.getUsername());
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, createRefreshTokenCookie(refreshToken).toString())
                 .body(Map.of(
+                        "role", user.getRole(),
+                        "userId", user.getUserId(),
+                        "username", user.getUsername(),
                         "access_token", accessToken,
                         "expires_in", jwtTokenUtil.getAccessExpiration()
                 ));
@@ -106,18 +105,15 @@ public class AuthController {
         }
 
         // 2. 提取用户信息
-        Long userId = jwtTokenUtil.getUserIdFromRefreshToken(refreshToken);
-        User user = userService.findById(userId)
-                .orElseThrow(() -> new UsernameNotFoundException("用户不存在"));
+        String username = jwtTokenUtil.getUsernameFromToken(refreshToken);
+        User user = userService.getUserByUsername(username);
+        if(user == null) {
+            throw new UsernameNotFoundException("User not found");
+        }
 
         // 3. 生成新访问令牌
         String newAccessToken = jwtTokenUtil.generateAccessToken(
-                new CustomUserDetails(
-                        user.getUsername(),
-                        user.getPassword(),
-                        user.getAuthorities(),
-                        user.getId()
-                )
+                (CustomUserDetails) userDetailsService.loadUserByUsername(username)
         );
 
         return ResponseEntity.ok(Map.of(
@@ -130,7 +126,7 @@ public class AuthController {
     private ResponseCookie createRefreshTokenCookie(String token) {
         return ResponseCookie.from("refresh_token", token)
                 .httpOnly(true)
-                .secure(true) // 生产环境启用
+                .secure(false) // 生产环境启用
                 .path("/api/auth/refresh")
                 .maxAge(Duration.ofSeconds(jwtTokenUtil.getRefreshExpiration()))
                 .sameSite("Strict")

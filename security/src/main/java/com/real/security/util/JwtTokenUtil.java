@@ -9,6 +9,7 @@ import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import lombok.Data;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 
 import java.security.Key;
@@ -54,18 +55,20 @@ public class JwtTokenUtil {
         claims.put("tokenType", TokenType.REFRESH);
         return buildToken(claims, customUserDetails.getUsername(), refreshExpiration);
     }
-
-    // 验证accessToken是否合法
-    public Boolean validateAccessToken(String token, CustomUserDetails customUserDetails) {
+    // 验证token是否合法
+    public Boolean validateToken(String token, UserDetails userDetails) {
         final String username = getUsernameFromToken(token);
-        final TokenType tokenType = getTokenTypeFromToken(token);
-        return (tokenType.equals(TokenType.ACCESS)) && (username.equals(customUserDetails.getUsername()) && !isTokenExpired(token));
+        return (username.equals(userDetails.getUsername()) && !isTokenExpired(token));
     }
-    // 验证refreshToken是否合法
-    public Boolean validateRefreshToken(String token, CustomUserDetails customUserDetails) {
-        final String username = getUsernameFromToken(token);
+    // 验证accessToken是否有效
+    public Boolean validateAccessToken(String token) {
         final TokenType tokenType = getTokenTypeFromToken(token);
-        return (tokenType.equals(TokenType.REFRESH)) && (username.equals(customUserDetails.getUsername()) && !isTokenExpired(token));
+        return (tokenType.equals(TokenType.ACCESS)) && !isTokenExpired(token);
+    }
+    // 验证refreshToken是否有效
+    public Boolean validateRefreshToken(String token) {
+        final TokenType tokenType = getTokenTypeFromToken(token);
+        return (tokenType.equals(TokenType.REFRESH)) && !isTokenExpired(token);
     }
 
     public String getUsernameFromToken(String token) {
@@ -76,7 +79,7 @@ public class JwtTokenUtil {
         return getClaimFromToken(token, Claims::getExpiration);
     }
     private TokenType getTokenTypeFromToken(String token) {
-        return getClaimFromToken(token, claims -> claims.get("tokenType", TokenType.class));
+        return TokenType.strTransitionToEnums(getClaimFromToken(token, claims -> claims.get("tokenType", String.class)));
     }
     // 验证token是否过期
     private Boolean isTokenExpired(String token) {

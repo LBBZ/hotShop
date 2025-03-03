@@ -2,7 +2,6 @@ package com.real.portal.controller;
 
 import com.github.pagehelper.PageInfo;
 import com.real.domain.entity.baseEntity.Product;
-import com.real.domain.mapper.StoredProcedure;
 import com.real.domain.service.baseService.ProductService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -17,7 +16,7 @@ public class ProductController {
     private final ProductService productService;
 
     @Autowired
-    public ProductController(ProductService productService, StoredProcedure storedProcedure) {
+    public ProductController(ProductService productService) {
         this.productService = productService;
     }
 

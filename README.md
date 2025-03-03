@@ -28,9 +28,9 @@ D --> E(common)
 ### 采取双令牌机制，自动刷新令牌
 ```mermaid
 graph TD
-A[客户端] -->|1. 提交凭证| B(登录接口)
-B -->|2. 生成双令牌| C[Access Token]
-B -->|2. 生成双令牌| D[Refresh Token]
+A[客户端] -->|提交凭证| B(登录接口)
+B -->|生成双令牌| C[Access Token]
+B -->|生成双令牌| D[Refresh Token]
 C -->|短期有效 1小时| E[API访问]
 D -->|长期有效 30天| F[令牌刷新]
 E -->|401过期| F

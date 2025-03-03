@@ -53,7 +53,7 @@ public class OrderTimeoutJob {
                     long duringSeconds = Duration.between(creatAt, now).getSeconds();
                     return duringSeconds > finalTimeoutThreshold;
                 })
-                .map(Order::getId)
+                .map(Order::getOrderId)
                 .collect(Collectors.toList());
 
         return timeoutOrderIds;

@@ -50,8 +50,8 @@ public class OrderStateService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean tryCreateOrder(Order order) {
         // 1. 生成订单号（幂等性保障：订单号在重试中保持不变）
-        if (order.getId() == null) {
-            order.setId(UUID.randomUUID().toString());
+        if (order.getOrderId() == null) {
+            order.setOrderId(UUID.randomUUID().toString());
             order.setStatus(OrderStatus.PENDING);
         }
 
@@ -76,7 +76,7 @@ public class OrderStateService {
         // 4. 保存订单和订单项
         orderMapper.insertOrder(order);
         order.getItems().forEach(item -> {
-            item.setOrderId(order.getId());
+            item.setOrderId(order.getOrderId());
             orderMapper.insertOrderItem(item);
         });
         return true;
@@ -91,7 +91,7 @@ public class OrderStateService {
                 3,      // 最大重试次数
                 200     // 重试间隔 200ms
         );
-        return order.getId();
+        return order.getOrderId();
     }
 
     /**

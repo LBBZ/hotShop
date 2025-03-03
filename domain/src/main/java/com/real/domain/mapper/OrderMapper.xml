@@ -4,7 +4,7 @@
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.real.domain.mapper.OrderMapper">
     <resultMap id="orderResultMap" type="Order">
-        <id property="id" column="order_id"/>  <!-- 映射订单ID -->
+        <id property="orderId" column="order_id"/>  <!-- 映射订单ID -->
         <result property="userId" column="user_id"/>
         <result property="totalAmount" column="total_amount"/>
         <result property="status" column="status"/>
@@ -15,7 +15,7 @@
                 resultMap="orderItemResultMap"/>
     </resultMap>
     <resultMap id="orderItemResultMap" type="OrderItem">
-        <id property="id" column="item_id"/>
+        <id property="orderItemId" column="order_item_id"/>
         <result property="orderId" column="order_id"/>
         <result property="productId" column="product_id"/>
         <result property="quantity" column="quantity"/>
@@ -23,60 +23,60 @@
     </resultMap>
 
     <insert id="insertOrder" parameterType="Order">
-        INSERT INTO `order` (id, user_id, total_amount, status)
-        VALUES (#{id}, #{userId}, #{totalAmount}, #{status})
+        INSERT INTO `order` (order_id, user_id, total_amount, status)
+        VALUES (#{orderId}, #{userId}, #{totalAmount}, #{status})
     </insert>
     <update id="updateOrder" parameterType="Order">
         UPDATE `order`
         SET user_id = #{userId}, total_amount = #{totalAmount}, status = #{status}
-        WHERE id = #{id}
+        WHERE order_id = #{orderId}
     </update>
 
     <select id="selectOrderById" resultMap="orderResultMap">
         SELECT
-            o.id, o.user_id, o.total_amount, o.status, o.created_at,
-            i.id AS item_id, i.order_id, i.product_id, i.quantity, i.price
+            o.order_id, o.user_id, o.total_amount, o.status, o.created_at,
+            i.order_item_id, i.order_id, i.product_id, i.quantity, i.price
         FROM `order` o
-        LEFT JOIN order_item i ON o.id = i.order_id
-        WHERE o.id = #{orderId}
+        LEFT JOIN order_item i ON o.order_id = i.order_id
+        WHERE o.order_id = #{orderId}
     </select>
     <select id="selectOrdersByUserId" resultMap="orderResultMap">
         WITH paginated_orders AS (
-        SELECT
-        id,
-        user_id,
-        total_amount,
-        status,
-        created_at
-        FROM `order`
-        WHERE user_id = #{userId}
-        ORDER BY created_at DESC
-        LIMIT #{orderLimit} OFFSET #{orderOffset}
+            SELECT
+                order_id,
+                user_id,
+                total_amount,
+                status,
+                created_at
+            FROM `order`
+            WHERE user_id = #{userId}
+            ORDER BY created_at DESC
+            LIMIT #{orderLimit} OFFSET #{orderOffset}
         ),
         order_items_paged AS (
-        SELECT
-        oi.*,
-        ROW_NUMBER() OVER (PARTITION BY order_id ORDER BY id) AS rn
-        FROM order_item oi
-        WHERE oi.order_id IN (SELECT id FROM paginated_orders)
+            SELECT
+                oi.*,
+                ROW_NUMBER() OVER (PARTITION BY order_id ORDER BY order_item_id) AS rn
+            FROM order_item oi
+            WHERE oi.order_id IN (SELECT order_id FROM paginated_orders)
         )
         SELECT
-        po.id AS order_id,
-        po.user_id,
-        po.total_amount,
-        po.status,
-        po.created_at,
-        oip.id AS item_id,
-        oip.order_id,
-        oip.product_id,
-        oip.quantity,
-        oip.price
+            po.order_id,
+            po.user_id,
+            po.total_amount,
+            po.status,
+            po.created_at,
+            oip.order_item_id,
+            oip.order_id,
+            oip.product_id,
+            oip.quantity,
+            oip.price
         FROM paginated_orders po
         LEFT JOIN order_items_paged oip
-        ON po.id = oip.order_id
+        ON po.order_id = oip.order_id
         AND oip.rn > #{itemOffset}
         AND oip.rn &lt;= #{itemOffset} + #{itemLimit}
-        ORDER BY po.created_at DESC, oip.id;
+        ORDER BY po.created_at DESC, oip.order_item_id;
     </select>
     <select id="selectOrdersByOrderStatus" resultType="Order">
         SELECT *
@@ -85,18 +85,18 @@
     </select>
     <select id="selectOrdersByConditions" resultMap="orderResultMap">
         SELECT
-            o.id AS order_id,
+            o.order_id,
             o.user_id,
             o.total_amount,
             o.status,
             o.created_at,
-            oi.id AS item_id,
+            oi.order_item_id,
             oi.order_id,
             oi.product_id,
             oi.quantity,
             oi.price
         FROM `order` o
-        LEFT JOIN order_item oi ON o.id = oi.order_id
+        LEFT JOIN order_item oi ON o.order_id = oi.order_id
         <where>
             1 = 1
             <if test="userId != null">
@@ -115,11 +115,11 @@
     </select>
 
     <insert id="insertOrderItem" parameterType="OrderItem"
-            useGeneratedKeys="true" keyProperty="id">
+            useGeneratedKeys="true" keyProperty="orderItemId">
         INSERT INTO order_item (order_id, product_id, quantity, price)
         VALUES (#{orderId}, #{productId}, #{quantity}, #{price})
     </insert>
-    <insert id="insertOrderItems" parameterType="list" useGeneratedKeys="true" keyProperty="id">
+    <insert id="insertOrderItems" parameterType="list" useGeneratedKeys="true" keyProperty="orderItemId">
         INSERT INTO order_item (order_id, product_id, quantity, price)
         VALUES
         <foreach collection="list" item="item" separator = ",">

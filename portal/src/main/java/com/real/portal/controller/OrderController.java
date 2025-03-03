@@ -17,7 +17,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/orders")
-@PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
+@PreAuthorize("hasRole('ROLE_USER') or hasRole('ROLE_ADMIN')")
 public class OrderController {
 
     private final OrderService orderService;
@@ -32,7 +32,7 @@ public class OrderController {
     @PostMapping("/add")
     public ResponseEntity<String> createOrder(@AuthenticationPrincipal CustomUserDetails customUserDetails,
                                               @RequestBody Order order) {
-        order.setUserId(customUserDetails.getId());
+        order.setUserId(customUserDetails.getUserId());
         String orderId = orderStateService.createOrder(order);
         return ResponseEntity.ok("订单创建成功，订单号: " + orderId);
     }
@@ -45,7 +45,7 @@ public class OrderController {
             @RequestParam(defaultValue = "1") int itemPage,
             @RequestParam(defaultValue = "3") int itemPageSize
     ) {
-        return ResponseEntity.ok(orderService.getOrdersByUserId(customUserDetails.getId(), orderPage, orderPageSize, itemPage, itemPageSize));
+        return ResponseEntity.ok(orderService.getOrdersByUserId(customUserDetails.getUserId(), orderPage, orderPageSize, itemPage, itemPageSize));
     }
 
     @GetMapping("/search")
@@ -56,7 +56,7 @@ public class OrderController {
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime endTime
     ) {
         OrderStatus status = OrderStatus.strTransitionToEnums(statusStr);
-        List<Order> orders = orderService.getOrdersByConditions(customUserDetails.getId(), status, startTime, endTime);
+        List<Order> orders = orderService.getOrdersByConditions(customUserDetails.getUserId(), status, startTime, endTime);
         return ResponseEntity.ok(orders);
     }
 }

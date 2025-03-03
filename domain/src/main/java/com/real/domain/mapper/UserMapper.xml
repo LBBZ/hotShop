@@ -5,12 +5,12 @@
 <mapper namespace="com.real.domain.mapper.UserMapper">
 
     <insert id="insert" parameterType="User"
-            useGeneratedKeys="true" keyProperty="id">
+            useGeneratedKeys="true" keyProperty="userId">
         INSERT INTO `user` (username, password, email, role)
         VALUES (#{username}, #{password}, #{email}, #{role})
     </insert>
     <delete id="delete">
-        DELETE FROM `user` WHERE id = #{id}
+        DELETE FROM `user` WHERE user_id = #{userId}
     </delete>
     <delete id="deleteByUsername">
         DELETE FROM `user` WHERE `username` = #{username}
@@ -18,7 +18,7 @@
     <update id="update" parameterType="User">
         UPDATE `user`
         SET username = #{username}, password = #{password}, email = #{email}
-        WHERE id = #{id}
+        WHERE user_id = #{userId}
     </update>
 
     <select id="selectAll" resultType="User">
@@ -32,7 +32,7 @@
         FROM user
         WHERE 1=1
         <if test="id != null">
-            AND id = #{id}
+            AND user_id = #{userId}
         </if>
         <if test="username != null and username != ''">
             AND username = #{username}

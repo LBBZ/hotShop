@@ -11,7 +11,7 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 public class OrderItem {
 
-    private Long id;
+    private Long orderItemId;
     private String orderId;     // 关联订单号
     private Long productId;     // 商品ID
     private Integer quantity;   // 购买数量

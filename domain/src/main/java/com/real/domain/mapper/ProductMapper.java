@@ -9,11 +9,11 @@ import java.util.List;
 @Mapper
 public interface ProductMapper {
     int insert(Product product);
-    int delete(Long id);
+    int delete(Long productId);
     int update(Product product);
     int reduceStock(Long productId, Integer quantity);
     int increaseStock(Long productId, Integer quantity);
-    Product selectById(Long id);
+    Product selectById(Long productId);
     List<Product> selectAll();
 
     List<Product> selectByCategory(String category);

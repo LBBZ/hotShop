@@ -34,7 +34,7 @@ public class ProductController {
             @PathVariable Long id,
             @RequestBody Product product
     ) {
-        product.setId(id);
+        product.setProductId(id);
         productService.updateProduct(product);
         return ResponseEntity.ok("商品更新成功");
     }

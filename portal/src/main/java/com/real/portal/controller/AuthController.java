@@ -68,7 +68,7 @@ public class AuthController {
         // 返回增强响应
         Map<String, Object> response = new HashMap<>();
         response.put("token", token);
-        response.put("userId", user.getId());
+        response.put("userId", user.getUserId());
         response.put("role", user.getRole().name());
             return ResponseEntity.ok(response);
         } catch (AuthenticationException e) {

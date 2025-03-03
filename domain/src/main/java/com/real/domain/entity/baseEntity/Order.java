@@ -14,7 +14,7 @@ import java.util.List;
 @NoArgsConstructor
 public class Order {
 
-    private String id;          // 订单号（UUID）
+    private String orderId;          // 订单号（UUID）
     private Long userId;       // 用户ID
     private BigDecimal totalAmount;  // 总金额
     private OrderStatus status;      // 订单状态

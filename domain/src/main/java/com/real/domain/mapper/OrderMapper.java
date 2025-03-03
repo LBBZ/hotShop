@@ -35,7 +35,7 @@ public interface OrderMapper {
     );
 
     int insertOrderItem(OrderItem item);
-    @Options(useGeneratedKeys = true, keyProperty = "id")
+    @Options(useGeneratedKeys = true, keyProperty = "orderItemId")
     int insertOrderItems(List<OrderItem> items);
 
 }

@@ -34,7 +34,7 @@ public class UserDetailsServiceImpl implements UserDetailsService {
         Collection<? extends GrantedAuthority> authorities = mapRolesToAuthorities(user.getRole());
 
         return new CustomUserDetails(
-                user.getId(),
+                user.getUserId(),
                 user.getUsername(),
                 user.getPassword(),
                 authorities

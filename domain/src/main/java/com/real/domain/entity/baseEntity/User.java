@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 @Builder
 public class User {
 
-    private Long id;
+    private Long userId;
     private String username;
     private String password;
     private String email;

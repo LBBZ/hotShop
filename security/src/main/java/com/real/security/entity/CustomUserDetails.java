@@ -15,7 +15,7 @@ import java.util.Collection;
 @Builder
 public class CustomUserDetails implements UserDetails {
 
-    private Long id;
+    private Long userId;
     private String username;
     private String password;
     private Collection<? extends GrantedAuthority> authorities;

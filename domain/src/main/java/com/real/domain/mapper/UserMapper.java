@@ -12,12 +12,12 @@ import java.util.List;
 public interface UserMapper {
 
     int insert(User user);
-    int delete(Long id);
+    int delete(Long userId);
     int deleteByUsername(String username);
     int update(User user);
     User selectByUsername(String username);
     List<User> selectAll();
-    List<User> selectUsersByConditions(@Param("id") Long id,
+    List<User> selectUsersByConditions(@Param("userId") Long userId,
                                        @Param("username") String username,
                                        @Param("email") String email,
                                        @Param("role") Role role,

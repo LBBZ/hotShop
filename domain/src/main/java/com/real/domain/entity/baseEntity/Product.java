@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 public class Product {
 
-    private Long id;
+    private Long productId;
     private String name;
     private BigDecimal price;
     private Integer stock;

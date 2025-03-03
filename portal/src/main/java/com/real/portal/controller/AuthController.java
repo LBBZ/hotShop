@@ -5,10 +5,13 @@ import com.real.domain.entity.authEntity.LoginRequest;
 import com.real.domain.entity.authEntity.RegisterRequest;
 import com.real.domain.entity.baseEntity.User;
 import com.real.domain.service.baseService.UserService;
+import com.real.security.entity.CustomUserDetails;
 import com.real.security.util.JwtTokenUtil;
 import jakarta.validation.Valid;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -17,13 +20,11 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-
+import org.springframework.web.bind.annotation.*;
+import
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
@@ -41,39 +42,6 @@ public class AuthController {
         this.jwtTokenUtil = jwtTokenUtil;
         this.userDetailsService = userDetailsService;
         this.userService = userService;
-    }
-
-    @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
-        try {
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(
-                        request.getUsername(),
-                        request.getPassword()
-                )
-        );
-        UserDetails userDetails = userDetailsService.loadUserByUsername(request.getUsername());
-        String token = jwtTokenUtil.generateToken(userDetails);
-        User user = userService.getUserByUsername(request.getUsername());
-
-        // 设置HttpOnly Cookie
-        ResponseCookie cookie = ResponseCookie.from("access_token", token)
-                .httpOnly(true)
-                .secure(true) // 仅HTTPS
-                .path("/")
-                .maxAge(Duration.ofHours(1))
-                .sameSite("Strict")
-                .build();
-
-        // 返回增强响应
-        Map<String, Object> response = new HashMap<>();
-        response.put("token", token);
-        response.put("userId", user.getUserId());
-        response.put("role", user.getRole().name());
-            return ResponseEntity.ok(response);
-        } catch (AuthenticationException e) {
-            return ResponseEntity.status(401).body(Map.of("error", "用户名或密码错误"));
-        }
     }
 
     @PostMapping("/register")
@@ -98,5 +66,74 @@ public class AuthController {
 
         userService.register(newUser);
         return ResponseEntity.ok("注册成功");
+    }
+
+
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
+        // 1. 认证用户凭证
+        Authentication authentication = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(
+                        request.getUsername(),
+                        request.getPassword()
+                )
+        );
+
+        // 2. 获取用户详情
+        CustomUserDetails customUserDetails = (CustomUserDetails) authentication.getPrincipal();
+
+        // 3.生成双令牌
+        String accessToken = jwtTokenUtil.generateAccessToken(customUserDetails);
+        String refreshToken = jwtTokenUtil.generateRefreshToken(customUserDetails);
+
+        User user = userService.getUserByUsername(request.getUsername());
+
+        // 4. 返回响应（刷新令牌建议通过Cookie返回）
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, createRefreshTokenCookie(refreshToken).toString())
+                .body(Map.of(
+                        "access_token", accessToken,
+                        "expires_in", jwtTokenUtil.getAccessExpiration()
+                ));
+    }
+
+    // 刷新令牌接口
+    @PostMapping("/refresh")
+    public ResponseEntity<?> refreshToken(@CookieValue(name = "refresh_token", required = false) String refreshToken) {
+        // 1. 验证刷新令牌格式
+        if (!jwtTokenUtil.validateRefreshToken(refreshToken)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("无效的刷新令牌");
+        }
+
+        // 2. 提取用户信息
+        Long userId = jwtTokenUtil.getUserIdFromRefreshToken(refreshToken);
+        User user = userService.findById(userId)
+                .orElseThrow(() -> new UsernameNotFoundException("用户不存在"));
+
+        // 3. 生成新访问令牌
+        String newAccessToken = jwtTokenUtil.generateAccessToken(
+                new CustomUserDetails(
+                        user.getUsername(),
+                        user.getPassword(),
+                        user.getAuthorities(),
+                        user.getId()
+                )
+        );
+
+        return ResponseEntity.ok(Map.of(
+                "access_token", newAccessToken,
+                "expires_in", jwtTokenUtil.getAccessExpiration()
+        ));
+    }
+
+    // 创建安全Cookie
+    private ResponseCookie createRefreshTokenCookie(String token) {
+        return ResponseCookie.from("refresh_token", token)
+                .httpOnly(true)
+                .secure(true) // 生产环境启用
+                .path("/api/auth/refresh")
+                .maxAge(Duration.ofSeconds(jwtTokenUtil.getRefreshExpiration()))
+                .sameSite("Strict")
+                .build();
     }
 }

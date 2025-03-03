@@ -24,4 +24,5 @@ mybatis:
 
 jwt:
   secret: "5YWD56We5ZCv5Yqo5LiN5ZCv5Yqo5LqG5oiR5YaN5Lmf5LiN5a6M5Y6f56We5LqG"  # 元神启动不启动了我再也不完原神了
-  expiration: 86400  # 令牌有效期（秒）
+  access-expiration: 3600    # 访问令牌1小时过期
+  refresh-expiration: 2592000 # 刷新令牌30天过期

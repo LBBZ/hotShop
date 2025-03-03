@@ -9,14 +9,36 @@
         <version>0.0.1-SNAPSHOT</version>
     </parent>
 
-    <artifactId>admin</artifactId>
+    <artifactId>security</artifactId>
 
     <dependencies>
-        <!-- 依赖 portal -->
+        <!-- 依赖 domain -->
         <dependency>
             <groupId>com.real</groupId>
-            <artifactId>portal</artifactId>
+            <artifactId>domain</artifactId>
             <version>${project.version}</version>
+        </dependency>
+
+        <!-- Spring Security -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
+        <!-- JWT -->
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <scope>runtime</scope>
         </dependency>
     </dependencies>
 

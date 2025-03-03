@@ -2,7 +2,7 @@ package com.real.portal.controller;
 
 import com.real.common.enums.OrderStatus;
 import com.real.domain.entity.baseEntity.Order;
-import com.real.domain.security.entity.CustomUserDetails;
+import com.real.security.entity.CustomUserDetails;
 import com.real.domain.service.baseService.OrderService;
 import com.real.domain.service.orderStateService.OrderStateService;
 import org.springframework.beans.factory.annotation.Autowired;

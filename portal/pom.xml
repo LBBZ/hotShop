@@ -15,15 +15,8 @@
         <!-- 依赖 domain -->
         <dependency>
             <groupId>com.real</groupId>
-            <artifactId>domain</artifactId>
+            <artifactId>security</artifactId>
             <version>${project.version}</version>
-        </dependency>
-
-        <!-- Lombok -->
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <optional>true</optional>
         </dependency>
 
         <!-- Spring Boot Web -->
@@ -31,12 +24,6 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
-
-        <!-- Spring Security -->
-        <!--<dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-security</artifactId>
-        </dependency>-->
 
         <!-- 分页查询插件 -->
         <dependency>

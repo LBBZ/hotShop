@@ -1,4 +1,4 @@
-package com.real.domain.security.entity;
+package com.real.security.entity;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

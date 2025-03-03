@@ -1,11 +1,11 @@
 package com.real.portal.controller;
 
 import com.real.common.enums.Role;
-import com.real.common.security.JwtTokenUtil;
 import com.real.domain.entity.authEntity.LoginRequest;
 import com.real.domain.entity.authEntity.RegisterRequest;
 import com.real.domain.entity.baseEntity.User;
 import com.real.domain.service.baseService.UserService;
+import com.real.security.util.JwtTokenUtil;
 import jakarta.validation.Valid;
 
 import org.springframework.beans.factory.annotation.Autowired;

@@ -1,8 +1,8 @@
-package com.real.domain.security.service;
+package com.real.security.service;
 
 import com.real.common.enums.Role;
 import com.real.domain.entity.baseEntity.User;
-import com.real.domain.security.entity.CustomUserDetails;
+import com.real.security.entity.CustomUserDetails;
 import com.real.domain.service.baseService.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.GrantedAuthority;

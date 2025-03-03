@@ -1,4 +1,4 @@
-package com.real.common.security;
+package com.real.security.util;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;

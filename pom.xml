@@ -23,6 +23,7 @@
         <module>domain</module>
         <module>portal</module>
         <module>admin</module>
+        <module>security</module>
     </modules>
 
     <url/>

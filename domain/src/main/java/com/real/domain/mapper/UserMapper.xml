@@ -47,7 +47,7 @@
             AND created_at >= #{startTime}
         </if>
         <if test="endTime != null">
-            AND created_at <= #{endTime}
+            AND created_at = #{endTime}
         </if>
     </select>
 

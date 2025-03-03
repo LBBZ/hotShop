@@ -1,4 +1,4 @@
-package com.real.common.security;
+package com.real.security.util;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;

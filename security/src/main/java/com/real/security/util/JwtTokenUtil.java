@@ -46,10 +46,11 @@ public class JwtTokenUtil {
     }
 
     public String extractToken(String bearerToken) {
-        if (StringUtils.hasText(bearerToken) && bearerToken.startsWith("Bearer ")) {
+        if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
             return bearerToken.substring(7);
+        } else {
+            return bearerToken;
         }
-        return null;
     }
 
     // 生成令牌

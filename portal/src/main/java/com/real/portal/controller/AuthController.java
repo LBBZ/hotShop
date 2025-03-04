@@ -117,7 +117,6 @@ public class AuthController {
         tokenBlacklistService.addToBlacklist(TokenAc);
         tokenBlacklistService.addToBlacklist(TokenRe);
 
-
         return ResponseEntity.ok(Map.of("message", "Logout successful"));
     }
 

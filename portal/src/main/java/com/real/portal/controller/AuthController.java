@@ -21,7 +21,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -107,8 +106,7 @@ public class AuthController {
     @PreAuthorize("hasRole('ROLE_USER') or hasRole('ROLE_ADMIN')")
     public ResponseEntity<?> logout(
             HttpServletRequest request,
-            @CookieValue(name = "refresh_token", required = false) String refreshToken,
-            @AuthenticationPrincipal CustomUserDetails customUserDetails
+            @CookieValue(name = "refresh_token", required = false) String refreshToken
     ) {
         String TokenAc = jwtTokenUtil.extractToken(request.getHeader("Authorization"));
         String TokenRe = jwtTokenUtil.extractToken(refreshToken);

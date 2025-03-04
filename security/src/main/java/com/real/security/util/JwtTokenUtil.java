@@ -7,10 +7,12 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.Data;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.security.Key;
 import java.util.Date;
@@ -43,48 +45,56 @@ public class JwtTokenUtil {
                 .compact();
     }
 
-    // 生成访问令牌
-    public String generateAccessToken(CustomUserDetails customUserDetails) {
+    public String extractToken(String bearerToken) {
+        if (StringUtils.hasText(bearerToken) && bearerToken.startsWith("Bearer ")) {
+            return bearerToken.substring(7);
+        }
+        return null;
+    }
+
+    // 生成令牌
+    public String generateToken(CustomUserDetails customUserDetails, TokenType tokenType) {
         Map<String, Object> claims = new HashMap<>();
-        claims.put("tokenType", TokenType.ACCESS);
+        claims.put("tokenType", tokenType);
         return buildToken(claims, customUserDetails.getUsername(), accessExpiration);
     }
-    // 生成刷新令牌
-    public String generateRefreshToken(CustomUserDetails customUserDetails) {
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("tokenType", TokenType.REFRESH);
-        return buildToken(claims, customUserDetails.getUsername(), refreshExpiration);
-    }
-    // 验证token是否合法
+    /**
+     * @param token 令牌
+     * @param userDetails 用户详细信息
+     * @return 返回令牌是否合法
+     */
     public Boolean validateToken(String token, UserDetails userDetails) {
         final String username = getUsernameFromToken(token);
         return (username.equals(userDetails.getUsername()) && !isTokenExpired(token));
     }
-    // 验证accessToken是否有效
-    public Boolean validateAccessToken(String token) {
-        final TokenType tokenType = getTokenTypeFromToken(token);
-        return (tokenType.equals(TokenType.ACCESS)) && !isTokenExpired(token);
+    /**
+     * @param token 令牌
+     * @param tokenType 期望token种类
+     * @return 返回Token是否有效
+     */
+    public Boolean validateToken(String token, TokenType tokenType) {
+        final TokenType realTokenType = getTokenTypeFromToken(token);
+        return (realTokenType.equals(tokenType)) && !isTokenExpired(token);
     }
-    // 验证refreshToken是否有效
-    public Boolean validateRefreshToken(String token) {
-        final TokenType tokenType = getTokenTypeFromToken(token);
-        return (tokenType.equals(TokenType.REFRESH)) && !isTokenExpired(token);
+    /**
+     * @param token 令牌
+     * @return 返回token是否过期
+     */
+    public Boolean isTokenExpired(String token) {
+        final Date expiration = getExpirationDateFromToken(token);
+        return expiration.before(new Date());
     }
 
     public String getUsernameFromToken(String token) {
         return getClaimFromToken(token, Claims::getSubject);
     }
 
-    private Date getExpirationDateFromToken(String token) {
+    public Date getExpirationDateFromToken(String token) {
         return getClaimFromToken(token, Claims::getExpiration);
     }
+
     private TokenType getTokenTypeFromToken(String token) {
         return TokenType.strTransitionToEnums(getClaimFromToken(token, claims -> claims.get("tokenType", String.class)));
-    }
-    // 验证token是否过期
-    private Boolean isTokenExpired(String token) {
-        final Date expiration = getExpirationDateFromToken(token);
-        return expiration.before(new Date());
     }
     private <T> T getClaimFromToken(String token, Function<Claims, T> claimsResolver) {
         final Claims claims = getAllClaimsFromToken(token);

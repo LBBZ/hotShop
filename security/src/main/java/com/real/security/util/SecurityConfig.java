@@ -29,6 +29,7 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
+
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -39,6 +40,8 @@ public class SecurityConfig {
                                 "/webjars/**",
                                 "/static/**",
                                 "/favicon.ico").permitAll()
+                        .requestMatchers("/api/auth/logout",
+                                "/api/auth/refresh").authenticated()
                         .requestMatchers("/api/auth/**",
                                 "/products/**").permitAll()
                         .anyRequest().authenticated()

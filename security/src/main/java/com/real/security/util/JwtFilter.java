@@ -1,5 +1,6 @@
 package com.real.security.util;
 
+import com.real.security.service.TokenBlacklistService;
 import jakarta.annotation.Nonnull;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -21,13 +22,14 @@ import java.io.IOException;
 public class JwtFilter extends OncePerRequestFilter {
 
     private final JwtTokenUtil jwtTokenUtil;
+    private final TokenBlacklistService tokenBlacklistService;
     private final UserDetailsService userDetailsService;
     @Autowired
-    public JwtFilter(final JwtTokenUtil jwtTokenUtil, final UserDetailsService userDetailsService) {
+    public JwtFilter(final JwtTokenUtil jwtTokenUtil, TokenBlacklistService tokenBlacklistService, final UserDetailsService userDetailsService) {
         this.jwtTokenUtil = jwtTokenUtil;
+        this.tokenBlacklistService = tokenBlacklistService;
         this.userDetailsService = userDetailsService;
     }
-
 
     private String extractToken(HttpServletRequest request) {
         String bearerToken = request.getHeader("Authorization");
@@ -44,6 +46,11 @@ public class JwtFilter extends OncePerRequestFilter {
 
         String token = extractToken(request);
         if (token != null) {
+            // 黑名单检查
+            if (tokenBlacklistService.isBlacklisted(token)) {
+                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Token revoked");
+                return;
+            }
             String username = jwtTokenUtil.getUsernameFromToken(token);
             if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 UserDetails userDetails = userDetailsService.loadUserByUsername(username);

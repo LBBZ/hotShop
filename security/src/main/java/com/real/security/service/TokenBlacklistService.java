@@ -1,6 +1,7 @@
 package com.real.security.service;
 
 import com.real.security.util.JwtTokenUtil;
+import jakarta.annotation.Resource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
@@ -11,12 +12,13 @@ import java.util.concurrent.TimeUnit;
 
 @Service
 public class TokenBlacklistService {
-    private final RedisTemplate<String, Object> redisTemplate;
+    @Resource
+    private RedisTemplate redisTemplate;
+
     private final JwtTokenUtil jwtTokenUtil;
     private static final String BLACKLIST_KEY = "jwt:blacklist";
     @Autowired
-    public TokenBlacklistService(RedisTemplate<String, Object> redisTemplate, JwtTokenUtil jwtTokenUtil) {
-        this.redisTemplate = redisTemplate;
+    public TokenBlacklistService( JwtTokenUtil jwtTokenUtil) {
         this.jwtTokenUtil = jwtTokenUtil;
     }
 

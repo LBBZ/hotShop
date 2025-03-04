@@ -114,8 +114,8 @@ public class AuthController {
         String TokenRe = jwtTokenUtil.extractToken(refreshToken);
 
         // 将令牌加入黑名单
-        tokenBlacklistService.addToBlacklist(accessToken);
-        tokenBlacklistService.addToBlacklist(refreshToken);
+        tokenBlacklistService.addToBlacklist(TokenAc);
+        tokenBlacklistService.addToBlacklist(TokenRe);
 
 
         return ResponseEntity.ok(Map.of("message", "Logout successful"));

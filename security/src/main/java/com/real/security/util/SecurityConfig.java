@@ -30,16 +30,6 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                .logout(logout -> logout
-                        .logoutUrl("/api/auth/logout")
-                        .addLogoutHandler((request, response, authentication) -> {
-                            // 可以在此处执行额外的清理逻辑
-                        })
-                        .logoutSuccessHandler((request, response, authentication) -> {
-                            response.setStatus(HttpServletResponse.SC_OK);
-                            response.getWriter().write("Logout successful");
-                        })
-                )
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -51,7 +41,7 @@ public class SecurityConfig {
                                 "/static/**",
                                 "/favicon.ico").permitAll()
                         .requestMatchers("/api/auth/logout",
-                                "api/auth/refresh").authenticated()
+                                "/api/auth/refresh").authenticated()
                         .requestMatchers("/api/auth/**",
                                 "/products/**").permitAll()
                         .anyRequest().authenticated()

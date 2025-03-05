@@ -86,8 +86,8 @@ public class AuthController {
         CustomUserDetails customUserDetails = (CustomUserDetails) authentication.getPrincipal();
 
         // 3.生成双令牌
-        String accessToken = jwtTokenUtil.generateToken(customUserDetails, TokenType.ACCESS);
-        String refreshToken = jwtTokenUtil.generateToken(customUserDetails, TokenType.REFRESH);
+        String accessToken = jwtTokenUtil.generateToken(customUserDetails, TokenType.ACCESS, null);
+        String refreshToken = jwtTokenUtil.generateToken(customUserDetails, TokenType.REFRESH, null);
 
         // 4. 返回响应（刷新令牌建议通过Cookie返回）
         User user = userService.getUserByUsername(request.getUsername());
@@ -137,7 +137,8 @@ public class AuthController {
         // 3. 生成新访问令牌
         String newAccessToken = jwtTokenUtil.generateToken(
                 (CustomUserDetails) userDetailsService.loadUserByUsername(username),
-                TokenType.ACCESS
+                TokenType.ACCESS,
+                null
         );
 
         return ResponseEntity.ok(Map.of(

@@ -54,7 +54,7 @@ public class JwtTokenUtil {
     /**
      * @param customUserDetails 用户信息，不可为空值
      * @param tokenType 令牌类型
-     * @param claims 声明，可以为空值 null
+     * @param claims 自定义声明键值对，声明可以为空值 null
      * @return 返回生成的
      */
     public String generateToken(CustomUserDetails customUserDetails, TokenType tokenType, Map<String, Object> claims) {

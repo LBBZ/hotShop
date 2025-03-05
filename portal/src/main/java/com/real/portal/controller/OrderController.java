@@ -17,7 +17,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/orders")
-@PreAuthorize("hasRole('ROLE_USER') or hasRole('ROLE_ADMIN')")
+@PreAuthorize("hasRole('ROLE_USER')")
 public class OrderController {
 
     private final OrderService orderService;
@@ -30,7 +30,7 @@ public class OrderController {
     }
 
     @PostMapping("/add")
-    public ResponseEntity<String> createOrder(@AuthenticationPrincipal CustomUserDetails customUserDetails,
+    public ResponseEntity<String> createOrderByUserToken(@AuthenticationPrincipal CustomUserDetails customUserDetails,
                                               @RequestBody Order order) {
         order.setUserId(customUserDetails.getUserId());
         String orderId = orderStateService.createOrder(order);
@@ -38,7 +38,7 @@ public class OrderController {
     }
 
     @GetMapping("/page")
-    public ResponseEntity<List<Order>> getOrdersByUserId(
+    public ResponseEntity<List<Order>> getOrdersByUserToken(
             @AuthenticationPrincipal CustomUserDetails customUserDetails,
             @RequestParam(defaultValue = "1") int orderPage,
             @RequestParam(defaultValue = "10") int orderPageSize,
@@ -49,7 +49,7 @@ public class OrderController {
     }
 
     @GetMapping("/search")
-    public ResponseEntity<List<Order>> getOrders(
+    public ResponseEntity<List<Order>> getOrdersByUserToken(
             @AuthenticationPrincipal CustomUserDetails customUserDetails,
             @RequestParam(required = false) String statusStr,
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime startTime,

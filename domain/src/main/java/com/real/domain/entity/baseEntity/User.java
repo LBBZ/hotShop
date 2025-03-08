@@ -18,7 +18,7 @@ public class User {
     @Schema(description = "用户ID", example = "123")
     private Long userId;
 
-    @Schema(description = "用户名", example = "john_doe", required = true)
+    @Schema(description = "用户名", example = "john_doe", requiredMode = Schema.RequiredMode.REQUIRED)
     private String username;
 
     @Schema(description = "加密后的密码", example = "$2a$10$ABC...", hidden = true) // 隐藏敏感字段

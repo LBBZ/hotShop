@@ -16,7 +16,7 @@ public class Product {
     @Schema(description = "商品ID", example = "456")
     private Long productId;
 
-    @Schema(description = "商品名称", example = "iPhone 15", required = true)
+    @Schema(description = "商品名称", example = "iPhone 15", requiredMode = Schema.RequiredMode.REQUIRED)
     private String name;
 
     @Schema(description = "商品价格（单位：元）", example = "6999.00")

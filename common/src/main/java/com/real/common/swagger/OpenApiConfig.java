@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.OpenAPIDefinition;
 import io.swagger.v3.oas.annotations.info.Info;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import org.springdoc.core.customizers.OpenApiCustomizer;
+import org.springdoc.core.models.GroupedOpenApi;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -25,5 +26,22 @@ public class OpenApiConfig {
                         .type(SecurityScheme.Type.HTTP)
                         .scheme("bearer")
                         .bearerFormat("JWT"));
+    }
+
+    // 在 SwaggerConfig.java 中添加以下方法：
+    @Bean
+    public GroupedOpenApi portalApi() {
+        return GroupedOpenApi.builder()
+                .group("前台接口和公开接口")
+                .pathsToMatch("/portal/**")
+                .build();
+    }
+
+    @Bean
+    public GroupedOpenApi adminApi() {
+        return GroupedOpenApi.builder()
+                .group("后台接口")
+                .pathsToMatch("/admin/**")
+                .build();
     }
 }

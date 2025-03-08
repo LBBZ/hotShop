@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @Tag(name = "用户接口", description = "用户信息管理（需登录）")
-@RequestMapping("/users")
+@RequestMapping("/portal/users")
 @PreAuthorize("hasRole('ROLE_USER') or hasRole('ROLE_ADMIN')")
 public class UserController {
     private final UserService userService;

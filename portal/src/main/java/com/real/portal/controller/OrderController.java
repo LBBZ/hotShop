@@ -23,7 +23,7 @@ import java.util.List;
 
 @RestController
 @Tag(name = "订单接口", description = "用户订单管理（需要用户权限）")
-@RequestMapping("/orders")
+@RequestMapping("/portal/orders")
 @PreAuthorize("hasRole('ROLE_USER')")
 public class OrderController {
     private final OrderService orderService;

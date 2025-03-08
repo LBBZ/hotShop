@@ -38,7 +38,7 @@ import java.util.Map;
 
 @RestController
 @Tag(name = "认证接口", description = "用户注册/登录/登出/令牌管理")
-@RequestMapping("/api/auth")
+@RequestMapping("/portal/auth")
 public class AuthController {
     private final AuthenticationManager authenticationManager;
     private final JwtTokenUtil jwtTokenUtil;

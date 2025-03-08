@@ -14,7 +14,7 @@ import java.util.List;
 
 @RestController
 @Tag(name = "商品接口", description = "商品信息查询（公开接口）")
-@RequestMapping("/products")
+@RequestMapping("/portal/products")
 public class ProductController {
     private final ProductService productService;
     @Autowired

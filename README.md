@@ -12,20 +12,22 @@
 - Order
 
 ## `技术架构`
-	
 
-| 技术 | 说明 | Right aligned |
-|:-------------|:--------------:|--------------:|
-| This text    | This text      | This text     |
-| is left      | is centered    | is right      |
-| aligned      |                | aligned       |
-springboot mysql  mybatis
+|      技术栈       | 说明                   | 详细                                     | 状态  |
+|:--------------:|:---------------------|:---------------------------------------|:---:|
+|   springboot   | 用于快速开发 Spring 应用的框架  | 略                                      | 已集成 |
+|     Lombok     | 减少 boilerplate 代码的工具 | 略                                      | 已集成 |
+|     mysql      | 关系型数据库,用于数据存储        | 存储信息表,用户、订单、商品等                        | 已集成 |
+|    mybatis     | 持久层框架,简化数据库操作        | 略                                      | 已集成 |
+|    swagger     | 用于生成和展示 API 文档的工具    | 略                                      | 已集成 |
+| springSecurity | 安全框架,用于实现认证和授权       | 用于管理端、用户端的安全认证,拦截请求等操作                 | 已集成 |
+|      JWT       | 用于生成和验证 JWT 令牌       | 用于生成定时过期的认证令牌(访问令牌、刷新令牌),服务器无需储存令牌即可验证 | 已集成 |
+|     redis      | 高性能的内存数据库            | 用于设置令牌黑名单,登出的账号的令牌会存储在redis黑名单中        | 已集成 |
 
-springSecurity 
 
-JWT Redis
+ 
 
-Lombok
+
 
 ### 模块化
 ```mermaid

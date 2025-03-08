@@ -120,11 +120,21 @@ public class AuthController {
 
     // 刷新令牌接口
     @PostMapping("/refresh")
-    @PreAuthorize("hasRole('ROLE_USER') or hasRole('ROLE_ADMIN')")
-    public ResponseEntity<?> refreshToken(@CookieValue(name = "refresh_token", required = false) String refreshToken) {
-        // 1. 验证刷新令牌格式
+    public ResponseEntity<?> refreshToken(
+            HttpServletRequest request,
+            @CookieValue(name = "refresh_token", required = false) String refreshToken) {
+        // 1. 验证刷新令牌格式,验证access令牌是否失效
         if (!jwtTokenUtil.validateToken(refreshToken, TokenType.REFRESH)) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("无效的刷新令牌");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("无效令牌");
+        }
+        String accessToken = jwtTokenUtil.extractToken(request.getHeader("Authorization"));
+        if (accessToken == null || accessToken.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("无效令牌");
+        }
+        if (jwtTokenUtil.validateToken(accessToken, TokenType.ACCESS)) {
+            return ResponseEntity.ok(Map.of(
+                    "access_token", accessToken
+            ));
         }
 
         // 2. 提取用户信息
@@ -142,8 +152,7 @@ public class AuthController {
         );
 
         return ResponseEntity.ok(Map.of(
-                "access_token", newAccessToken,
-                "expires_in", jwtTokenUtil.getAccessExpiration()
+                "access_token", newAccessToken
         ));
     }
 

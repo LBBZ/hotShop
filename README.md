@@ -12,10 +12,20 @@
 - Order
 
 ## `技术架构`
+	
 
+| 技术 | 说明 | Right aligned |
+|:-------------|:--------------:|--------------:|
+| This text    | This text      | This text     |
+| is left      | is centered    | is right      |
+| aligned      |                | aligned       |
 springboot mysql  mybatis
 
-嵌入springSecurity JWT
+springSecurity 
+
+JWT Redis
+
+Lombok
 
 ### 模块化
 ```mermaid

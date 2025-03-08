@@ -27,15 +27,17 @@
     <select id="selectByUsername" resultType="User">
         SELECT * FROM `user` WHERE username = #{username}
     </select>
+
+
     <select id="selectUsersByConditions" resultType="User">
         SELECT *
-        FROM user
+        FROM `user`
         WHERE 1=1
-        <if test="id != null">
+        <if test="userId != null">
             AND user_id = #{userId}
         </if>
         <if test="username != null and username != ''">
-            AND username = #{username}
+            AND username LIKE CONCAT('%', #{username}, '%')
         </if>
         <if test="email != null and email != ''">
             AND email = #{email}

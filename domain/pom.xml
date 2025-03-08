@@ -34,12 +34,6 @@
             <artifactId>protobuf-java</artifactId>
             <version>4.28.2</version> <!-- 确保使用最新版本 -->
         </dependency>
-
-        <!-- 分页查询插件 -->
-        <dependency>
-            <groupId>com.github.pagehelper</groupId>
-            <artifactId>pagehelper-spring-boot-starter</artifactId>
-        </dependency>
     </dependencies>
 
     <properties>

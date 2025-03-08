@@ -14,11 +14,11 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/admin/orders")
-@PreAuthorize("hasRole('ADMIN')")
-public class OrderController {
+@PreAuthorize("hasRole('ROLE_ADMIN')")
+public class AdminOrderController {
     private final OrderService orderService;
     @Autowired
-    public OrderController(OrderService orderService) {
+    public AdminOrderController(OrderService orderService) {
         this.orderService = orderService;
     }
 

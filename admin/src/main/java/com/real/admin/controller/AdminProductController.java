@@ -13,12 +13,12 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/admin/products")
-@PreAuthorize("hasRole('ADMIN')")
-public class ProductController {
+@PreAuthorize("hasRole('ROLE_ADMIN')")
+public class AdminProductController {
     private final ProductService productService;
     private final StoredProcedure storedProcedure;
     @Autowired
-    public ProductController(ProductService productService, StoredProcedure storedProcedure) {
+    public AdminProductController(ProductService productService, StoredProcedure storedProcedure) {
         this.productService = productService;
         this.storedProcedure = storedProcedure;
     }
@@ -66,13 +66,15 @@ public class ProductController {
     }
 
     @GetMapping("/search")
-    public ResponseEntity<List<Product>> searchProducts(
+    public ResponseEntity<PageInfo<Product>> searchProducts(
+            @RequestParam(defaultValue = "1") int pageNum,
+            @RequestParam(defaultValue = "10") int pageSize,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String category,
             @RequestParam(required = false) Long minPrice,
             @RequestParam(required = false) Long maxPrice
     ) {
-        List<Product> products = productService.getProductsByConditions(keyword, category, minPrice, maxPrice);
+        PageInfo<Product> products = productService.getProductsByConditions(pageNum, pageSize, keyword, category, minPrice, maxPrice);
         return ResponseEntity.ok(products);
     }
 

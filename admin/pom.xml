@@ -18,6 +18,11 @@
             <artifactId>portal</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>com.real</groupId>
+            <artifactId>domain</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 
     <properties>

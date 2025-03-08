@@ -6,8 +6,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication(scanBasePackages = {
         "com.real.admin",  // 当前模块
-        "com.real.domain",   // 领域模块
-        "com.real.common",      // 扫描通用模块（如全局异常处理）
+        "com.real.domain", // 领域模块
+        "com.real.common", // 扫描通用模块（如全局异常处理）
         "com.real.portal"
 })
 @MapperScan("com.real.domain.mapper")

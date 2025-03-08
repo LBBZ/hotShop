@@ -9,6 +9,12 @@ import com.real.domain.service.baseService.UserService;
 import com.real.security.entity.CustomUserDetails;
 import com.real.security.service.TokenBlacklistService;
 import com.real.security.util.JwtTokenUtil;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 
@@ -31,6 +37,7 @@ import java.time.Duration;
 import java.util.Map;
 
 @RestController
+@Tag(name = "认证接口", description = "用户注册/登录/登出/令牌管理")
 @RequestMapping("/api/auth")
 public class AuthController {
     private final AuthenticationManager authenticationManager;
@@ -47,6 +54,19 @@ public class AuthController {
         this.tokenBlacklistService = tokenBlacklistService;
     }
 
+    @Operation(
+        summary = "用户注册",
+        description = "新用户注册接口（密码需包含字母、数字、特殊字符且至少8位）",
+        responses = {
+                @ApiResponse(responseCode = "200", description = "注册成功"),
+                @ApiResponse(responseCode = "400", description = """
+            可能的错误信息：
+            - 用户名已存在
+            - 邮箱已被注册
+            - 密码不符合强度要求
+            """)
+        }
+    )
     @PostMapping("/register")
     public ResponseEntity<String> register(@RequestBody @Valid RegisterRequest request) {
         // 检查用户名、邮箱是否已存在
@@ -71,7 +91,22 @@ public class AuthController {
         return ResponseEntity.ok("注册成功");
     }
 
-
+    @Operation(
+        summary = "用户登录",
+        description = "获取访问令牌（Access Token）和刷新令牌（Refresh Token）",
+        responses = {
+            @ApiResponse(responseCode = "200", description = "登录成功",
+                    content = @Content(schema = @Schema(implementation = Map.class, example = """
+            {
+                "role": "ROLE_USER",
+                "userId": 123,
+                "username": "john_doe",
+                "access_token": "eyJhbGci...",
+                "expires_in": 3600
+            }"""))),
+            @ApiResponse(responseCode = "401", description = "用户名或密码错误")
+            }
+    )
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
         // 1. 认证用户凭证
@@ -102,6 +137,15 @@ public class AuthController {
                 ));
     }
 
+    @Operation(
+        summary = "用户登出",
+        description = "使当前访问令牌失效（需要携带有效令牌）",
+        security = @SecurityRequirement(name = "JWT"),
+        responses = {
+            @ApiResponse(responseCode = "200", description = "登出成功"),
+            @ApiResponse(responseCode = "401", description = "未授权访问")
+        }
+    )
     @PostMapping("/logout")
     @PreAuthorize("hasRole('ROLE_USER') or hasRole('ROLE_ADMIN')")
     public ResponseEntity<?> logout(
@@ -118,7 +162,17 @@ public class AuthController {
         return ResponseEntity.ok(Map.of("message", "Logout successful"));
     }
 
-    // 刷新令牌接口
+
+    @Operation(
+        summary = "刷新访问令牌",
+        description = "使用刷新令牌获取新的访问令牌",
+        responses = {
+            @ApiResponse(responseCode = "200", description = "令牌刷新成功",
+                    content = @Content(schema = @Schema(example = """
+            { "access_token": "eyJhbGci..." }"""))),
+            @ApiResponse(responseCode = "401", description = "无效的刷新令牌")
+            }
+    )
     @PostMapping("/refresh")
     public ResponseEntity<?> refreshToken(
             HttpServletRequest request,

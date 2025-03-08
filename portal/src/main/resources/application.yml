@@ -23,6 +23,11 @@ spring:
           min-idle: 0
           max-wait: -1ms
 
+springdoc:
+  swagger-ui:
+    enabled: true   # 关闭 Swagger UI
+  api-docs:
+    enabled: true   # 关闭 OpenAPI JSON 文档生成
 
 logging:
   level:

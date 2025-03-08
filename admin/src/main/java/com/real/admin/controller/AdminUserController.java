@@ -18,7 +18,6 @@ import java.time.LocalDateTime;
 @RequestMapping("/admin/users")
 @PreAuthorize("hasRole('ROLE_ADMIN')")
 public class AdminUserController {
-
     private final UserService userService;
     @Autowired
     public AdminUserController(UserService userService) {

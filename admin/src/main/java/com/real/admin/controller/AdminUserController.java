@@ -24,7 +24,6 @@ public class AdminUserController {
         this.userService = userService;
     }
 
-
     @GetMapping("/search")
     public ResponseEntity<PageInfo<User>> getUsers(
             @RequestParam(defaultValue = "1") int pageNum,

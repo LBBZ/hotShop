@@ -1,5 +1,6 @@
 package com.real.admin.controller;
 
+import com.github.pagehelper.PageInfo;
 import com.real.common.enums.OrderStatus;
 import com.real.domain.entity.baseEntity.Order;
 import com.real.domain.service.baseService.OrderService;
@@ -39,14 +40,16 @@ public class AdminOrderController {
     }
 
     @GetMapping("/search")
-    public ResponseEntity<List<Order>> getOrders(
+    public ResponseEntity<PageInfo<Order>> getOrders(
+            @RequestParam(defaultValue = "1") int orderPage,
+            @RequestParam(defaultValue = "10") int orderPageSize,
             @RequestParam(required = false) Long userId,
             @RequestParam(required = false) String statusStr,
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime startTime,
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime endTime
     ) {
         OrderStatus status = OrderStatus.strTransitionToEnums(statusStr);
-        List<Order> orders = orderService.getOrdersByConditions(userId, status, startTime, endTime);
+        PageInfo<Order> orders = orderService.getOrdersByConditions(orderPage, orderPageSize, userId, status, startTime, endTime);
         return ResponseEntity.ok(orders);
     }
 }

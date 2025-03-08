@@ -1,6 +1,8 @@
 package com.real.domain.service.baseService;
 
+import com.github.pagehelper.PageInfo;
 import com.real.common.enums.OrderStatus;
+import com.real.common.util.PageHelperUtils;
 import com.real.domain.entity.baseEntity.Order;
 import com.real.domain.mapper.OrderMapper;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,12 +16,12 @@ import java.util.List;
 @Service
 @Transactional
 public class OrderService {
-
     private final OrderMapper orderMapper;
-
+    private final PageHelperUtils<Order> pageHelperUtils;
     @Autowired
-    public OrderService(OrderMapper orderMapper) {
+    public OrderService(OrderMapper orderMapper, PageHelperUtils<Order> pageHelperUtils) {
         this.orderMapper = orderMapper;
+        this.pageHelperUtils = pageHelperUtils;
     }
 
     public Order getOrderById(String orderId) {
@@ -66,5 +68,11 @@ public class OrderService {
 
     public List<Order> getOrdersByConditions(Long userId, OrderStatus status, LocalDateTime startTime, LocalDateTime endTime) {
         return orderMapper.selectOrdersByConditions(userId, status, startTime, endTime);
+    }
+
+    public PageInfo<Order> getOrdersByConditions(int pageNum, int pageSize, Long userId, OrderStatus status, LocalDateTime startTime, LocalDateTime endTime) {
+        List<Order> orders;
+        orders = getOrdersByConditions(userId, status, startTime, endTime);
+        return pageHelperUtils.getPageInfo(pageNum, pageSize, orders);
     }
 }

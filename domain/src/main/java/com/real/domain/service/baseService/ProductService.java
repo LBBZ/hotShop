@@ -13,7 +13,6 @@ import java.util.List;
 public class ProductService {
     private final PageHelperUtils<Product> pageHelperUtils;
     private final ProductMapper productMapper;
-
     @Autowired
     public ProductService(PageHelperUtils<Product> pageHelperUtils, ProductMapper productMapper) {
         this.pageHelperUtils = pageHelperUtils;

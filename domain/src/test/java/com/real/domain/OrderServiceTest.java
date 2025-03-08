@@ -1,6 +1,7 @@
 package com.real.domain;
 
 import com.real.common.exception.InventoryShortageException;
+import com.real.common.util.PageHelperUtils;
 import com.real.domain.entity.baseEntity.Order;
 import com.real.domain.entity.baseEntity.OrderItem;
 import com.real.domain.entity.baseEntity.Product;
@@ -28,12 +29,13 @@ class OrderServiceTest {
     private OrderMapper orderMapper;
     private OrderStateService orderStateService;
     private OrderService orderService;
-
+    @Mock
+    private PageHelperUtils<Order> pageHelperUtils = new PageHelperUtils<>();
     @BeforeEach
     void setUp() throws Exception {
         try (AutoCloseable ignored = MockitoAnnotations.openMocks(this)) {
             // 初始化 Mock 对象
-            orderService = new OrderService(orderMapper);
+            orderService = new OrderService(orderMapper, pageHelperUtils);
             orderStateService = new OrderStateService(orderMapper, productMapper);
         }
     }

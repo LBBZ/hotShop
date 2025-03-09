@@ -9,8 +9,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-
 @RestController
 @RequestMapping("/admin/products")
 @PreAuthorize("hasRole('ROLE_ADMIN')")
@@ -64,5 +62,4 @@ public class AdminProductController {
         PageInfo<Product> products = productService.getProductsByConditions(pageNum, pageSize, keyword, category, minPrice, maxPrice);
         return ResponseEntity.ok(products);
     }
-
 }

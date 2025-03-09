@@ -40,10 +40,10 @@ public class SecurityConfig {
                                 "/webjars/**",
                                 "/static/**",
                                 "/favicon.ico").permitAll()
-                        .requestMatchers("/api/auth/logout",
-                                "/api/auth/refresh").authenticated()
-                        .requestMatchers("/api/auth/**",
-                                "/products/**").permitAll()
+                        .requestMatchers("/portal/auth/logout",
+                                "/portal/auth/refresh").authenticated()
+                        .requestMatchers("/portal/auth/**",
+                                "/portal/products/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);

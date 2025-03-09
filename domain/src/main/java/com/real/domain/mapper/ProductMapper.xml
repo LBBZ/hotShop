@@ -9,7 +9,7 @@
         VALUES (#{name}, #{price}, #{stock}, #{category}, #{description})
     </insert>
     <delete id="delete">
-        DELETE FROM product WHERE id = #{id}
+        DELETE FROM product WHERE product_id = #{productId}
     </delete>
     <update id="update" parameterType="Product">
         UPDATE product

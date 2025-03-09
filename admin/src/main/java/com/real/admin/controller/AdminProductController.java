@@ -52,19 +52,6 @@ public class AdminProductController {
         return ResponseEntity.ok(product);
     }
 
-    @GetMapping("/all")
-    public ResponseEntity<List<Product>> getAllProducts() {
-        return ResponseEntity.ok(productService.getAllProducts());
-    }
-
-    @GetMapping("/page")
-    public ResponseEntity<PageInfo<Product>> getProductPage(
-            @RequestParam(defaultValue = "1") int pageNum,
-            @RequestParam(defaultValue = "10") int pageSize,
-            @RequestParam(required = false) String category) {
-        return ResponseEntity.ok(productService.getProductByPage(pageNum, pageSize, category));
-    }
-
     @GetMapping("/search")
     public ResponseEntity<PageInfo<Product>> searchProducts(
             @RequestParam(defaultValue = "1") int pageNum,

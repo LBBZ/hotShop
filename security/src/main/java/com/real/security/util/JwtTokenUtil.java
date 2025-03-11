@@ -58,11 +58,9 @@ public class JwtTokenUtil {
      * @return 返回生成的
      */
     public String generateToken(CustomUserDetails customUserDetails, TokenType tokenType, Map<String, Object> claims) {
-        if (customUserDetails != null) {
+        if (claims == null) {
             claims = new HashMap<>();
-            claims.put("tokenType", tokenType);
         }
-        claims = new HashMap<>();
         claims.put("tokenType", tokenType);
         assert customUserDetails != null;
         return buildToken(claims, customUserDetails.getUsername(), accessExpiration);

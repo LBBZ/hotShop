@@ -33,7 +33,7 @@ public class JwtTokenUtil {
         byte[] keyBytes = Decoders.BASE64.decode(secret);
         return Keys.hmacShaKeyFor(keyBytes);
     }
-    private String buildToken(Map<String, Object> claims, String subject, Long expiration) {
+    public String buildToken(Map<String, Object> claims, String subject, Long expiration) {
         return Jwts.builder()
                 .setClaims(claims)
                 .setSubject(subject)
@@ -67,6 +67,7 @@ public class JwtTokenUtil {
         assert customUserDetails != null;
         return buildToken(claims, customUserDetails.getUsername(), accessExpiration);
     }
+
     /**
      * @param token 令牌
      * @param userDetails 用户详细信息

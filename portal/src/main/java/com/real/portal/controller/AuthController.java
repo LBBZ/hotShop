@@ -92,7 +92,7 @@ public class AuthController {
     }
 
     @Operation(
-        summary = "用户登录",
+        summary = "普通用户登录",
         description = "获取访问令牌（Access Token）和刷新令牌（Refresh Token）",
         responses = {
             @ApiResponse(responseCode = "200", description = "登录成功",
@@ -119,13 +119,17 @@ public class AuthController {
 
         // 2. 获取用户详情
         CustomUserDetails customUserDetails = (CustomUserDetails) authentication.getPrincipal();
+        User user = userService.getUserByUsername(request.getUsername());
+        if (!user.getRole().equals(Role.ROLE_USER)) {
+            return ResponseEntity.ok()
+                    .body(Map.of("message", "user :" + customUserDetails.getUsername() + "not exist"));
+        }
 
         // 3.生成双令牌
         String accessToken = jwtTokenUtil.generateToken(customUserDetails, TokenType.ACCESS, null);
         String refreshToken = jwtTokenUtil.generateToken(customUserDetails, TokenType.REFRESH, null);
 
         // 4. 返回响应（刷新令牌建议通过Cookie返回）
-        User user = userService.getUserByUsername(request.getUsername());
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, createRefreshTokenCookie(refreshToken).toString())
                 .body(Map.of(
@@ -133,12 +137,12 @@ public class AuthController {
                         "userId", user.getUserId(),
                         "username", user.getUsername(),
                         "access_token", accessToken,
-                        "expires_in", jwtTokenUtil.getAccessExpiration()
+                        "expires_in", jwtTokenUtil.getExpirationDateFromToken(accessToken)
                 ));
     }
 
     @Operation(
-        summary = "用户登出",
+        summary = "普通用户登出",
         description = "使当前访问令牌失效（需要携带有效令牌）",
         security = @SecurityRequirement(name = "JWT"),
         responses = {
@@ -147,7 +151,7 @@ public class AuthController {
         }
     )
     @PostMapping("/logout")
-    @PreAuthorize("hasRole('ROLE_USER') or hasRole('ROLE_ADMIN')")
+    @PreAuthorize("hasRole('ROLE_USER')")
     public ResponseEntity<?> logout(
             HttpServletRequest request,
             @CookieValue(name = "refresh_token", required = false) String refreshToken

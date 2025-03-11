@@ -43,6 +43,7 @@ public class SecurityConfig {
                         .requestMatchers("/portal/auth/logout",
                                 "/portal/auth/refresh").authenticated()
                         .requestMatchers("/portal/auth/**",
+                                "/admin/auth/**",
                                 "/portal/products/**").permitAll()
                         .anyRequest().authenticated()
                 )

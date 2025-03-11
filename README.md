@@ -32,8 +32,8 @@
 ### 模块化
 ```mermaid
 graph TD
-A(admin) --> B(portal)
-B --> C(domain)
+A(admin) --> C(domain)
+B(portal) --> C(domain)
 C --> D(security)
 D --> E(common)
 ```

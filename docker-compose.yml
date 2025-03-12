@@ -27,8 +27,8 @@ services:
 
   admin-service:
     build:
-      context: .
-      dockerfile: admin/Dockerfile
+      context: ./admin
+      dockerfile: Dockerfile
     container_name: hotShop-admin
     depends_on:
       - mysql
@@ -45,8 +45,8 @@ services:
 
   portal-service:
     build:
-      context: .
-      dockerfile: portal/Dockerfile
+      context: ./portal
+      dockerfile: Dockerfile
     container_name: hotShop-portal
     depends_on:
       - mysql

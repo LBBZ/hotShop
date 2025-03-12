@@ -39,5 +39,5 @@ jwt:
   access-expiration: 3600    # 访问令牌1小时过期
   refresh-expiration: 604800 # 刷新令牌7天过期
 
-timeout:
-  orderCancel: 30 # 分钟为单位
+server:
+  port: 8088

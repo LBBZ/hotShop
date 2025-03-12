@@ -1,0 +1,70 @@
+# 文件路径：/opt/hotShop/docker-compose.yml
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: hotShop-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: 123456
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "4306:3306"
+    networks:
+      - hotShop-network
+
+  redis:
+    image: redis:alpine
+    container_name: hotShop-redis
+    ports:
+      - "7379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - hotShop-network
+
+  admin-service:
+    build:
+      context: .
+      dockerfile: admin/Dockerfile
+    container_name: hotShop-admin
+    depends_on:
+      - mysql
+      - redis
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://hotShop-mysql:3306/hot_shop
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: 123456
+      SPRING_REDIS_HOST: hotShop-redis
+    ports:
+      - "9080:8080"
+    networks:
+      - hotShop-network
+
+  portal-service:
+    build:
+      context: .
+      dockerfile: portal/Dockerfile
+    container_name: hotShop-portal
+    depends_on:
+      - mysql
+      - redis
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://hotShop-mysql:3306/hot_shop
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: 123456
+      SPRING_REDIS_HOST: hotShop-redis
+    ports:
+      - "9081:8080"
+    networks:
+      - hotShop-network
+
+volumes:
+  mysql_data:
+  redis_data:
+
+networks:
+  hotShop-network:
+    driver: bridge

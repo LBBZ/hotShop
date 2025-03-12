@@ -1,4 +1,4 @@
-USE hotShop;
+/*USE hotShop;
 
 DROP TABLE IF EXISTS `order_item`;
 DROP TABLE IF EXISTS `order`;
@@ -6,7 +6,7 @@ DROP TABLE IF EXISTS `product`;
 DROP TABLE IF EXISTS `user`;
 DROP PROCEDURE IF EXISTS `delete_and_reset`;
 
-DROP DATABASE hotShop;
+DROP DATABASE hotShop;*/
 
 CREATE DATABASE hotShop;
 

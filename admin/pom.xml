@@ -12,15 +12,10 @@
     <artifactId>admin</artifactId>
 
     <dependencies>
-        <!-- 依赖 portal -->
+        <!-- 依赖 security -->
         <dependency>
             <groupId>com.real</groupId>
-            <artifactId>portal</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.real</groupId>
-            <artifactId>domain</artifactId>
+            <artifactId>security</artifactId>
             <version>${project.version}</version>
         </dependency>
     </dependencies>

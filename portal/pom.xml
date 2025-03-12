@@ -12,7 +12,7 @@
     <artifactId>portal</artifactId>
 
     <dependencies>
-        <!-- 依赖 domain -->
+        <!-- 依赖 security -->
         <dependency>
             <groupId>com.real</groupId>
             <artifactId>security</artifactId>

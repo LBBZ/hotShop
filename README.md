@@ -64,3 +64,87 @@ participant ResourceServer
 ## `业务架构`
 
 ## `部署docker`
+# Docker 部署流程图
+
+1. **环境准备**
+    - 确保虚拟机或服务器满足以下要求：
+        - 操作系统：龙蜥8.9 (Anolis8.9)
+        - 内存：至少 2GB
+        - 磁盘空间：至少 50GB
+
+2. **安装 Docker**
+    - 更新系统包：
+      ```bash
+      sudo yum update -y
+      ```
+    - 安装必要的依赖包：
+      ```bash
+      sudo yum install -y yum-utils device-mapper-persistent-data lvm2
+      ```
+    - 添加 Docker 的官方 YUM 源：
+      ```bash
+      sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+      ```
+    - 安装 Docker CE 和 containerd：
+      ```bash
+      sudo yum install -y docker-ce docker-ce-cli containerd.io
+      ```
+    - 启动 Docker 服务：
+      ```bash
+      sudo systemctl start docker
+      ```
+    - 设置 Docker 开机自启：
+      ```bash
+      sudo systemctl enable docker
+      ```
+
+3. **安装 Docker Compose**
+    - 下载 Docker Compose 二进制文件：
+      ```bash
+      sudo curl -L "https://github.com/docker/compose/releases/download/v2.21.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+      ```
+    - 赋予执行权限：
+      ```bash
+      sudo chmod +x /usr/local/bin/docker-compose
+      ```
+    - 验证安装：
+      ```bash
+      docker-compose --version
+      ```
+
+4. **传输项目文件**
+    - 将本地项目文件传输到虚拟机：
+      ```bash
+      scp -r /本地/项目/路径 用户名@虚拟机IP地址:/目标/路径
+      ```
+
+5. **构建和运行 Docker 服务**
+    - 导航到项目目录：
+      ```bash
+      cd /目标/路径
+      ```
+    - 构建并启动服务：
+      ```bash
+      docker-compose up -d --build
+      ```
+    - 查看服务状态：
+      ```bash
+      docker-compose ps
+      ```
+
+6. **验证部署**
+    - 确保所有服务正常运行：
+      ```bash
+      docker ps
+      ```
+    - 访问应用的前端界面或 API，确保其正常工作。
+
+7. **维护和更新**
+    - 如需更新服务，重新运行构建命令：
+      ```bash
+      docker-compose up -d --build
+      ```
+    - 查看日志以排查问题：
+      ```bash
+      docker-compose logs
+      ```

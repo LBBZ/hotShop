@@ -63,9 +63,9 @@ participant ResourceServer
 
 ## `业务架构`
 
-## `部署docker`
-# Docker 部署流程图
+# 部署docker
 
+## `Docker 安装及配置`
 1. **环境准备**
     - 确保虚拟机或服务器满足以下要求：
         - 操作系统：龙蜥8.9 (Anolis8.9)
@@ -73,78 +73,131 @@ participant ResourceServer
         - 磁盘空间：至少 50GB
 
 2. **安装 Docker**
-    - 更新系统包：
+    - 更新系统包 :
       ```bash
       sudo yum update -y
       ```
-    - 安装必要的依赖包：
+    - 确保删除原有的依赖包 :
       ```bash
-      sudo yum install -y yum-utils device-mapper-persistent-data lvm2
+      sudo yum remove docker \
+      docker-client \
+      docker-client-latest \
+      docker-common \
+      docker-latest \
+      docker-latest-logrotate \
+      docker-logrotate \
+      docker-engine
       ```
-    - 添加 Docker 的官方 YUM 源：
-      ```bash
-      sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
-      ```
-    - 安装 Docker CE 和 containerd：
-      ```bash
-      sudo yum install -y docker-ce docker-ce-cli containerd.io
-      ```
-    - 启动 Docker 服务：
-      ```bash
-      sudo systemctl start docker
-      ```
-    - 设置 Docker 开机自启：
-      ```bash
-      sudo systemctl enable docker
-      ```
-
+   - 安装底层工具 :
+     ```bash
+     yum install -y yum-utils device-mapper-persistent-data lvm2
+     ```  
+   - 添加 Docker 的镜像 : 
+     ```bash
+     自行添加
+     ```
+   - 安装 Docker :
+     ```bash
+     yum -y install docker-ce docker-ce-cli containerd.io --allowerasing
+     ```
+   - 验证 Docker 安装 :
+     ```bash
+     docker --version
+     ```
+     应显示 Docker 的版本信息，例如 :
+     ```
+     Docker version 26.1.3, build b72abbb
+     ```
+   - 启动 Docker 服务 :
+     ```bash
+     sudo systemctl start docker
+     ```
+   - 设置 Docker 开机自启 :
+     ```bash
+     sudo systemctl enable docker
+     ```
 3. **安装 Docker Compose**
-    - 下载 Docker Compose 二进制文件：
+    - 下载docker-compose文件 :
       ```bash
-      sudo curl -L "https://github.com/docker/compose/releases/download/v2.21.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+      sudo curl -L https://github.com/docker/compose/releases/download/v2.21.0/docker-compose-`uname -s`-`uname -m` -o /usr/local/bin/docker-compose
       ```
-    - 赋予执行权限：
+    - 添加执行权限 :
       ```bash
       sudo chmod +x /usr/local/bin/docker-compose
       ```
-    - 验证安装：
+    - 验证安装 : 
       ```bash
       docker-compose --version
       ```
+      应显示 docker-compose 的版本信息，例如 :
+      ```bash
+      Docker Compose version v2.21.0
+      ```
 
 4. **传输项目文件**
-    - 将本地项目文件传输到虚拟机：
+    - 将本地项目文件传输到虚拟机 :
+      
+      项目文件在linux下请跳过这步
       ```bash
-      scp -r /本地/项目/路径 用户名@虚拟机IP地址:/目标/路径
+      scp -r /path/hotShop 用户名@虚拟机IP地址:/opt
       ```
 
 5. **构建和运行 Docker 服务**
-    - 导航到项目目录：
+    - 导航到项目目录 :
       ```bash
-      cd /目标/路径
+      cd /opt/hotShop
       ```
-    - 构建并启动服务：
+    - 构建并启动服务 :
       ```bash
-      docker-compose up -d --build
+      # 进入项目根目录
+      cd /opt/hotshop
+      
+      # 清理并打包所有模块
+      mvn clean package -DskipTests
+      
+      # 确认 portal、admin模块的 JAR 文件存在
+      ls portal/target/*.jar
+      ls admin/target/*.jar
       ```
-    - 查看服务状态：
+      应输出以下内容
+      ```bash
+      portal/target/portal-0.0.1-SNAPSHOT.jar
+      admin/target/admin-0.0.1-SNAPSHOT.jar
+      ```
+    - 构建镜像并启动 :
+      ```bash
+      #如果有残留请执行以下命令
+      #docker-compose down
+      #docker system prune -a --volumes
+      
+      docker-compose build --no-cache
+      
+      docker-compose up -d
+      ```
+    - 查看服务状态 :
       ```bash
       docker-compose ps
       ```
+      应输出以下内容
+      ```bash
+      NAME             IMAGE                    COMMAND                               SERVICE          CREATED       STATUS         PORTS
+      hotShop-admin    hotshop-admin-service    "java -jar /app.jar"                  admin-service    2 hours ago   Up 3 seconds   0.0.0.0:8088->8088/tcp, :::8088->8088/tcp
+      hotShop-mysql    mysql:8.0                "docker-entrypoint.sh mysqld"         mysql            2 hours ago   Up 3 seconds   33060/tcp, 0.0.0.0:4306->3306/tcp, :::4306->3306/tcp
+      hotShop-portal   hotshop-portal-service   "java -jar /app.jar"                  portal-service   2 hours ago   Up 3 seconds   0.0.0.0:8080->8080/tcp, :::8080->8080/tcp
+      hotShop-redis    redis:alpine             "docker-entrypoint.sh redis-server"   redis            2 hours ago   Up 3 seconds   0.0.0.0:7379->6379/tcp, :::7379->6379/tcp
+      ```
 
 6. **验证部署**
-    - 确保所有服务正常运行：
-      ```bash
-      docker ps
-      ```
     - 访问应用的前端界面或 API，确保其正常工作。
+    - 虚拟机ip:8080/swagger-ui/index.html
+    - 虚拟机ip:8088/swagger-ui/index.html
 
 7. **维护和更新**
-    - 如需更新服务，重新运行构建命令：
+    - 关闭服务
       ```bash
-      docker-compose up -d --build
+      docker-compose down
       ```
-    - 查看日志以排查问题：
+    - 开启服务
       ```bash
-      docker-compose logs
+      docker-compose up -d
       ```

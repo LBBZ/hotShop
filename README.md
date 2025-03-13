@@ -73,21 +73,21 @@ participant ResourceServer
         - 磁盘空间：至少 50GB
 
 2. **安装 Docker**
-    - 更新系统包 :
-      ```bash
-      sudo yum update -y
-      ```
-    - 确保删除原有的依赖包 :
-      ```bash
-      sudo yum remove docker \
-      docker-client \
-      docker-client-latest \
-      docker-common \
-      docker-latest \
-      docker-latest-logrotate \
-      docker-logrotate \
-      docker-engine
-      ```
+   - 更新系统包 :
+     ```bash
+     sudo yum update -y
+     ```
+   - 确保删除原有的依赖包 :
+     ```bash
+     sudo yum remove docker \
+     docker-client \
+     docker-client-latest \
+     docker-common \
+     docker-latest \
+     docker-latest-logrotate \
+     docker-logrotate \
+     docker-engine
+     ```
    - 安装底层工具 :
      ```bash
      yum install -y yum-utils device-mapper-persistent-data lvm2
@@ -117,82 +117,100 @@ participant ResourceServer
      sudo systemctl enable docker
      ```
 3. **安装 Docker Compose**
-    - 下载docker-compose文件 :
+   - 下载docker-compose文件 :
+     ```bash
+     sudo curl -L https://github.com/docker/compose/releases/download/v2.21.0/docker-compose-`uname -s`-`uname -m` -o /usr/local/bin/docker-compose
+     ```
+   - 添加执行权限 :
+     ```bash
+     sudo chmod +x /usr/local/bin/docker-compose
+     ```
+   - 验证安装 : 
+     ```bash
+     docker-compose --version
+     ```
+     应显示 docker-compose 的版本信息，例如 :
+     ```bash
+     Docker Compose version v2.21.0
+     ```
+4. **安装maven和JDK**
+   - 安装并配置 OpenJDK 17
       ```bash
-      sudo curl -L https://github.com/docker/compose/releases/download/v2.21.0/docker-compose-`uname -s`-`uname -m` -o /usr/local/bin/docker-compose
+      sudo yum install java-17-openjdk java-17-openjdk-devel
+      sudo alternatives --config java
+      sudo nano ~/.bashrc
+      export JAVA_HOME=/usr/lib/jvm/java-17-openjdk
+      export PATH=$JAVA_HOME/bin:$PATH
+      source ~/.bashrc
+      java -version
       ```
-    - 添加执行权限 :
+   - 安装并配置 maven 3.99
       ```bash
-      sudo chmod +x /usr/local/bin/docker-compose
+      wget https://archive.apache.org/dist/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.tar.gz
+      tar -zxvf apache-maven-3.9.9-bin.tar.gz
+      export MAVEN_HOME=/path/to/apache-maven-3.6.3
+      export PATH=$MAVEN_HOME/bin:$PATH
+      mvn -v
       ```
-    - 验证安装 : 
-      ```bash
-      docker-compose --version
-      ```
-      应显示 docker-compose 的版本信息，例如 :
-      ```bash
-      Docker Compose version v2.21.0
-      ```
+5. **传输项目文件**
+   - 将本地项目文件传输到虚拟机 :
+      
+     项目文件在linux下请跳过这步
+     ```bash
+     scp -r /path/hotShop 用户名@虚拟机IP地址:/opt
+     ```
 
-4. **传输项目文件**
-    - 将本地项目文件传输到虚拟机 :
+6. **构建和运行 Docker 服务**
+   - 导航到项目目录 :
+     ```bash
+     cd /opt/hotShop
+     ```
+   - 构建并启动服务 :
+     ```bash
+     # 进入项目根目录
+     cd /opt/hotshop
       
-      项目文件在linux下请跳过这步
-      ```bash
-      scp -r /path/hotShop 用户名@虚拟机IP地址:/opt
-      ```
+     # 清理并打包所有模块
+     mvn clean package -DskipTests
+      
+     # 确认 portal、admin模块的 JAR 文件存在
+     ls portal/target/*.jar
+     ls admin/target/*.jar
+     ```
+     应输出以下内容
+     ```bash
+     portal/target/portal-0.0.1-SNAPSHOT.jar
+     admin/target/admin-0.0.1-SNAPSHOT.jar
+     ```
+   - 构建镜像并启动 :
+     ```bash
+     #如果有残留请执行以下命令
+     #docker-compose down
+     #docker system prune -a --volumes
+      
+     docker-compose build --no-cache
+      
+     docker-compose up -d
+     ```
+   - 查看服务状态 :
+     ```bash
+     docker-compose ps
+     ```
+     应输出以下内容
+     ```bash
+     NAME             IMAGE                    COMMAND                               SERVICE          CREATED       STATUS         PORTS
+     hotShop-admin    hotshop-admin-service    "java -jar /app.jar"                  admin-service    2 hours ago   Up 3 seconds   0.0.0.0:8088->8088/tcp, :::8088->8088/tcp
+     hotShop-mysql    mysql:8.0                "docker-entrypoint.sh mysqld"         mysql            2 hours ago   Up 3 seconds   33060/tcp, 0.0.0.0:4306->3306/tcp, :::4306->3306/tcp
+     hotShop-portal   hotshop-portal-service   "java -jar /app.jar"                  portal-service   2 hours ago   Up 3 seconds   0.0.0.0:8080->8080/tcp, :::8080->8080/tcp
+     hotShop-redis    redis:alpine             "docker-entrypoint.sh redis-server"   redis            2 hours ago   Up 3 seconds   0.0.0.0:7379->6379/tcp, :::7379->6379/tcp
+     ```
 
-5. **构建和运行 Docker 服务**
-    - 导航到项目目录 :
-      ```bash
-      cd /opt/hotShop
-      ```
-    - 构建并启动服务 :
-      ```bash
-      # 进入项目根目录
-      cd /opt/hotshop
-      
-      # 清理并打包所有模块
-      mvn clean package -DskipTests
-      
-      # 确认 portal、admin模块的 JAR 文件存在
-      ls portal/target/*.jar
-      ls admin/target/*.jar
-      ```
-      应输出以下内容
-      ```bash
-      portal/target/portal-0.0.1-SNAPSHOT.jar
-      admin/target/admin-0.0.1-SNAPSHOT.jar
-      ```
-    - 构建镜像并启动 :
-      ```bash
-      #如果有残留请执行以下命令
-      #docker-compose down
-      #docker system prune -a --volumes
-      
-      docker-compose build --no-cache
-      
-      docker-compose up -d
-      ```
-    - 查看服务状态 :
-      ```bash
-      docker-compose ps
-      ```
-      应输出以下内容
-      ```bash
-      NAME             IMAGE                    COMMAND                               SERVICE          CREATED       STATUS         PORTS
-      hotShop-admin    hotshop-admin-service    "java -jar /app.jar"                  admin-service    2 hours ago   Up 3 seconds   0.0.0.0:8088->8088/tcp, :::8088->8088/tcp
-      hotShop-mysql    mysql:8.0                "docker-entrypoint.sh mysqld"         mysql            2 hours ago   Up 3 seconds   33060/tcp, 0.0.0.0:4306->3306/tcp, :::4306->3306/tcp
-      hotShop-portal   hotshop-portal-service   "java -jar /app.jar"                  portal-service   2 hours ago   Up 3 seconds   0.0.0.0:8080->8080/tcp, :::8080->8080/tcp
-      hotShop-redis    redis:alpine             "docker-entrypoint.sh redis-server"   redis            2 hours ago   Up 3 seconds   0.0.0.0:7379->6379/tcp, :::7379->6379/tcp
-      ```
+7. **验证部署**
+   - 访问应用的前端界面或 API，确保其正常工作。
+   - {虚拟机ip}:8080/swagger-ui/index.html
+   - {虚拟机ip}:8088/swagger-ui/index.html
 
-6. **验证部署**
-    - 访问应用的前端界面或 API，确保其正常工作。
-    - {虚拟机ip}:8080/swagger-ui/index.html
-    - {虚拟机ip}:8088/swagger-ui/index.html
-
-7. **维护和更新**
+8. **维护和更新**
    - 停止服务
      ```bash
      docker-compose stop
@@ -206,6 +224,6 @@ participant ResourceServer
      ```
    - 删除服务
      ```bash
-     docker-compose down
+     docker-compose down -v
      ```
    

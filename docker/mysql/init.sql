@@ -6,9 +6,9 @@ DROP TABLE IF EXISTS `product`;
 DROP TABLE IF EXISTS `user`;
 DROP PROCEDURE IF EXISTS `delete_and_reset`;
 
-DROP DATABASE hotShop;*/
+DROP DATABASE hotShop;
 
-CREATE DATABASE hotShop;
+CREATE DATABASE hotShop;*/
 
 USE hotShop;
 

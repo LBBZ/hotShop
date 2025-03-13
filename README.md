@@ -189,8 +189,8 @@ participant ResourceServer
 
 6. **验证部署**
     - 访问应用的前端界面或 API，确保其正常工作。
-    - 虚拟机ip:8080/swagger-ui/index.html
-    - 虚拟机ip:8088/swagger-ui/index.html
+    - {虚拟机ip}:8080/swagger-ui/index.html
+    - {虚拟机ip}:8088/swagger-ui/index.html
 
 7. **维护和更新**
    - 停止服务

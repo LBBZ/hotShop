@@ -69,7 +69,7 @@ services:
         PROFILE: ""
     container_name: hotShop-portal
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://hotShop-mysql:3306/hot_shop
+      SPRING_DATASOURCE_URL: jdbc:mysql://hotShop-mysql:3306/hotShop
       SPRING_REDIS_HOST: redis
       SERVER_PORT: 8080
     ports:

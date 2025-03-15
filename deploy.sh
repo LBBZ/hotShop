@@ -7,7 +7,7 @@
 
 # 配置参数
 COMPOSE_FILE="docker-compose.yml"
-ENV_FILE=".env"
+ENV_FILE=""
 SERVICE_NAME="all"  # 默认操作所有服务
 
 # 颜色定义

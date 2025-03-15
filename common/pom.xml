@@ -40,6 +40,21 @@
         </dependency>
     </dependencies>
 
+    <build>
+        <resources>
+            <!-- 主资源目录 -->
+            <resource>
+                <directory>src/main/resources</directory>
+                <includes>
+                    <include>**/*.yml</include>
+                    <include>**/*.xml</include>
+                </includes>
+                <!-- 关键：启用过滤使路径可识别 -->
+                <filtering>true</filtering>
+            </resource>
+        </resources>
+    </build>
+
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>

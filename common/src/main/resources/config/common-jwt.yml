@@ -1,0 +1,4 @@
+jwt:
+  secret: "5YWD56We5ZCv5Yqo5LiN5ZCv5Yqo5LqG5oiR5YaN5Lmf5LiN5a6M5Y6f56We5LqG"
+  access-expiration: 3600
+  refresh-expiration: 604800

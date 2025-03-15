@@ -1,43 +1,27 @@
 spring:
   application:
-    name: domain
+    name: admin
+  config:
+    import:
+      - classpath:config/common-db.yml
+      - classpath:config/common-redis.yml
+      - classpath:config/common-jwt.yml
+
   datasource:
-    driver-class-name: com.mysql.cj.jdbc.Driver
     url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/hotShop?useSSL=false&serverTimezone=UTC}
     username: ${SPRING_DATASOURCE_USERNAME:root}
     password: ${SPRING_DATASOURCE_PASSWORD:123456}
-    hikari:
-      data-source-properties:
-        rewriteBatchedStatements: true
+
   data:
     redis:
       host: ${SPRING_REDIS_HOST:localhost}
       port: ${SPRING_REDIS_PORT:6379}
-      password:
       database: 0
-      timeout: 2000ms
-      jedis:
-        pool:
-          max-active: 8
-          max-idle: 8
-          min-idle: 0
-          max-wait: -1ms
+
+server:
+  port: 8088
 
 logging:
   level:
     org.springframework.security: DEBUG
     com.real: TRACE
-
-mybatis:
-  mapper-locations: classpath*:mapper/*.xml
-  type-aliases-package: com.real.domain.entity
-  configuration:
-    mapUnderscoreToCamelCase: true
-
-jwt:
-  secret: "5YWD56We5ZCv5Yqo5LiN5ZCv5Yqo5LqG5oiR5YaN5Lmf5LiN5a6M5Y6f56We5LqG"  # 元神启动不启动了我再也不完原神了
-  access-expiration: 3600    # 访问令牌1小时过期
-  refresh-expiration: 604800 # 刷新令牌7天过期
-
-server:
-  port: 8088

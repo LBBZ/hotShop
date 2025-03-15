@@ -1,0 +1,11 @@
+spring:
+  data:
+    redis:
+      password:
+      timeout: 2000ms
+      jedis:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: -1ms

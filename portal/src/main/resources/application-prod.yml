@@ -1,0 +1,19 @@
+# 生产环境配置（完全保持原有内容）
+spring:
+  datasource:
+    url: jdbc:mysql://${DB_HOST:prod-db}:3306/hotShop_portal_prod?useSSL=false&serverTimezone=UTC
+    username: ${DB_USER:prod_portal}
+    password: ${DB_PASSWORD:Portal_1234}
+  data:
+    redis:
+      host: ${REDIS_HOST:prod-redis}
+      port: 6379
+
+springdoc:
+  swagger-ui:
+    enabled: false
+  api-docs:
+    enabled: false
+
+timeout:
+  orderCancel: 45  # 生产环境更长的超时时间

@@ -1,0 +1,17 @@
+# 开发环境配置（完全保持原有内容）
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/hotShop_portal_dev?useSSL=false&serverTimezone=UTC
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+springdoc:
+  swagger-ui:
+    enabled: true
+  api-docs:
+    enabled: true
+
+timeout:
+  orderCancel: 15  # 开发环境更短的超时时间

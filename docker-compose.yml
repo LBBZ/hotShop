@@ -16,6 +16,11 @@ services:
       - "4306:3306"
     networks:
       - hotShop-network
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   # Redis服务（共用）
   redis:
@@ -27,22 +32,31 @@ services:
       - redis_data:/data
     networks:
       - hotShop-network
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   admin-service:
     build:
       context: .
       args:
         MODULE: admin
-        PROFILE: prod
+    container_name: hotShop-admin
     environment:
-      SERVICE_TYPE: admin # 指定运行 admin 服务
-      SPRING_DATASOURCE_URL: jdbc:mysql://hotShop-mysql:3306/hot_shop
-      SPRING_REDIS_HOST: hotShop-redis
-    depends_on:
-      - mysql
-      - redis
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/hotShop
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: 123456
+      SPRING_REDIS_HOST: redis
+      SERVER_PORT: 8088
     ports:
       - "8088:8088"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - hotShop-network
 
@@ -51,16 +65,18 @@ services:
       context: .
       args:
         MODULE: portal
-        PROFILE: prod
+    container_name: hotShop-portal
     environment:
-      SERVICE_TYPE: portal # 指定运行 portal 服务
       SPRING_DATASOURCE_URL: jdbc:mysql://hotShop-mysql:3306/hot_shop
-      SPRING_REDIS_HOST: hotShop-redis
-    depends_on:
-      - mysql
-      - redis
+      SPRING_REDIS_HOST: redis
+      SERVER_PORT: 8080
     ports:
-      - "8080:8080"
+       - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - hotShop-network
 

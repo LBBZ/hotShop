@@ -211,19 +211,20 @@ participant ResourceServer
    - {虚拟机ip}:8088/swagger-ui/index.html
 
 8. **维护和更新**
-   - 停止服务
-     ```bash
-     docker-compose stop
-     ```
-   - 开启服务
-     ```bash
-     docker-compose up -d
-     
-     #or
-     docker-compose up #将打印控制台信息
-     ```
-   - 删除服务
-     ```bash
-     docker-compose down -v
-     ```
+    - 开始服务、停止服务、查看服务实时日志
+      ```bash
+      docker-compose start
+      docker-compose stop
+      docker-compose logs -f admin-service #or portal-service
+      ```
+    - 初始化或重新部署服务
+      ```bash
+      docker-compose up -d
+      #or
+      docker-compose up #将打印控制台信息
+      ```
+    - 删除服务
+      ```bash
+      docker-compose down -v
+      ```
    

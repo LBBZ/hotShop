@@ -1,5 +1,5 @@
 # 使用参数化构建
-FROM openjdk:17-jre-alpine
+FROM openjdk:17-jdk-alpine
 ARG MODULE
 ARG PROFILE=""
 ENV SPRING_PROFILES_ACTIVE=${PROFILE}

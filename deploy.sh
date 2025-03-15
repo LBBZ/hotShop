@@ -7,7 +7,7 @@
 
 # 配置参数
 COMPOSE_FILE="docker-compose.yml"
-ENV_FILE=""
+ENV_FILE=".env"
 SERVICE_NAME="all"  # 默认操作所有服务
 
 # 颜色定义
@@ -18,6 +18,12 @@ BLUE='\033[34m'
 RESET='\033[0m'
 
 # -------------------------- 功能函数 --------------------------
+
+# 构建项目
+build_project() {
+    echo -e "${BLUE}🛠 构建项目...${RESET}"
+    mvn clean package
+}
 
 # 启动服务
 start_services() {
@@ -66,16 +72,18 @@ show_help() {
     echo "${GREEN}常用选项：${RESET}"
     echo "  -e <env>  指定环境 (dev/prod)，默认：dev"
     echo "  -s <name> 指定服务名称，默认：所有服务"
+    echo "  -b        构建项目"
     echo "  -h        显示帮助信息"
 }
 
 # -------------------------- 主流程 --------------------------
 
 # 解析参数
-while getopts "e:s:h" opt; do
+while getopts "e:s:bh" opt; do
     case $opt in
         e) export PROFILE=${OPTARG} ;;
         s) SERVICE_NAME=${OPTARG} ;;
+        b) BUILD_PROJECT=true ;;
         h) show_help; exit 0 ;;
         \?) echo -e "${RED}无效选项！${RESET}"; exit 1 ;;
     esac
@@ -89,6 +97,9 @@ fi
 # 执行命令
 case "$1" in
     start)
+        if [ "$BUILD_PROJECT" = true ]; then
+            build_project
+        fi
         start_services
         ;;
     stop)
@@ -96,9 +107,15 @@ case "$1" in
         ;;
     restart)
         stop_services
+        if [ "$BUILD_PROJECT" = true ]; then
+            build_project
+        fi
         start_services
         ;;
     rebuild)
+        if [ "$BUILD_PROJECT" = true ]; then
+            build_project
+        fi
         rebuild_services
         ;;
     clean)

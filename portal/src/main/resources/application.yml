@@ -1,6 +1,8 @@
 spring:
   application:
     name: portal
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:}
   config:
     import:
       - classpath:config/common-db.yml

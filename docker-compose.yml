@@ -43,6 +43,7 @@ services:
       context: .
       args:
         MODULE: admin
+        PROFILE: ""
     container_name: hotShop-admin
     environment:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/hotShop
@@ -65,6 +66,7 @@ services:
       context: .
       args:
         MODULE: portal
+        PROFILE: ""
     container_name: hotShop-portal
     environment:
       SPRING_DATASOURCE_URL: jdbc:mysql://hotShop-mysql:3306/hot_shop

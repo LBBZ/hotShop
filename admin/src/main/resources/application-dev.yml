@@ -1,12 +1,4 @@
 # 开发环境配置（完全保持原有内容）
-spring:
-  datasource:
-    url: jdbc:mysql://localhost:3306/hotShop_dev?useSSL=false&serverTimezone=UTC
-  data:
-    redis:
-      host: localhost
-      port: 6379
-
 springdoc:
   swagger-ui:
     enabled: true

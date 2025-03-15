@@ -2,12 +2,13 @@
 version: '3.8'
 
 services:
+  # 数据库服务（共用）
   mysql:
     image: mysql:8.0
     container_name: hotShop-mysql
     environment:
-      MYSQL_ROOT_PASSWORD: 123456
-      MYSQL_DATABASE: hotShop
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-123456}
+      MYSQL_DATABASE: hot_shop
     volumes:
       - mysql_data:/var/lib/mysql
       - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -16,6 +17,7 @@ services:
     networks:
       - hotShop-network
 
+  # Redis服务（共用）
   redis:
     image: redis:alpine
     container_name: hotShop-redis

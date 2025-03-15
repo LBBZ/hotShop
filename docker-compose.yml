@@ -7,8 +7,8 @@ services:
     image: mysql:8.0
     container_name: hotShop-mysql
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-123456}
-      MYSQL_DATABASE: hot_shop
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_DATABASE: hotShop
     volumes:
       - mysql_data:/var/lib/mysql
       - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql

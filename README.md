@@ -8,6 +8,7 @@
      - <a href="#31-模块化">🔩 3.1 模块化</a>
      - <a href="#32-双令牌机制">🔐 3.2 双令牌机制</a>
      - <a href="#33-安全认证">🔒 3.3 安全认证</a>
+     - <a href="#34-Redis-分发机制">📤 3.4 Redis 分发机制</a>
 - <a href="#4-业务架构">🤹 4. 业务架构</a>
 </details>
 
@@ -63,7 +64,9 @@ C --> D(security)
 D --> E(common)
 ```
 ### 3.2 双令牌机制
-    使用redis来储存黑名单，减少拦截验证令牌的数据库开销
+    使用 JWT 无需将令牌存至数据库,减少数据库压力
+    双令牌减少令牌存活时间,用户下线自动拉黑存活令牌
+    使用redis来储存黑名单,减少拦截验证令牌的数据库开销,redis根据令牌ttl自动删除过期令牌
 ```mermaid
 graph TD
 A[客户端] -->|提交凭证| B(登录接口)
@@ -90,7 +93,19 @@ participant ResourceServer
     Client->>ResourceServer: 4. 使用新Token重试请求
     ResourceServer-->>Client: 返回请求结果
 ```
-
+### 3.4 Redis 分发机制
+    通过分发 RedisTemplate 可以减少初始化链接的数量,同时可以灵活的根据需求自动化创建数据库的链接
+```mermaid
+graph TD
+    A[应用调用RedisService] --> B[RedisService根据dbIndex获取RedisTemplate]
+    B --> C{RedisTemplateGenerator检查缓存}
+    C -->|缓存存在| D[直接返回缓存中的RedisTemplate]
+    C -->|缓存不存在| E[创建新的LettuceConnectionFactory]
+    E --> F[使用工厂创建并配置RedisTemplate]
+    F --> G[将RedisTemplate存入缓存]
+    G --> D
+    D --> H[使用RedisTemplate操作Redis数据库]
+```
 ## 4. 业务架构
 
 # 部署docker

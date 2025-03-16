@@ -13,13 +13,13 @@ import java.util.concurrent.ConcurrentMap;
 @Configuration
 public class RedisTemplateGenerator {
 
-    @Value("${spring.redis.host:localhost}")
+    @Value("${spring.data.redis.host}")
     private String redisHost;
 
-    @Value("${spring.redis.port:6379}")
+    @Value("${spring.data.redis.port}")
     private int redisPort;
 
-    @Value("${spring.redis.password:}")
+    @Value("${spring.data.redis.password}")
     private String redisPassword;
 
     // 使用ConcurrentHashMap存储RedisTemplate实例，确保线程安全

@@ -27,7 +27,7 @@ public class TokenBlacklistService {
             redisService.set(
                     BLACKLIST_KEY + ":" + hashToken,
                     "invalid",
-                    0,
+                    1,
                     ttl
             );
         }
@@ -35,7 +35,7 @@ public class TokenBlacklistService {
 
     public boolean isBlacklisted(String token) {
         String hashToken = hashToken(token);
-        return Boolean.TRUE.equals(redisService.hasKey(BLACKLIST_KEY + ":" + hashToken, 0));
+        return Boolean.TRUE.equals(redisService.hasKey(BLACKLIST_KEY + ":" + hashToken, 1));
     }
 
     private String hashToken(String token) {

@@ -1,7 +1,6 @@
-# 📂 双一级标题交互式目录
-
+# 快速跳转
 <details>
-<summary><a href="#hotshop-文档">📦 hotShop 文档</a></summary>
+<summary>📦 hotShop 文档</summary>
 
 - <a href="#1-api接口文档">📘 1. API接口文档</a>
 - <a href="#2-crud">📚 2. CRUD模块</a>
@@ -9,15 +8,24 @@
      - <a href="#31-模块化">🔩 3.1 模块化</a>
      - <a href="#32-双令牌机制">🔐 3.2 双令牌机制</a>
      - <a href="#33-安全认证">🔒 3.3 安全认证</a>
+- <a href="#4-业务架构">🤹 4. 业务架构</a>
 </details>
 
 <details>
-<summary><a href="#4-部署docker">🚢 部署docker</a></summary>
+<summary>🐋 部署docker</summary>
 
-- <a href="#41-docker安装及配置">📦 4.1 Docker安装配置</a>
-- <a href="#42-构建和运行-docker-服务">⚙️ 4.2 服务构建运行</a>
-- <a href="#43-验证部署">✅ 4.3 部署验证</a>
-- <a href="#44-维护和更新">🔄 4.4 维护更新</a>
+- <a href="#1-docker安装及配置">📦 1. Docker安装配置</a>
+     - <a href="#11-环境准备">🖥️ 1.1 环境准备</a>
+     - <a href="#12-安装-docker">🔧 1.2 安装 Docker</a>
+     - <a href="#13-安装-docker-compose">📝 1.3 安装 Docker Compose</a>
+     - <a href="#14-安装maven和jdk">⚙️ 1.4 安装maven和JDK</a>
+- <a href="#2-构建和运行-docker-服务">🌊 2. 服务构建运行</a>
+     - <a href="#21-传输项目文件">📤 2.1 传输项目文件</a>
+     - <a href="#22-快速启动">🚀 2.2 快速启动</a>
+     - <a href="#23-脚本启动">📝 2.3 脚本启动</a>
+     - <a href="#24-自行启动">🛠️ 2.4 自行启动</a>
+- <a href="#3-验证部署">🛳️ 3. 部署验证</a>
+- <a href="#4-维护和更新">⚓ 4. 维护更新</a>
 </details>
 
 # hotShop 文档

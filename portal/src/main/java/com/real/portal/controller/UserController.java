@@ -1,6 +1,5 @@
 package com.real.portal.controller;
 
-
 import com.real.domain.entity.baseEntity.User;
 import com.real.domain.service.baseService.UserService;
 import io.swagger.v3.oas.annotations.Operation;

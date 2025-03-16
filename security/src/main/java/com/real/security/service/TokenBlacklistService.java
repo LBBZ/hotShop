@@ -1,25 +1,22 @@
 package com.real.security.service;
 
+import com.real.domain.redisService.RedisService;
 import com.real.security.util.JwtTokenUtil;
-import jakarta.annotation.Resource;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.concurrent.TimeUnit;
 
 @Service
 public class TokenBlacklistService {
-    @Resource
-    private RedisTemplate redisTemplate;
-
+    private final RedisService redisService;
     private final JwtTokenUtil jwtTokenUtil;
     private static final String BLACKLIST_KEY = "jwt:blacklist";
     @Autowired
-    public TokenBlacklistService( JwtTokenUtil jwtTokenUtil) {
+    public TokenBlacklistService(JwtTokenUtil jwtTokenUtil, RedisService redisService) {
         this.jwtTokenUtil = jwtTokenUtil;
+        this.redisService = redisService;
     }
 
     public void addToBlacklist(String token) {
@@ -27,18 +24,18 @@ public class TokenBlacklistService {
         long ttl = (jwtTokenUtil.getExpirationDateFromToken(token).getTime() - System.currentTimeMillis())/1000 + 1;
         String hashToken = hashToken(token);
         if (ttl > 0) {
-            redisTemplate.opsForValue().set(
+            redisService.set(
                     BLACKLIST_KEY + ":" + hashToken,
                     "invalid",
-                    ttl,
-                    TimeUnit.SECONDS
+                    0,
+                    ttl
             );
         }
     }
 
     public boolean isBlacklisted(String token) {
         String hashToken = hashToken(token);
-        return Boolean.TRUE.equals(redisTemplate.hasKey(BLACKLIST_KEY + ":" + hashToken));
+        return Boolean.TRUE.equals(redisService.hasKey(BLACKLIST_KEY + ":" + hashToken, 0));
     }
 
     private String hashToken(String token) {
@@ -53,5 +50,5 @@ public class TokenBlacklistService {
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException("SHA-256 algorithm not found", e);
         }
-        }
+    }
 }

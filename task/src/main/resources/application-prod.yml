@@ -14,3 +14,6 @@ springdoc:
     enabled: false
   api-docs:
     enabled: false
+
+timeout:
+  orderCancel: 45  # 生产环境更长的超时时间

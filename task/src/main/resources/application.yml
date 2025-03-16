@@ -1,6 +1,6 @@
 spring:
   application:
-    name: portal
+    name: task
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:}
   config:
@@ -21,15 +21,11 @@ spring:
 
 
 server:
-  port: 8080
-
-springdoc:
-  swagger-ui:
-    enabled: true
-  api-docs:
-    enabled: true
+  port: 8888
 
 logging:
   level:
-    org.springframework.security: DEBUG
     com.real: TRACE
+
+timeout:
+  orderCancel: 30

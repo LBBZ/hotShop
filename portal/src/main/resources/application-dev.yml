@@ -4,6 +4,3 @@ springdoc:
     enabled: true
   api-docs:
     enabled: true
-
-timeout:
-  orderCancel: 15  # 开发环境更短的超时时间

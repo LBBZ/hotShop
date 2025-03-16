@@ -24,6 +24,7 @@
         <module>portal</module>
         <module>admin</module>
         <module>security</module>
+        <module>task</module>
     </modules>
 
     <url/>

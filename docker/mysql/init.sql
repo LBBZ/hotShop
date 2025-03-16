@@ -43,6 +43,7 @@ CREATE TABLE `order` (
                          `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
                          FOREIGN KEY (`user_id`) REFERENCES `user`(`user_id`)  -- 外键关联用户表
 );
+CREATE INDEX idx_order_status_created ON `order`(status, created_at);
 
 CREATE TABLE `order_item` (
                               `order_item_id` BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '订单项ID',

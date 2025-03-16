@@ -1,6 +1,6 @@
 package com.real.domain.redisService;
 
-import jakarta.annotation.Resource;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -8,9 +8,9 @@ import java.util.concurrent.TimeUnit;
 
 @Service
 public class RedisService {
-    private RedisTemplate<String, String> redisTemplate;
-    @Resource
-    public void RedisTemplate(RedisTemplate<String, String> redisTemplate) {
+    private final RedisTemplate<String, String> redisTemplate;
+    @Autowired
+    public RedisService(RedisTemplate<String, String> redisTemplate) {
         this.redisTemplate = redisTemplate;
     }
 

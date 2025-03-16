@@ -18,19 +18,7 @@ spring:
     redis:
       host: ${SPRING_REDIS_HOST:localhost}
       port: ${SPRING_REDIS_PORT:6379}
-      database: 0
 
-  redis:
-    database-1:
-      host: ${SPRING_REDIS_HOST:localhost}
-      port: ${SPRING_REDIS_PORT:6379}
-      database: 1
-      lettuce:
-        pool:
-          max-active: 8
-          max-wait: -1
-          max-idle: 8
-          min-idle: 0
 
 server:
   port: 8080

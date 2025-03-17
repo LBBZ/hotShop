@@ -14,7 +14,6 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-@Alias("User")
 @Schema(description = "用户实体")
 public class User {
     @Schema(description = "用户ID", example = "123")

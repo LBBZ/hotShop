@@ -24,6 +24,17 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+
+        <!-- RabbitMQ -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.amqp</groupId>
+            <artifactId>spring-rabbit-test</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <properties>
@@ -45,14 +56,6 @@
         <resources>
             <resource>
                 <directory>src/main/resources</directory>
-            </resource>
-            <!-- 关键：显式声明资源依赖 -->
-            <resource>
-                <directory>${project.basedir}/../common/src/main/resources</directory>
-                <targetPath>${project.build.outputDirectory}/config</targetPath>
-                <includes>
-                    <include>config/*.yml</include>
-                </includes>
             </resource>
         </resources>
     </build>

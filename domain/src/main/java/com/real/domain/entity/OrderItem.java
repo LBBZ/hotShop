@@ -11,7 +11,6 @@ import java.math.BigDecimal;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-@Alias("OrderItem")
 @Schema(description = "订单项实体")
 public class OrderItem {
     @Schema(description = "订单项ID", example = "789")

@@ -41,14 +41,6 @@
             <resource>
                 <directory>src/main/resources</directory>
             </resource>
-            <!-- 关键：显式声明资源依赖 -->
-            <resource>
-                <directory>${project.basedir}/../common/src/main/resources</directory>
-                <targetPath>${project.build.outputDirectory}/config</targetPath>
-                <includes>
-                    <include>config/*.yml</include>
-                </includes>
-            </resource>
         </resources>
     </build>
 </project>

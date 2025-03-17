@@ -9,4 +9,5 @@ mybatis:
   mapper-locations: classpath*:mapper/*.xml
   configuration:
     mapUnderscoreToCamelCase: true
+  type-aliases-package: com.real.domain.entity
 

@@ -14,7 +14,6 @@ import java.util.List;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-@Alias("Order")
 @Schema(description = "订单实体")
 public class Order {
     @Schema(description = "订单号（UUID）", example = "ORDER_20231001123456")

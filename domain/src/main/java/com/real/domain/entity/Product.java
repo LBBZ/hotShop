@@ -12,7 +12,6 @@ import java.time.LocalDateTime;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-@Alias("Product")
 @Schema(description = "商品实体")
 public class Product {
     @Schema(description = "商品ID", example = "456")

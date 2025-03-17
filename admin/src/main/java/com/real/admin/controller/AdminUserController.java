@@ -2,7 +2,7 @@ package com.real.admin.controller;
 
 import com.github.pagehelper.PageInfo;
 import com.real.common.enums.Role;
-import com.real.domain.entity.baseEntity.User;
+import com.real.domain.entity.User;
 import com.real.domain.service.baseService.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;

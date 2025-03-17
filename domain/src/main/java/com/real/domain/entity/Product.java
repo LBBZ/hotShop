@@ -1,9 +1,10 @@
-package com.real.domain.entity.baseEntity;
+package com.real.domain.entity;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.apache.ibatis.type.Alias;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -11,6 +12,7 @@ import java.time.LocalDateTime;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
+@Alias("Product")
 @Schema(description = "商品实体")
 public class Product {
     @Schema(description = "商品ID", example = "456")

@@ -2,9 +2,9 @@ package com.real.portal.controller;
 
 import com.real.common.enums.Role;
 import com.real.common.enums.TokenType;
-import com.real.domain.entity.authEntity.LoginRequest;
-import com.real.domain.entity.authEntity.RegisterRequest;
-import com.real.domain.entity.baseEntity.User;
+import com.real.domain.requestEntity.LoginRequest;
+import com.real.domain.requestEntity.RegisterRequest;
+import com.real.domain.entity.User;
 import com.real.domain.service.baseService.UserService;
 import com.real.security.entity.CustomUserDetails;
 import com.real.security.service.TokenBlacklistService;

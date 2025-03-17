@@ -1,7 +1,7 @@
 package com.real.security.service;
 
 import com.real.common.enums.Role;
-import com.real.domain.entity.baseEntity.User;
+import com.real.domain.entity.User;
 import com.real.security.entity.CustomUserDetails;
 import com.real.domain.service.baseService.UserService;
 import org.springframework.beans.factory.annotation.Autowired;

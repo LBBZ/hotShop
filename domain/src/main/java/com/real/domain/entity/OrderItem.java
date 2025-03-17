@@ -1,15 +1,17 @@
-package com.real.domain.entity.baseEntity;
+package com.real.domain.entity;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.apache.ibatis.type.Alias;
 
 import java.math.BigDecimal;
 
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
+@Alias("OrderItem")
 @Schema(description = "订单项实体")
 public class OrderItem {
     @Schema(description = "订单项ID", example = "789")

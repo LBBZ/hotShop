@@ -1,7 +1,7 @@
 package com.real.portal.controller;
 
 import com.real.common.enums.OrderStatus;
-import com.real.domain.entity.baseEntity.Order;
+import com.real.domain.entity.Order;
 import com.real.security.entity.CustomUserDetails;
 import com.real.domain.service.baseService.OrderService;
 import com.real.domain.service.orderStateService.OrderStateService;

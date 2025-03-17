@@ -1,4 +1,4 @@
-package com.real.domain.entity.baseEntity;
+package com.real.domain.entity;
 
 import com.real.common.enums.Role;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -6,6 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.apache.ibatis.type.Alias;
 
 import java.time.LocalDateTime;
 
@@ -13,6 +14,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
+@Alias("User")
 @Schema(description = "用户实体")
 public class User {
     @Schema(description = "用户ID", example = "123")

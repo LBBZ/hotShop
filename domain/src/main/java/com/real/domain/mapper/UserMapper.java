@@ -1,7 +1,7 @@
 package com.real.domain.mapper;
 
 import com.real.common.enums.Role;
-import com.real.domain.entity.baseEntity.User;
+import com.real.domain.entity.User;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 

@@ -1,8 +1,8 @@
 package com.real.domain.mapper;
 
 import com.real.common.enums.OrderStatus;
-import com.real.domain.entity.baseEntity.Order;
-import com.real.domain.entity.baseEntity.OrderItem;
+import com.real.domain.entity.Order;
+import com.real.domain.entity.OrderItem;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Options;
 import org.apache.ibatis.annotations.Param;

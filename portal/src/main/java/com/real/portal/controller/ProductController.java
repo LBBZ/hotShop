@@ -1,7 +1,7 @@
 package com.real.portal.controller;
 
 import com.github.pagehelper.PageInfo;
-import com.real.domain.entity.baseEntity.Product;
+import com.real.domain.entity.Product;
 import com.real.domain.service.baseService.ProductService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;

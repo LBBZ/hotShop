@@ -1,4 +1,4 @@
-package com.real.domain.entity.authEntity;
+package com.real.domain.requestEntity;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;

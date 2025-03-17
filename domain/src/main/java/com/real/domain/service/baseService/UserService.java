@@ -4,7 +4,7 @@ package com.real.domain.service.baseService;
 import com.github.pagehelper.PageInfo;
 import com.real.common.enums.Role;
 import com.real.common.util.PageHelperUtils;
-import com.real.domain.entity.baseEntity.User;
+import com.real.domain.entity.User;
 import com.real.domain.mapper.UserMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;

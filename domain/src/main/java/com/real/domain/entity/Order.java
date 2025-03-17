@@ -1,10 +1,11 @@
-package com.real.domain.entity.baseEntity;
+package com.real.domain.entity;
 
 import com.real.common.enums.OrderStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.apache.ibatis.type.Alias;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -13,6 +14,7 @@ import java.util.List;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
+@Alias("Order")
 @Schema(description = "订单实体")
 public class Order {
     @Schema(description = "订单号（UUID）", example = "ORDER_20231001123456")

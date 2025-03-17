@@ -2,7 +2,7 @@ package com.real.admin.controller;
 
 import com.github.pagehelper.PageInfo;
 import com.real.common.enums.OrderStatus;
-import com.real.domain.entity.baseEntity.Order;
+import com.real.domain.entity.Order;
 import com.real.domain.service.baseService.OrderService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;

@@ -54,14 +54,18 @@
 | SpringSecurity | 安全框架,用于实现认证和授权       | 用于管理端、用户端的安全认证,拦截请求等操作                 | 已集成 |
 |      JWT       | 用于生成和验证 JWT 令牌       | 用于生成定时过期的认证令牌(访问令牌、刷新令牌),服务器无需储存令牌即可验证 | 已集成 |
 |     Redis      | 高性能的内存数据库            | 用于设置令牌黑名单,登出的账号的令牌会存储在redis黑名单中        | 已集成 |
-
+|||
 ### 3.1 模块化
 ```mermaid
 graph TD
-A(admin) --> C(domain)
-B(portal) --> C(domain)
-C --> D(security)
-D --> E(common)
+A(admin\n负责管理员前台模块) --> X
+B(portal\n负责用户前台模块) --> X
+C(task\n负责后台任务\n如定时任务) --> Y
+X --> Y
+Y --> Z
+X(security\n安全认证\n请求拦截\nJWT生成)
+Y(domain\n领域模块\n核心功能)
+Z(common\n通用组件)
 ```
 ### 3.2 双令牌机制
     使用 JWT 无需将令牌存至数据库,减少数据库压力

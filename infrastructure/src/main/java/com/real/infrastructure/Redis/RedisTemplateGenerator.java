@@ -1,4 +1,4 @@
-package com.real.domain.redisService;
+package com.real.infrastructure.Redis;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;

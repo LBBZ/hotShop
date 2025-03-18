@@ -1,4 +1,4 @@
-package com.real.common.swagger;
+package com.real.infrastructure.Swagger;
 
 import io.swagger.v3.oas.annotations.OpenAPIDefinition;
 import io.swagger.v3.oas.annotations.info.Info;

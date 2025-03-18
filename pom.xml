@@ -25,6 +25,7 @@
         <module>admin</module>
         <module>security</module>
         <module>task</module>
+        <module>infrastructure</module>
     </modules>
 
     <url/>

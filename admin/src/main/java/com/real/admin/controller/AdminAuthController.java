@@ -70,10 +70,11 @@ public class AdminAuthController {
 
         // 2. 获取用户详情
         CustomUserDetails customUserDetails = (CustomUserDetails) authentication.getPrincipal();
+
         User user = userService.getUserByUsername(request.getUsername());
         if (!user.getRole().equals(Role.ROLE_ADMIN)) {
             return ResponseEntity.ok()
-                    .body(Map.of("message", "user :" + customUserDetails.getUsername() + "not exist"));
+                    .body(Map.of("message", "user :" + customUserDetails.getUsername() + " not exist"));
         }
 
         // 3.生成令牌

@@ -2,13 +2,13 @@ package com.real.domain.infra;
 
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
-// RabbitMQService.java
 @Service
+@ConditionalOnProperty(name = "rabbitmq.enabled", havingValue = "true")
 public class RabbitMQService {
     private final RabbitTemplate rabbitTemplate;
-
     @Autowired
     public RabbitMQService(RabbitTemplate rabbitTemplate) {
         this.rabbitTemplate = rabbitTemplate;

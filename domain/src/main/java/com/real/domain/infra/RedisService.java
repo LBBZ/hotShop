@@ -1,4 +1,4 @@
-package com.real.domain.redisService;
+package com.real.domain.infra;
 
 import com.real.infrastructure.Redis.RedisTemplateGenerator;
 import org.springframework.beans.factory.annotation.Autowired;

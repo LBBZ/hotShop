@@ -1,6 +1,6 @@
 package com.real.security.service;
 
-import com.real.domain.redisService.RedisService;
+import com.real.domain.infra.RedisService;
 import com.real.security.util.JwtTokenUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;

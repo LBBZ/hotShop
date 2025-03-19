@@ -3,7 +3,7 @@ package com.real.admin.controller;
 import com.github.pagehelper.PageInfo;
 import com.real.domain.entity.Product;
 import com.real.domain.mapper.StoredProcedure;
-import com.real.domain.service.baseService.ProductService;
+import com.real.domain.service.ProductService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;

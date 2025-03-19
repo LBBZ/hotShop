@@ -1,4 +1,4 @@
-package com.real.domain.service.baseService;
+package com.real.domain.service;
 
 import com.github.pagehelper.PageInfo;
 import com.real.common.enums.OrderStatus;

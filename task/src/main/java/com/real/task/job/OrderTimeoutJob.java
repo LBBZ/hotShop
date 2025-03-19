@@ -2,8 +2,8 @@ package com.real.task.job;
 
 import com.real.common.enums.OrderStatus;
 import com.real.domain.entity.Order;
-import com.real.domain.service.baseService.OrderService;
-import com.real.domain.service.orderStateService.OrderStateService;
+import com.real.domain.service.OrderService;
+import com.real.domain.service.advance.OrderStateService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.EnableScheduling;

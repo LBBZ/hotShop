@@ -1,7 +1,7 @@
 package com.real.portal.controller;
 
 import com.real.domain.entity.User;
-import com.real.domain.service.baseService.UserService;
+import com.real.domain.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;

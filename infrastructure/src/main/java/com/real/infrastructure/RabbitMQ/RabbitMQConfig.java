@@ -14,7 +14,7 @@ import java.util.Map;
 @Configuration
 @ConditionalOnProperty(name = "rabbitmq.enabled", havingValue = "true")
 public class RabbitMQConfig {
-    // 延迟交换机（需安装插件）
+    // 延迟交换机
     @Bean
     public CustomExchange delayExchange() {
         Map<String, Object> args = new HashMap<>();

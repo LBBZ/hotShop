@@ -35,7 +35,7 @@ public class RabbitMQService {
      * @param orderId 订单ID
      * @param timeoutMinutes 超时时间（分钟）
      */
-    public void sendOrderTimeoutMessage(String orderId, int timeoutMinutes) {
+    public void sendOrderTimeoutMessage(String orderId, long timeoutMinutes) {
         sendDelayedMessage(
                 "order.delay.exchange",
                 "order.delay.routingKey",

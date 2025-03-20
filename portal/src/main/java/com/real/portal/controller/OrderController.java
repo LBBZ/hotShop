@@ -2,6 +2,7 @@ package com.real.portal.controller;
 
 import com.real.common.enums.OrderStatus;
 import com.real.domain.entity.Order;
+import com.real.domain.infra.RabbitMQService;
 import com.real.security.entity.CustomUserDetails;
 import com.real.domain.service.OrderService;
 import com.real.domain.service.advance.OrderStateService;
@@ -12,6 +13,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -26,17 +28,21 @@ import java.util.List;
 @RequestMapping("/portal/orders")
 @PreAuthorize("hasRole('ROLE_USER')")
 public class OrderController {
+    @Value("${timeout.orderCancel}")
+    private long timeoutThreshold;
     private final OrderService orderService;
     private final OrderStateService orderStateService;
+    private final RabbitMQService rabbitMQService;
     @Autowired
-    public OrderController(OrderService orderService, OrderStateService orderStateService) {
+    public OrderController(OrderService orderService, OrderStateService orderStateService, RabbitMQService rabbitMQService) {
         this.orderService = orderService;
         this.orderStateService = orderStateService;
+        this.rabbitMQService = rabbitMQService;
     }
 
     @Operation(
         summary = "创建订单",
-        description = "根据购物车生成新订单",
+        description = "根据购物车生成新订单,并发送延时消息",
         security = @SecurityRequirement(name = "JWT"),
         responses = {
             @ApiResponse(responseCode = "200", description = "订单创建成功"),
@@ -50,6 +56,8 @@ public class OrderController {
             @RequestBody Order order) {
         order.setUserId(customUserDetails.getUserId());
         String orderId = orderStateService.createOrder(order);
+        // 发送延时消息
+        rabbitMQService.sendOrderTimeoutMessage(orderId, timeoutThreshold);
         return ResponseEntity.ok("订单创建成功，订单号: " + orderId);
     }
 

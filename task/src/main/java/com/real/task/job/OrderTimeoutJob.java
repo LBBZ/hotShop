@@ -1,5 +1,6 @@
 package com.real.task.job;
 
+/*
 import com.real.common.enums.OrderStatus;
 import com.real.domain.entity.Order;
 import com.real.domain.service.OrderService;
@@ -40,10 +41,12 @@ public class OrderTimeoutJob {
         });
     }
 
-    /**
+    */
+/**
      * 获取超时未支付订单
      * @return 超时未支付订单订单号
-     */
+     *//*
+
     private List<String> getTimeoutOrders() {
         long finalTimeoutThreshold = timeoutThreshold * 60;
         LocalDateTime now = LocalDateTime.now();
@@ -62,3 +65,4 @@ public class OrderTimeoutJob {
     }
 
 }
+*/

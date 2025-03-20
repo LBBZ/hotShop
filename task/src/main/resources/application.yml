@@ -39,6 +39,3 @@ server:
 logging:
   level:
     com.real: TRACE
-
-timeout:
-  orderCancel: 30

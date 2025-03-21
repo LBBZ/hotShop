@@ -40,16 +40,27 @@ services:
 
   # RabbitMQ服务
   rabbitmq:
-    image: rabbitmq:3.12-management-alpine
+    image: rabbitmq:4.0.7-management-alpine
     container_name: hotShop-rabbitmq
     environment:
-      RABBITMQ_DEFAULT_USER: admin
-      RABBITMQ_DEFAULT_PASS: admin123
+      SPRING_RABBITMQ_USERNAME: guest
+      SPRING_RABBITMQ_PASSWORD: guest
+    command:
+      bash -c "
+      set -e;  # 任何命令失败立即终止脚本
+      if [ ! -f /plugins/rabbitmq_delayed_message_exchange-4.0.7.ez ]; then
+      wget -q --tries=3 -O /plugins/rabbitmq_delayed_message_exchange-4.0.7.ez \
+      https://github.com/rabbitmq/rabbitmq-delayed-message-exchange/releases/download/v4.0.7/rabbitmq_delayed_message_exchange-v4.0.7.ez;
+      fi;
+      rabbitmq-plugins enable --offline rabbitmq_delayed_message_exchange;
+      rabbitmq-server
+      "
     ports:
-      - "5672:5672"
+      - "6672:5672"
       - "15672:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+      - rabbitmq_plugins:/plugins
     networks:
       - hotShop-network
     healthcheck:
@@ -90,7 +101,7 @@ services:
         PROFILE: ""
     container_name: hotShop-portal
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://hotShop-mysql:3306/hotShop
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/hotShop
       SPRING_REDIS_HOST: redis
       SPRING_RABBITMQ_HOST: rabbitmq
       SERVER_PORT: 8080
@@ -114,7 +125,7 @@ services:
         PROFILE: ""
     container_name: hotShop-task
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://hotShop-mysql:3306/hotShop
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/hotShop
       SPRING_REDIS_HOST: redis
       SPRING_RABBITMQ_HOST: rabbitmq
       SERVER_PORT: 8888
@@ -134,6 +145,7 @@ volumes:
   mysql_data:
   redis_data:
   rabbitmq_data:
+  rabbitmq_plugins:
 
 networks:
   hotShop-network:

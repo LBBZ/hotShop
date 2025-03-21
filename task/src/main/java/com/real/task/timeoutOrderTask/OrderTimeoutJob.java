@@ -29,8 +29,8 @@ public class OrderTimeoutJob {
         this.orderStateService = orderStateService;
     }
 
-    // 每10分钟执行一次（注意时区）
-    @Scheduled(cron = "0 */10 * * * ?", zone = "Asia/Shanghai")
+    // 定时处理订单
+    @Scheduled(fixedRate = 60_000)
     public void checkTimeoutOrders() {
         LocalDateTime threshold = LocalDateTime.now().minusMinutes(timeoutThreshold);
         List<Order> timeoutOrders = orderService.getOrdersByConditions(null, OrderStatus.PENDING, null, threshold);

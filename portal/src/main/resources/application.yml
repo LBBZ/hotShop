@@ -34,7 +34,7 @@ rabbitmq:
   enabled: true
 
 timeout:
-  orderCancel: 30
+  orderCancel: 1
 
 server:
   port: 8080

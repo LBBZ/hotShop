@@ -8,6 +8,7 @@ spring:
       - classpath:config/common-db.yml
       - classpath:config/common-redis.yml
       - classpath:config/common-jwt.yml
+      - classpath:config/orderTimeoutConfig.yml
 
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/hotShop?useSSL=false&serverTimezone=UTC}
@@ -33,9 +34,6 @@ spring:
 
 rabbitmq:
   enabled: true
-
-timeout:
-  orderCancel: 1
 
 server:
   port: 8080

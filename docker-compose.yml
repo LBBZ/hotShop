@@ -2,7 +2,7 @@
 version: '3.8'
 
 services:
-  # 数据库服务（共用）
+  # 数据库服务
   mysql:
     image: mysql:8.0
     container_name: hotShop-mysql
@@ -22,7 +22,7 @@ services:
       timeout: 3s
       retries: 5
 
-  # Redis服务（共用）
+  # Redis服务
   redis:
     image: redis:alpine
     container_name: hotShop-redis
@@ -37,6 +37,27 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+
+  # RabbitMQ服务
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: hotShop-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin123
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - hotShop-network
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "status" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 
   admin-service:
     build:
@@ -71,6 +92,7 @@ services:
     environment:
       SPRING_DATASOURCE_URL: jdbc:mysql://hotShop-mysql:3306/hotShop
       SPRING_REDIS_HOST: redis
+      SPRING_RABBITMQ_HOST: rabbitmq
       SERVER_PORT: 8080
     ports:
        - "8080:8080"
@@ -79,12 +101,39 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - hotShop-network
+
+  task-service:
+    build:
+      context: .
+      args:
+        MODULE: task
+        PROFILE: ""
+    container_name: hotShop-task
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://hotShop-mysql:3306/hotShop
+      SPRING_REDIS_HOST: redis
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SERVER_PORT: 8888
+    ports:
+      - "8888:8888"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     networks:
       - hotShop-network
 
 volumes:
   mysql_data:
   redis_data:
+  rabbitmq_data:
 
 networks:
   hotShop-network:

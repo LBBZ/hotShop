@@ -103,8 +103,7 @@ public class OrderStateService {
         if (order.getStatus().canTransitionTo(OrderStatus.PAID)) {
             order.setStatus(OrderStatus.PAID);
             orderMapper.updateOrder(order);
-        }
-        throw new IllegalStateException("订单当前状态不可支付");
+        } else throw new IllegalStateException("订单当前状态不可支付");
     }
 
     /**
@@ -118,8 +117,7 @@ public class OrderStateService {
             orderMapper.updateOrder(order);
             // 释放库存
             releaseStock(order);
-        }
-        throw new IllegalStateException("订单当前状态不可取消");
+        } else throw new IllegalStateException("订单当前状态不可取消");
     }
 
     /**
@@ -131,8 +129,7 @@ public class OrderStateService {
         if (order.getStatus().canTransitionTo(OrderStatus.COMPLETED)) {
             order.setStatus(OrderStatus.COMPLETED);
             orderMapper.updateOrder(order);
-        }
-        throw new IllegalStateException("订单当前状态不可取消");
+        } else throw new IllegalStateException("订单当前状态不可完成");
     }
 
     /**

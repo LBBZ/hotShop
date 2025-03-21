@@ -21,14 +21,32 @@ public class RedisService {
      * @param value 值
      * @param ttl （存活时间），单位为秒
      */
-    public void set(String key, String value, int dbIndex, long ttl) {
+    public Boolean setWithTTL(Object key, Object value, int dbIndex, long ttl) {
         // 设置键值对
-        redisTemplateGenerator
+        return
+                redisTemplateGenerator
                 .getRedisTemplate(dbIndex)
                 .opsForValue()
-                .set(
+                .setIfAbsent(
                 key, value,
                 ttl, TimeUnit.SECONDS);
+    }
+
+    /**
+     * 设置键值对到指定的 Redis 数据库
+     * @param dbIndex 数据库索引
+     * @param key 键
+     * @param value 值
+     */
+    public Boolean setNoTTL(Object key, Object value, int dbIndex) {
+        // 设置键值对
+        return
+                redisTemplateGenerator
+                        .getRedisTemplate(dbIndex)
+                        .opsForValue()
+                        .setIfAbsent(
+                                key, value
+                        );
     }
 
     /**

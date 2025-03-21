@@ -24,7 +24,7 @@ public class TokenBlacklistService {
         long ttl = (jwtTokenUtil.getExpirationDateFromToken(token).getTime() - System.currentTimeMillis())/1000 + 1;
         String hashToken = hashToken(token);
         if (ttl > 0) {
-            redisService.set(
+            redisService.setWithTTL(
                     BLACKLIST_KEY + ":" + hashToken,
                     "invalid",
                     0,

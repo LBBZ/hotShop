@@ -22,7 +22,7 @@ public class OrderTimeoutJob {
     // timeoutThreshold 分钟为单位
     @Value("${timeout.orderCancel}")
     private long timeoutThreshold;
-    private final OrderStateService orderStateService;
+    private final OrderStateService  ;
     private final OrderService orderService;
 
     @Autowired

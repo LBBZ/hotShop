@@ -7,7 +7,7 @@
 
 # 配置参数
 COMPOSE_FILE="docker-compose.yml"
-SERVICES=("mysql" "redis" "admin" "portal")  # 服务列表
+SERVICES=("mysql" "redis" "task" "admin" "portal")  # 服务列表
 DEFAULT_ENV=""                            # 默认环境
 
 # 颜色定义

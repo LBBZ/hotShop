@@ -42,18 +42,15 @@ services:
   rabbitmq:
     image: rabbitmq:4.0.7-management-alpine
     container_name: hotShop-rabbitmq
-    environment:
-      SPRING_RABBITMQ_USERNAME: guest
-      SPRING_RABBITMQ_PASSWORD: guest
-    command:
+    user: "0:0"
+    command: |
       bash -c "
-      set -e;  # 任何命令失败立即终止脚本
+      chown -R rabbitmq:rabbitmq /plugins /var/lib/rabbitmq;
       if [ ! -f /plugins/rabbitmq_delayed_message_exchange-4.0.7.ez ]; then
-      wget -q --tries=3 -O /plugins/rabbitmq_delayed_message_exchange-4.0.7.ez \
-      https://github.com/rabbitmq/rabbitmq-delayed-message-exchange/releases/download/v4.0.7/rabbitmq_delayed_message_exchange-v4.0.7.ez;
+        wget -q -P /plugins https://github.com/rabbitmq/rabbitmq-delayed-message-exchange/releases/download/v4.0.7/rabbitmq_delayed_message_exchange-v4.0.7.ez;
       fi;
       rabbitmq-plugins enable --offline rabbitmq_delayed_message_exchange;
-      rabbitmq-server
+      exec su-exec rabbitmq rabbitmq-server
       "
     ports:
       - "6672:5672"

@@ -34,7 +34,7 @@ hotShop 智能部署脚本 - 帮助文档
                clean     - 清理资源
                logs      - 查看日志
                status    - 检查服务状态
-  -e <环境>  指定部署环境，默认: ${DEFAULT_ENV}
+  -e <环境>  指定部署环境,默认: ${DEFAULT_ENV}
                可选值: dev/test/prod
   -s <服务>  指定操作的服务名称（仅在 logs 时需要）
   -h         显示此帮助信息

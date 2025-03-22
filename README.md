@@ -141,82 +141,82 @@ graph TD
 ### 1.2 安装 Docker
    - 更新系统包
      ```bash
-     sudo yum update -y
+        sudo yum update -y
      ```
    - 确保删除原有的依赖包
      ```bash
-     sudo yum remove docker \
-     docker-client \
-     docker-client-latest \
-     docker-common \
-     docker-latest \
-     docker-latest-logrotate \
-     docker-logrotate \
-     docker-engine
+        sudo yum remove docker \
+        docker-client \
+        docker-client-latest \
+        docker-common \
+        docker-latest \
+        docker-latest-logrotate \
+        docker-logrotate \
+        docker-engine
      ```
    - 安装底层工具
      ```bash
-     yum install -y yum-utils device-mapper-persistent-data lvm2
+        yum install -y yum-utils device-mapper-persistent-data lvm2
      ```  
    - 添加 Docker 的镜像
      ```bash
-     自行添加
+        自行添加
      ```
    - 安装 Docker
      ```bash
-     yum -y install docker-ce docker-ce-cli containerd.io --allowerasing
+        yum -y install docker-ce docker-ce-cli containerd.io --allowerasing
      ```
    - 验证 Docker 安装
      ```bash
-     docker --version
+        docker --version
      ```
      应显示 Docker 的版本信息，例如 :
-     ```
-     Docker version 26.1.3, build b72abbb
+     ```bash
+        Docker version 26.1.3, build b72abbb
      ```
    - 启动 Docker 服务
      ```bash
-     sudo systemctl start docker
+        sudo systemctl start docker
      ```
    - 设置 Docker 开机自启
      ```bash
-     sudo systemctl enable docker
+        sudo systemctl enable docker
      ```
 ### 1.3 安装 Docker Compose
    - 下载docker-compose文件
      ```bash
-     sudo curl -L https://github.com/docker/compose/releases/download/v2.21.0/docker-compose-`uname -s`-`uname -m` -o /usr/local/bin/docker-compose
+        sudo curl -L https://github.com/docker/compose/releases/download/v2.21.0/docker-compose-`uname -s`-`uname -m` -o /usr/local/bin/docker-compose
      ```
    - 添加执行权限
      ```bash
-     sudo chmod +x /usr/local/bin/docker-compose
+        sudo chmod +x /usr/local/bin/docker-compose
      ```
    - 验证安装
      ```bash
-     docker-compose --version
+        docker-compose --version
      ```
      应显示 docker-compose 的版本信息,例如 :
      ```bash
-     Docker Compose version v2.21.0
+        Docker Compose version v2.21.0
      ```
 ### 1.4 安装maven和JDK
    - 安装并配置 OpenJDK 17
       ```bash
-      sudo yum install java-17-openjdk java-17-openjdk-devel
-      sudo alternatives --config java
-      sudo nano ~/.bashrc
-      export JAVA_HOME=/usr/lib/jvm/java-17-openjdk
-      export PATH=$JAVA_HOME/bin:$PATH
-      source ~/.bashrc
-      java -version
+          sudo yum install java-17-openjdk java-17-openjdk-devel
+          sudo alternatives --config java
+          sudo nano ~/.bashrc
+          export JAVA_HOME=/usr/lib/jvm/java-17-openjdk
+          export PATH=$JAVA_HOME/bin:$PATH
+          source ~/.bashrc
+          java -version
       ```
    - 安装并配置 maven 3.99
       ```bash
-      wget https://archive.apache.org/dist/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.tar.gz
-      tar -zxvf apache-maven-3.9.9-bin.tar.gz
-      export MAVEN_HOME=/path/to/apache-maven-3.6.3
-      export PATH=$MAVEN_HOME/bin:$PATH
-      mvn -v
+          wget https://archive.apache.org/dist/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.tar.gz
+          tar -zxvf apache-maven-3.9.9-bin.tar.gz
+          export MAVEN_HOME=/path/to/apache-maven-3.6.3
+          export PATH=$MAVEN_HOME/bin:$PATH
+          mvn -v
       ```
 ## 2 构建和运行 Docker 服务
 
@@ -225,22 +225,22 @@ graph TD
       
      项目文件在linux下请跳过这步
      ```bash
-     scp -r /path/hotShop 用户名@虚拟机IP地址:/opt
+        scp -r /path/hotShop 用户名@虚拟机IP地址:/opt
      ```
 
 ### 2.2 快速启动
    - 在文件目录下运行script中的run.sh :
      ```bash
-     # 授予运行权限
-     chmod +x run.sh
-     ./run.sh
+        # 授予运行权限
+        chmod +x run.sh
+        ./run.sh
      ```
 ### 2.3 脚本启动
    - 在当前目录下运行script中的deploy.sh :
      ```bash
-     # 授予运行权限
-     chmod +x deploy.sh
-     ./deploy.sh -h
+        # 授予运行权限
+        chmod +x deploy.sh
+        ./deploy.sh -h
      ```
 |     功能      | 命令                                 | 说明              |
 |:-----------:|:-----------------------------------|:----------------|
@@ -253,42 +253,45 @@ graph TD
 ### 2.4 自行启动
    - 构建并启动服务
      ```bash
-     # 进入项目根目录
-     cd /opt/hotshop
+        # 进入项目根目录
+        cd /opt/hotshop
       
-     # 清理并打包所有模块
-     mvn clean package -DskipTests
+        # 清理并打包所有模块
+        mvn clean package -DskipTests
       
-     # 确认 portal、admin模块的 JAR 文件存在
-     ls portal/target/*.jar
-     ls admin/target/*.jar
+        # 确认 portal、admin模块的 JAR 文件存在
+        ls portal/target/*.jar
+        ls admin/target/*.jar
      ```
      应输出以下内容 :
      ```bash
-     portal/target/portal-0.0.1-SNAPSHOT.jar
-     admin/target/admin-0.0.1-SNAPSHOT.jar
+        portal/target/portal-0.0.1-SNAPSHOT.jar
+        admin/target/admin-0.0.1-SNAPSHOT.jar
      ```
    - 构建镜像并启动
      ```bash
-     #如果有残留请执行以下命令
-     #docker-compose down
-     #docker system prune -a --volumes
+        #如果有残留请执行以下命令
+        #docker-compose down
+        #docker system prune -a --volumes
       
-     docker-compose build --no-cache
+        docker-compose build --no-cache
       
-     docker-compose up -d
+        docker-compose up -d
      ```
    - 查看服务状态
      ```bash
-     docker-compose ps
+        docker-compose ps
      ```
      应输出以下内容 :
      ```bash
-     NAME             IMAGE                    COMMAND                               SERVICE          CREATED         STATUS                   PORTS
-     hotShop-admin    hotshop-admin-service    "java -jar /app.jar"                  admin-service    9 seconds ago   Up 2 seconds             0.0.0.0:8088->8088/tcp, :::8088->8088/tcp
-     hotShop-mysql    mysql:8.0                "docker-entrypoint.sh mysqld"         mysql            9 seconds ago   Up 8 seconds (healthy)   33060/tcp, 0.0.0.0:4306->3306/tcp, :::4306->3306/tcp
-     hotShop-portal   hotshop-portal-service   "java -jar /app.jar"                  portal-service   9 seconds ago   Up 2 seconds             0.0.0.0:8080->8080/tcp, :::8080->8080/tcp
-     hotShop-redis    redis:alpine             "docker-entrypoint.sh redis-server"   redis            9 seconds ago   Up 8 seconds (healthy)   0.0.0.0:7379->6379/tcp, :::7379->6379/tcp
+        [root@localhost hotShop]# docker-compose ps
+        NAME               IMAGE                              COMMAND                                                                                                                                                                                                                                                                                                                                                                                                                                           SERVICE          CREATED          STATUS                    PORTS
+        hotShop-admin      hotshop-admin-service              "java -jar /app.jar"                                                                                                                                                                                                                                                                                                                                                                                                                              admin-service    36 minutes ago   Up 36 minutes             0.0.0.0:8088->8088/tcp, :::8088->8088/tcp
+        hotShop-mysql      mysql:8.0                          "docker-entrypoint.sh mysqld"                                                                                                                                                                                                                                                                                                                                                                                                                     mysql            36 minutes ago   Up 36 minutes (healthy)   33060/tcp, 0.0.0.0:4306->3306/tcp, :::4306->3306/tcp
+        hotShop-portal     hotshop-portal-service             "java -jar /app.jar"                                                                                                                                                                                                                                                                                                                                                                                                                              portal-service   36 minutes ago   Up 36 minutes             0.0.0.0:8080->8080/tcp, :::8080->8080/tcp
+        hotShop-rabbitmq   rabbitmq:4.0.7-management-alpine   "docker-entrypoint.sh bash -c '\nchown -R rabbitmq:rabbitmq /plugins /var/lib/rabbitmq;\nif [ ! -f /plugins/rabbitmq_delayed_message_exchange-4.0.7.ez ]; then\n  wget -q -P /plugins https://github.com/rabbitmq/rabbitmq-delayed-message-exchange/releases/download/v4.0.7/rabbitmq_delayed_message_exchange-v4.0.7.ez;\nfi;\nrabbitmq-plugins enable --offline rabbitmq_delayed_message_exchange;\nexec su-exec rabbitmq rabbitmq-server\n'"   rabbitmq         36 minutes ago   Up 36 minutes (healthy)   4369/tcp, 5671/tcp, 15671/tcp, 15691-15692/tcp, 25672/tcp, 0.0.0.0:15672->15672/tcp, :::15672->15672/tcp, 0.0.0.0:6672->5672/tcp, :::6672->5672/tcp
+        hotShop-redis      redis:alpine                       "docker-entrypoint.sh redis-server"                                                                                                                                                                                                                                                                                                                                                                                                               redis            36 minutes ago   Up 36 minutes (healthy)   0.0.0.0:7379->6379/tcp, :::7379->6379/tcp
+        hotShop-task       hotshop-task-service               "java -jar /app.jar"                                                                                                                                                                                                                                                                                                                                                                                                                              task-service     36 minutes ago   Up 36 minutes             0.0.0.0:8888->8888/tcp, :::8888->8888/tcp
      ```
 
 ## 3 验证部署
@@ -299,18 +302,18 @@ graph TD
 ## 4 维护和更新
    - 开始服务、停止服务、查看服务实时日志
      ```bash
-     docker-compose start
-     docker-compose stop
-     docker-compose logs -f admin-service #or portal-service
+        docker-compose start
+        docker-compose stop
+        docker-compose logs -f admin-service #or portal-service
      ```
    - 初始化或重新部署服务
      ```bash
-     docker-compose up -d
-     #or
-     docker-compose up #将打印控制台信息
+        docker-compose up -d
+        #or
+        docker-compose up #将打印控制台信息
      ```
    - 删除服务
      ```bash
-     docker-compose down -v
+        docker-compose down -v
      ```
    

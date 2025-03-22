@@ -19,7 +19,7 @@ import java.util.stream.Collectors;
 @EnableScheduling
 public class OrderTimeoutJob {
     // timeoutThreshold 分钟为单位
-    @Value("${timeout.orderCancel}")
+    @Value("${timeout.scheduled}")
     private long timeoutThreshold;
     private final OrderService orderService;
     private final OrderStateService orderStateService;

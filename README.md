@@ -59,8 +59,8 @@
 ### 3.1 模块化
 ```mermaid
 graph TD
-A(admin  
-  负责管理员  
+A(admin
+  负责管理员
   前台模块) --> X
 B(portal
   负责用户
@@ -71,16 +71,16 @@ C(task
 X --> Y
 Y --> Z1
 Y --> Z2
-X(security  
+X(security
   安全认证
   请求拦截
   JWT生成)
-Y(domain  
-  领域模块  
+Y(domain
+  领域模块
   核心功能)
-Z1(common  
+Z1(common
    通用组件)
-Z2(infrastructure  
+Z2(infrastructure
    基础设施
    中间价)
 ```

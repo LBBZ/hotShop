@@ -59,30 +59,16 @@
 ### 3.1 模块化
 ```mermaid
 graph TD
-A(admin
-  负责管理员
-  前台模块) --> X
-B(portal
-  负责用户
-  前台模块) --> X
-C(task
-  负责后台任务
-  如定时任务) --> Y
+A(admin<br>负责管理员<br>前台模块) --> X
+B(portal<br>负责用户<br>前台模块) --> X
+C(task<br>负责后台任务<br>如定时任务) --> Y
 X --> Y
 Y --> Z1
 Y --> Z2
-X(security
-  安全认证
-  请求拦截
-  JWT生成)
-Y(domain
-  领域模块
-  核心功能)
-Z1(common
-   通用组件)
-Z2(infrastructure
-   基础设施
-   中间价)
+X(security<br>安全认证<br>请求拦截<br>JWT生成)
+Y(domain<br>领域模块<br>核心功能)
+Z1(common<br>通用组件)
+Z2(infrastructure<br>基础设施<br>中间价)
 ```
 ### 3.2 双令牌机制
     使用 JWT 无需将令牌存至数据库,减少数据库压力

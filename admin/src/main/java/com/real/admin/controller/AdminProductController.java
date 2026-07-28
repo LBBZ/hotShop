@@ -36,7 +36,6 @@ import java.math.BigDecimal;
 @Validated
 @Tag(name = "Admin products", description = "Administrator Catalog Product operations")
 @RequestMapping("/admin/api/v1/products")
-@PreAuthorize("hasAuthority('ROLE_ADMIN')")
 @SecurityRequirement(name = "bearerAuth")
 public class AdminProductController {
     private final ProductService productService;
@@ -47,6 +46,7 @@ public class AdminProductController {
 
     @Operation(summary = "Create a Catalog Product")
     @PostMapping
+    @PreAuthorize("hasAuthority('PERM_ADMIN_PRODUCT_WRITE')")
     public ResponseEntity<ProductResponse> addProduct(
             @RequestBody @Valid ProductWriteRequest request
     ) {
@@ -61,6 +61,7 @@ public class AdminProductController {
 
     @Operation(summary = "Replace a Catalog Product")
     @PutMapping("/{productId}")
+    @PreAuthorize("hasAuthority('PERM_ADMIN_PRODUCT_WRITE')")
     public ResponseEntity<ProductResponse> updateProduct(
             @PathVariable @Min(1) Long productId,
             @RequestBody @Valid ProductWriteRequest request
@@ -74,6 +75,7 @@ public class AdminProductController {
 
     @Operation(summary = "Soft-delete a Catalog Product")
     @DeleteMapping("/{productId}")
+    @PreAuthorize("hasAuthority('PERM_ADMIN_PRODUCT_WRITE')")
     public ResponseEntity<Void> deleteProduct(@PathVariable @Min(1) Long productId) {
         requireProduct(productId);
         productService.deleteProduct(productId);
@@ -82,6 +84,7 @@ public class AdminProductController {
 
     @Operation(summary = "Get a Catalog Product")
     @GetMapping("/{productId}")
+    @PreAuthorize("hasAuthority('PERM_ADMIN_PRODUCT_READ')")
     public ResponseEntity<ProductResponse> getProduct(@PathVariable @Min(1) Long productId) {
         return ResponseEntity.ok(ApiDtoMapper.toProductResponse(requireProduct(productId)));
     }
@@ -91,6 +94,7 @@ public class AdminProductController {
             description = "Stable keyset pagination ordered by productId ascending"
     )
     @GetMapping
+    @PreAuthorize("hasAuthority('PERM_ADMIN_PRODUCT_READ')")
     public ResponseEntity<CursorPageResponse<ProductResponse>> searchProducts(
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit,
             @RequestParam(required = false) String cursor,

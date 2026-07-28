@@ -53,6 +53,19 @@ public class ApiException extends RuntimeException {
         );
     }
 
+    public static ApiException forbidden(String code, String detail) {
+        return new ApiException(HttpStatus.FORBIDDEN, code, "Access denied", detail);
+    }
+
+    public static ApiException serviceUnavailable(String code, String detail) {
+        return new ApiException(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                code,
+                "Service unavailable",
+                detail
+        );
+    }
+
     public HttpStatus getStatus() {
         return status;
     }

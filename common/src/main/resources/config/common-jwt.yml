@@ -1,4 +1,47 @@
-jwt:
-  secret: "5YWD56We5ZCv5Yqo5LiN5ZCv5Yqo5LqG5oiR5YaN5Lmf5LiN5a6M5Y6f56We5LqG"
-  access-expiration: 3600
-  refresh-expiration: 604800
+hotshop:
+  security:
+    clock-skew-seconds: ${HOTSHOP_JWT_CLOCK_SKEW_SECONDS:30}
+    user:
+      issuer: https://auth.hotshop.local/user
+      audience: hotshop-portal-api
+      type: user-access+jwt
+      token-use: user_access
+      active-kid: ${HOTSHOP_USER_ACTIVE_KID:user-local-1}
+      private-key-path: ${HOTSHOP_USER_PRIVATE_KEY_PATH:}
+      verification-key-paths:
+        user-local-1: ${HOTSHOP_USER_PUBLIC_KEY_PATH:}
+      ttl-seconds: ${HOTSHOP_USER_ACCESS_TTL_SECONDS:900}
+    administrator:
+      issuer: https://auth.hotshop.local/administrator
+      audience: hotshop-admin-api
+      type: administrator-access+jwt
+      token-use: administrator_access
+      active-kid: ${HOTSHOP_ADMIN_ACTIVE_KID:administrator-local-1}
+      private-key-path: ${HOTSHOP_ADMIN_PRIVATE_KEY_PATH:}
+      verification-key-paths:
+        administrator-local-1: ${HOTSHOP_ADMIN_PUBLIC_KEY_PATH:}
+      ttl-seconds: ${HOTSHOP_ADMIN_ACCESS_TTL_SECONDS:900}
+    agent-delegation:
+      issuer: https://auth.hotshop.local/agent-delegation
+      audience: hotshop-agent-api
+      type: agent-delegation+jwt
+      token-use: agent_delegation
+      active-kid: ${HOTSHOP_AGENT_DELEGATION_ACTIVE_KID:agent-delegation-local-1}
+      private-key-path: ${HOTSHOP_AGENT_DELEGATION_PRIVATE_KEY_PATH:}
+      verification-key-paths:
+        agent-delegation-local-1: ${HOTSHOP_AGENT_DELEGATION_PUBLIC_KEY_PATH:}
+      ttl-seconds: ${HOTSHOP_AGENT_DELEGATION_TTL_SECONDS:300}
+    client-assertion:
+      issuer: https://agent.hotshop.local/service
+      audience: hotshop-agent-token-exchange
+      type: client-auth+jwt
+      client-id: hotshop-agent-service
+      verification-key-paths:
+        agent-service-local-1: ${HOTSHOP_AGENT_SERVICE_PUBLIC_KEY_PATH:}
+      max-ttl-seconds: ${HOTSHOP_AGENT_ASSERTION_MAX_TTL_SECONDS:60}
+    refresh:
+      secure-cookie: ${HOTSHOP_SECURE_COOKIES:true}
+      ttl-seconds: ${HOTSHOP_REFRESH_TTL_SECONDS:604800}
+    rate-limit:
+      trust-forwarded-headers: ${HOTSHOP_TRUST_FORWARDED_HEADERS:false}
+      trusted-proxy-addresses: ${HOTSHOP_TRUSTED_PROXY_ADDRESSES:}

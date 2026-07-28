@@ -6,6 +6,7 @@ import com.real.domain.service.ProductService;
 import com.real.domain.service.UserService;
 import com.real.security.entity.CustomUserDetails;
 import com.real.security.service.TokenBlacklistService;
+import com.real.security.util.JwtTokenUtil;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -140,7 +141,16 @@ class AdminApiContractTest {
     }
 
     private CustomUserDetails adminPrincipal() {
-        return principal("contract-admin", "ROLE_ADMIN");
+        return CustomUserDetails.builder()
+                .userId(100L)
+                .username("contract-admin")
+                .password("not-returned")
+                .authorities(
+                        JwtTokenUtil.administratorAuthorities().stream()
+                                .map(SimpleGrantedAuthority::new)
+                                .toList()
+                )
+                .build();
     }
 
     private CustomUserDetails userPrincipal() {

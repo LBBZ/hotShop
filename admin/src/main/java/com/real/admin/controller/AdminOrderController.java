@@ -30,7 +30,6 @@ import java.time.Instant;
 @Validated
 @Tag(name = "Admin orders", description = "Administrator Order queries")
 @RequestMapping("/admin/api/v1/orders")
-@PreAuthorize("hasAuthority('ROLE_ADMIN')")
 @SecurityRequirement(name = "bearerAuth")
 public class AdminOrderController {
     private final OrderService orderService;
@@ -41,6 +40,7 @@ public class AdminOrderController {
 
     @Operation(summary = "Get an Order")
     @GetMapping("/{orderId}")
+    @PreAuthorize("hasAuthority('PERM_ADMIN_ORDER_READ')")
     public ResponseEntity<OrderResponse> getOrder(
             @PathVariable
             @Pattern(regexp = "^[A-Za-z0-9_-]{1,64}$")
@@ -58,6 +58,7 @@ public class AdminOrderController {
             description = "Stable keyset pagination ordered by createdAt descending, then orderId descending"
     )
     @GetMapping
+    @PreAuthorize("hasAuthority('PERM_ADMIN_ORDER_READ')")
     public ResponseEntity<CursorPageResponse<OrderResponse>> getOrders(
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit,
             @RequestParam(required = false) String cursor,

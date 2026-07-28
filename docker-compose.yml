@@ -164,8 +164,19 @@ services:
       SPRING_REDIS_HOST: redis-cache
       SPRING_REDIS_PORT: 6379
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_CACHE_PASSWORD:-change-me-local-redis-cache}
+      HOTSHOP_ADMIN_PRIVATE_KEY_PATH: /run/secrets/hotshop/administrator-private.pem
+      HOTSHOP_ADMIN_PUBLIC_KEY_PATH: /run/secrets/hotshop/administrator-public.pem
+      HOTSHOP_SECURE_COOKIES: ${HOTSHOP_SECURE_COOKIES:-true}
+      HOTSHOP_JWT_CLOCK_SKEW_SECONDS: ${HOTSHOP_JWT_CLOCK_SKEW_SECONDS:-30}
+      HOTSHOP_ADMIN_ACCESS_TTL_SECONDS: ${HOTSHOP_ADMIN_ACCESS_TTL_SECONDS:-900}
+      HOTSHOP_REFRESH_TTL_SECONDS: ${HOTSHOP_REFRESH_TTL_SECONDS:-604800}
+      HOTSHOP_TRUST_FORWARDED_HEADERS: ${HOTSHOP_TRUST_FORWARDED_HEADERS:-false}
+      HOTSHOP_TRUSTED_PROXY_ADDRESSES: ${HOTSHOP_TRUSTED_PROXY_ADDRESSES:-}
       SERVER_PORT: 8088
       TZ: ${TZ:-UTC}
+    volumes:
+      - ${HOTSHOP_KEY_DIR:-./.local/keys/hotshop}/administrator-private.pem:/run/secrets/hotshop/administrator-private.pem:ro
+      - ${HOTSHOP_KEY_DIR:-./.local/keys/hotshop}/administrator-public.pem:/run/secrets/hotshop/administrator-public.pem:ro
     ports:
       - "${ADMIN_PORT:-8088}:8088"
     depends_on:
@@ -195,8 +206,27 @@ services:
       SPRING_RABBITMQ_PORT: 5672
       SPRING_RABBITMQ_USERNAME: ${RABBITMQ_DEFAULT_USER:-hotshop}
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_DEFAULT_PASS:-change-me-local-rabbitmq}
+      HOTSHOP_USER_PRIVATE_KEY_PATH: /run/secrets/hotshop/user-private.pem
+      HOTSHOP_USER_PUBLIC_KEY_PATH: /run/secrets/hotshop/user-public.pem
+      HOTSHOP_AGENT_DELEGATION_PRIVATE_KEY_PATH: /run/secrets/hotshop/agent-delegation-private.pem
+      HOTSHOP_AGENT_DELEGATION_PUBLIC_KEY_PATH: /run/secrets/hotshop/agent-delegation-public.pem
+      HOTSHOP_AGENT_SERVICE_PUBLIC_KEY_PATH: /run/secrets/hotshop/agent-service-public.pem
+      HOTSHOP_SECURE_COOKIES: ${HOTSHOP_SECURE_COOKIES:-true}
+      HOTSHOP_JWT_CLOCK_SKEW_SECONDS: ${HOTSHOP_JWT_CLOCK_SKEW_SECONDS:-30}
+      HOTSHOP_USER_ACCESS_TTL_SECONDS: ${HOTSHOP_USER_ACCESS_TTL_SECONDS:-900}
+      HOTSHOP_AGENT_DELEGATION_TTL_SECONDS: ${HOTSHOP_AGENT_DELEGATION_TTL_SECONDS:-300}
+      HOTSHOP_AGENT_ASSERTION_MAX_TTL_SECONDS: ${HOTSHOP_AGENT_ASSERTION_MAX_TTL_SECONDS:-60}
+      HOTSHOP_REFRESH_TTL_SECONDS: ${HOTSHOP_REFRESH_TTL_SECONDS:-604800}
+      HOTSHOP_TRUST_FORWARDED_HEADERS: ${HOTSHOP_TRUST_FORWARDED_HEADERS:-false}
+      HOTSHOP_TRUSTED_PROXY_ADDRESSES: ${HOTSHOP_TRUSTED_PROXY_ADDRESSES:-}
       SERVER_PORT: 8080
       TZ: ${TZ:-UTC}
+    volumes:
+      - ${HOTSHOP_KEY_DIR:-./.local/keys/hotshop}/user-private.pem:/run/secrets/hotshop/user-private.pem:ro
+      - ${HOTSHOP_KEY_DIR:-./.local/keys/hotshop}/user-public.pem:/run/secrets/hotshop/user-public.pem:ro
+      - ${HOTSHOP_KEY_DIR:-./.local/keys/hotshop}/agent-delegation-private.pem:/run/secrets/hotshop/agent-delegation-private.pem:ro
+      - ${HOTSHOP_KEY_DIR:-./.local/keys/hotshop}/agent-delegation-public.pem:/run/secrets/hotshop/agent-delegation-public.pem:ro
+      - ${HOTSHOP_KEY_DIR:-./.local/keys/hotshop}/agent-service-public.pem:/run/secrets/hotshop/agent-service-public.pem:ro
     ports:
       - "${PORTAL_PORT:-8080}:8080"
     depends_on:

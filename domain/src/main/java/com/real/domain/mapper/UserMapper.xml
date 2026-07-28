@@ -33,7 +33,7 @@
     <select id="selectByUsername" resultType="User">
         SELECT user_id, username, password_hash AS password, email, role, created_at
         FROM app_user
-        WHERE username = #{username} AND deleted_at IS NULL
+        WHERE username = #{username} AND status = 'ACTIVE' AND deleted_at IS NULL
     </select>
 
 

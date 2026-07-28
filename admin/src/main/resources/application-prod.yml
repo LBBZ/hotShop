@@ -3,7 +3,7 @@ spring:
   datasource:
     url: jdbc:mysql://${DB_HOST:prod-db}:3306/hotShop_prod?useSSL=false&serverTimezone=UTC
     username: ${DB_USER:prod_admin}
-    password: ${DB_PASSWORD:Prod_1234}
+    password: ${DB_PASSWORD}
   data:
     redis:
       host: ${REDIS_HOST:prod-redis}

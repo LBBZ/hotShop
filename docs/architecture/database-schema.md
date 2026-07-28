@@ -30,6 +30,7 @@ Compose 中只有一次性 `database-migrator` 可以执行迁移；portal、adm
 | --- | --- | --- |
 | `1.0` | `V1_0__create_hotshop_schema.sql` | 创建 11 张业务/平台表、约束和索引 |
 | `1.1` | `V1_1__take_over_legacy_tables.sql` | 条件导入旧四表，清理旧裸表及旧维护过程 |
+| `1.2` | `V1_2__secure_refresh_sessions.sql` | 为分域 Refresh Session 增加 session type、CSRF hash、family 索引和 SERVICE 审计 actor |
 
 ## 2. 表、业务键与状态
 
@@ -45,7 +46,7 @@ Compose 中只有一次性 `database-migrator` 可以执行迁移；portal、adm
 | `sales_order` | Order；`order_id` 业务订单号主键；每个非空 Reservation 最多一个 Order | 金额≥0、三字母币种；`PENDING/PAID/SHIPPED/COMPLETED/CANCELED`；version |
 | `sales_order_item` | Order Item；同一 Order 的 Catalog Product 唯一 | quantity>0、单价/行金额≥0、行金额=单价×数量 |
 | `payment_order` | Payment Order；`payment_no` 唯一；order+provider 唯一；provider transaction 非空时唯一 | 金额≥0；`PENDING/SUCCEEDED/FAILED/CLOSED`；version |
-| `refresh_token` | Refresh Token；应用生成 BIGINT 主键；只保存 SHA-256 token hash；hash 唯一，family 用于轮换/泄露处理 | 每个非空 `parent_token_id` 最多一个后继且不能指向自身；无外键；受限状态；过期晚于创建 |
+| `refresh_token` | Refresh Session；应用生成 BIGINT 主键；只保存 Refresh/CSRF 的 SHA-256 hash；token hash 唯一，family 用于轮换/泄露处理 | `session_type=USER/ADMIN`；每个非空 `parent_token_id` 最多一个后继且不能指向自身；状态 `ACTIVE/ROTATED/REVOKED/EXPIRED/REUSED`；无外键；过期晚于创建 |
 | `outbox_event` | 事务事件；`event_id` 唯一 | JSON payload；`NEW/PUBLISHING/PUBLISHED/FAILED`；attempts≥0 |
 | `processed_event` | 消费去重 | `(consumer_name,event_id)` 主键，同一事件可被不同消费者各处理一次 |
 | `audit_log` | 只追加审计结构 | actor/result 枚举受限；仅保存 JSON 状态摘要，不提供更新/删除业务 |
@@ -58,11 +59,20 @@ Username 和 Email 的唯一键覆盖已软删除 User。`existsByUsername`、`e
 因此查询全部记录；登录和普通 User 查询继续限定 `deleted_at IS NULL`。这保证应用预检与数据库最终
 约束一致，也落实 `CONTEXT.md` 中 Username 永不重新分配的语义。
 
-Refresh Token 轮换通过 `UNIQUE(parent_token_id)` 保证两个并发请求不能为同一父令牌创建第二个后继；
+Refresh Token 是至少 256-bit CSPRNG 生成的 opaque 值，不是 JWT；明文只存在于一次 HTTP cookie
+响应与调用方内存中。`token_hash` 和 `csrf_hash` 使用 SHA-256，不保存或记录明文。User 与
+Administrator 由 `session_type`、独立 issuer/audience 和独立 family 隔离。V1.2 会把升级前无法满足
+新 CSRF 契约的遗留 ACTIVE 记录置为 REVOKED，调用方必须重新登录。
+
+轮换通过 `UNIQUE(parent_token_id)` 保证两个并发请求不能为同一父令牌创建第二个后继；
 MySQL 唯一键允许多个 NULL，因此根令牌不受影响。`CHECK(parent_token_id IS NULL OR
 parent_token_id <> refresh_token_id)` 拒绝自引用。MySQL 不允许 CHECK 引用自增列，因此
 `refresh_token_id` 是由应用生成的 BIGINT，而不是 AUTO_INCREMENT。由于不使用外键，后续轮换用例
-仍须在事务中校验父令牌存在、属于同一 User/family 且状态允许；本任务只固定结构与约束证据。
+在单个事务中以 `SELECT ... FOR UPDATE` 锁定当前 hash，校验其 User、family、session type、
+issuer/audience、到期时间和状态。成功时先将当前记录置为 ROTATED，再插入唯一 successor。再次使用
+ROTATED token 会将其置为 REUSED、撤销同 family 的所有 ACTIVE token，并在同一事务追加脱敏
+`REFRESH_TOKEN_REUSE_DETECTED` 审计事件。并发 loser 也遵循 reuse 语义，因此最终 family 被撤销，
+而不会产生两条活动链。
 
 ## 3. 索引依据
 

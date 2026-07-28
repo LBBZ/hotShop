@@ -57,8 +57,8 @@ class SchemaConstraintTest {
 
     @Test
     void emptyDatabaseMigratesToLatestAndValidates() {
-        assertThat(initialMigrationCount).isEqualTo(2);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1.1");
+        assertThat(initialMigrationCount).isEqualTo(3);
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1.2");
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
     }
 
@@ -196,11 +196,13 @@ class SchemaConstraintTest {
         try (Connection connection = connection()) {
             assertConstraintViolation(() -> executeUpdate(connection, """
                     INSERT INTO refresh_token (
-                        refresh_token_id, token_hash, family_id, user_id, parent_token_id,
+                        refresh_token_id, token_hash, csrf_hash, family_id, user_id,
+                        session_type, parent_token_id,
                         issuer, audience, expires_at
                     ) VALUES (
                         9000000, 'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
-                        '00000000-0000-0000-0000-000000000001', 1, 9000000,
+                        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+                        '00000000-0000-0000-0000-000000000001', 1, 'USER', 9000000,
                         'hotshop', 'hotshop', DATE_ADD(CURRENT_TIMESTAMP(6), INTERVAL 1 DAY)
                     )
                     """));
@@ -299,10 +301,12 @@ class SchemaConstraintTest {
         long tokenId = REFRESH_TOKEN_IDS.getAndIncrement();
         try (PreparedStatement statement = connection.prepareStatement("""
                 INSERT INTO refresh_token (
-                    refresh_token_id, token_hash, family_id, user_id, parent_token_id,
+                    refresh_token_id, token_hash, csrf_hash, family_id, user_id,
+                    session_type, parent_token_id,
                     issuer, audience, expires_at
                 ) VALUES (
-                    ?, ?, '00000000-0000-0000-0000-000000000001', 1, ?, 'hotshop', 'hotshop',
+                    ?, ?, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+                    '00000000-0000-0000-0000-000000000001', 1, 'USER', ?, 'hotshop', 'hotshop',
                     DATE_ADD(CURRENT_TIMESTAMP(6), INTERVAL 1 DAY)
                 )
                 """)) {

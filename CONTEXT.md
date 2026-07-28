@@ -17,6 +17,48 @@ _Avoid_: Admin account, backend user
 A permanent sign-in identifier that is never reassigned, including after its User is disabled.
 _Avoid_: Nickname, reusable handle
 
+**Access Token**:
+A short-lived, audience-bound JWT used by exactly one HTTP identity domain. User Access and Administrator Access have
+different issuers, audiences, signing keys, and verification key sets.
+_Avoid_: Shared JWT, session token
+
+**Refresh Session**:
+A server-side login session represented to the caller by a single-use opaque Refresh Token. The database stores only
+the token hash; each successful refresh rotates the token.
+_Avoid_: Refresh JWT, long-lived access
+
+**Token Family**:
+The complete parent/successor chain belonging to one Refresh Session lineage. Reuse of a rotated token revokes every
+active token in the family.
+_Avoid_: Access-token family
+
+**Service Identity**:
+An internal process identity with its own issuer, audience, client identifier, and asymmetric credentials. It is not a
+User, Administrator, or Agent Delegation. The repository-local `task` process calls Java services directly and does
+not impersonate a Service Identity over HTTP.
+_Avoid_: Service user, user JWT
+
+**Agent Delegation**:
+A non-refreshable, at-most-five-minute JWT issued only after token exchange validates both the Agent Service Identity
+client assertion and a User Access Token. It identifies the delegated User, authorized Agent client, and allowed
+scopes, and never carries Administrator authority.
+_Avoid_: Agent access token, admin delegation
+
+**Actor**:
+The identity directly performing an operation. For an ordinary request it is the authenticated User, Administrator,
+or Service Identity.
+_Avoid_: Username string
+
+**Delegated Actor**:
+The User on whose behalf an authorized Agent client acts. Agent authorization must validate both the Agent client and
+this delegated User.
+_Avoid_: Agent owner, administrator
+
+**Scope**:
+A named, allowlisted Agent capability. A scope narrows an Agent Delegation; it never grants a role or crosses into
+User or Administrator HTTP boundaries.
+_Avoid_: Role, wildcard permission
+
 ## Catalog and flash sale
 
 **Catalog Product**:

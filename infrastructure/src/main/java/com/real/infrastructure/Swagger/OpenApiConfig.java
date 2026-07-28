@@ -61,6 +61,7 @@ public class OpenApiConfig {
                         operation.getResponses().putIfAbsent("409", refResponse("Conflict"));
                         operation.getResponses().putIfAbsent("429", refResponse("RateLimited"));
                         operation.getResponses().putIfAbsent("415", refResponse("UnsupportedMediaType"));
+                        operation.getResponses().putIfAbsent("503", refResponse("ServiceUnavailable"));
                         operation.getResponses().putIfAbsent("500", refResponse("InternalError"));
                         operation.getResponses().values().forEach(response -> {
                             if (response.getHeaders() == null) {
@@ -232,17 +233,18 @@ public class OpenApiConfig {
     }
 
     private void addProblemResponses(Components components) {
-        Map<String, String> responses = Map.of(
-                "BadRequest", "Invalid request",
-                "Unauthorized", "Authentication required",
-                "Forbidden", "Access denied",
-                "NotFound", "Resource not found",
-                "MethodNotAllowed", "Request method is not supported",
-                "NotAcceptable", "Requested response media type is not available",
-                "Conflict", "State or idempotency conflict",
-                "RateLimited", "Request rate limit exceeded",
-                "UnsupportedMediaType", "Request media type is not supported",
-                "InternalError", "Unexpected server error"
+        Map<String, String> responses = Map.ofEntries(
+                Map.entry("BadRequest", "Invalid request"),
+                Map.entry("Unauthorized", "Authentication required"),
+                Map.entry("Forbidden", "Access denied"),
+                Map.entry("NotFound", "Resource not found"),
+                Map.entry("MethodNotAllowed", "Request method is not supported"),
+                Map.entry("NotAcceptable", "Requested response media type is not available"),
+                Map.entry("Conflict", "State or idempotency conflict"),
+                Map.entry("RateLimited", "Request rate limit exceeded"),
+                Map.entry("UnsupportedMediaType", "Request media type is not supported"),
+                Map.entry("ServiceUnavailable", "Authentication dependency is unavailable"),
+                Map.entry("InternalError", "Unexpected server error")
         );
         responses.forEach((name, description) -> components.addResponses(
                 name,

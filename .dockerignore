@@ -4,5 +4,6 @@
 .env
 .env.*
 !.env.example
+.local
 **/target
 *.log

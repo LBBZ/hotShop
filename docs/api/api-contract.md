@@ -37,6 +37,85 @@ Spring Security 验证旧路径在已认证请求下返回 404；生成的三个
 Controller 的 HTTP 签名只使用 `*Request`、`*Response` 和 `CursorPageResponse` DTO。持久化实体只在
 Controller 内部与领域服务之间使用，不进入请求/响应签名或 OpenAPI schema。
 
+### 1.1 TASK-05 身份域与令牌生命周期
+
+认证边界在签名验证阶段按 issuer、audience、`typ`、`kid` 和独立公钥集合隔离，不能靠
+`role` 字符串补救错误 audience：
+
+| 调用身份 | 唯一 HTTP 边界 | JWT `typ` | audience | 最长 TTL | 可刷新 |
+| --- | --- | --- | --- | --- | --- |
+| User Access | `/api/v1/**` | `user-access+jwt` | `hotshop-portal-api` | 15 分钟 | 通过 User Refresh Session |
+| Administrator Access | `/admin/api/v1/**` | `administrator-access+jwt` | `hotshop-admin-api` | 15 分钟 | 通过独立 Admin Refresh Session |
+| Agent Delegation | `/agent/api/v1/**` | `agent-delegation+jwt` | `hotshop-agent-api` | 5 分钟 | 否 |
+| Service Identity client assertion | 仅 token exchange 的客户端证明 | `client-auth+jwt` | `hotshop-agent-token-exchange` | 60 秒 | 否 |
+
+User、Administrator、Agent Delegation 和 Agent Service client assertion 分别使用独立 issuer、audience
+与 key set。Access JWT 固定 RS256，必须同时验证 `alg`、`kid`、签名、`iss`、`aud`、`typ`、稳定
+User ID 形式的 `sub`、`iat`、`nbf`、`exp`、`jti`；允许时钟偏差 30 秒。拒绝 `none`、错误算法、
+未知 `kid`、跨 issuer/audience、尚未生效、过期和签名篡改令牌。Principal 完全从验证后的声明构造，
+正常请求不查询数据库；禁用 User 或权限变更最多受剩余 Access TTL 影响。高风险即时撤销可将
+SHA-256(`jti`) 加入 Redis denylist，绝不保存原 JWT。
+
+认证端点：
+
+| 方法与路径 | 凭据与 CSRF | 成功结果 |
+| --- | --- | --- |
+| `POST /api/v1/auth/login` | username/password | body 返回 User Access；设置 User Refresh/CSRF cookies |
+| `POST /api/v1/auth/refresh` | User Refresh cookie + CSRF cookie + `X-CSRF-Token` | 原子轮换；body 返回新 Access；替换两个 cookies |
+| `POST /api/v1/auth/logout` | 有 Refresh cookie 时必须提供匹配 CSRF；Access 可选 | 撤销 family，清 cookies；有效 Access `jti` 立即 denylist |
+| `POST /admin/api/v1/auth/login` | username/password，且角色必须是 Administrator | body 返回 Administrator Access；设置独立 Admin cookies |
+| `POST /admin/api/v1/auth/refresh` | Admin Refresh cookie + Admin CSRF cookie/header | 独立 family 原子轮换 |
+| `POST /admin/api/v1/auth/logout` | 与 User logout 同语义但只处理 Admin family | 撤销并清理 Admin cookies |
+| `POST /agent/api/v1/auth/token-exchange` | body 同时提交 User subject token、Agent client assertion、scopes | 返回短期 Agent Delegation |
+
+所有 login/refresh/logout/token-exchange 成功或安全失败响应均不得回显凭据；login/refresh 响应包含
+`Cache-Control: no-store` 与 `Pragma: no-cache`。Access Token 只在 JSON body 返回，前端应仅保存在
+内存。Refresh Token 是至少 256-bit CSPRNG opaque 值，数据库只保存 SHA-256 hash。
+
+Cookie 契约：
+
+| 域 | Refresh cookie | CSRF cookie | Path |
+| --- | --- | --- | --- |
+| User | `hotshop_user_refresh`（HttpOnly） | `hotshop_user_csrf`（前端可读） | `/api/v1/auth` |
+| Administrator | `hotshop_admin_refresh`（HttpOnly） | `hotshop_admin_csrf`（前端可读） | `/admin/api/v1/auth` |
+
+四个 cookie 均为 host-only、`SameSite=Strict`。生产默认 `Secure=true`；只有显式本地 HTTP 配置
+`HOTSHOP_SECURE_COOKIES=false` 可关闭。refresh/logout 使用双提交 CSRF，并以常量时间比较 cookie
+和 `X-CSRF-Token`。refresh 不要求 Access Token；即使 Authorization 中的 Access 已过期，只要
+Refresh Session 有效仍可轮换。
+
+轮换事务使用 `SELECT ... FOR UPDATE` 锁定 hash 命中的当前记录，将其置为 `ROTATED` 后插入唯一
+successor。`UNIQUE(parent_token_id)` 保证数据库最多一个后继。两个并发 refresh 中只有一个成功；
+loser 观察到旧 token 已轮换后按 reuse 处理，将旧 token 标记 `REUSED`、撤销 family 中全部
+`ACTIVE` token，并在同一事务写入脱敏 `REFRESH_TOKEN_REUSE_DETECTED` 事件。因此并发竞争的最终
+安全语义是 family revoked，绝不静默保留两条有效链。已撤销、过期或未知 Refresh Token 返回统一
+401；logout 可重复调用。
+
+Agent token exchange 仅接受 User Access 作为 subject token，并同时验证固定 client ID
+`hotshop-agent-service` 的 RS256 client assertion。assertion 必须具有独立 issuer/audience、正确
+`typ`、`sub`、`iat`、短 `exp`、`jti`、`kid` 和签名；Redis 以 hash(`jti`) 的 `SET NX EX` 在不超过
+assertion 剩余有效期内防重放。scope 请求必须是下列 allowlist 的子集，否则整个请求拒绝：
+`catalog:read`、`orders:self:read`、`reservations:self:read`。库存/价格写入、用户管理、Administrator
+写操作、审计、密钥和权限管理永不进入 Agent scope。签发的 Agent Delegation 含 delegated User
+`sub`、`azp=hotshop-agent-service` 与显式 `scope`，不含 Administrator role，也不能调用 Portal 或
+Admin 边界。本任务不创建 Agent 业务成功接口。
+
+授权矩阵的实现结果：
+
+| 凭据 | Portal `/api/v1/**` | Admin `/admin/api/v1/**` | Agent `/agent/api/v1/**` |
+| --- | --- | --- | --- |
+| User Access | 按本人资源和 User authority | 认证阶段 401 | 认证阶段 401 |
+| Administrator Access | 认证阶段 401 | 按显式管理 permission | 认证阶段 401 |
+| Agent Delegation | 认证阶段 401 | 认证阶段 401 | 同时检查 `typ`/audience/`azp`/delegated User/scope |
+
+登录在 BCrypt 前执行粗粒度可信客户端 IP 桶，失败后记录 IP+username hash 和失败细粒度桶；
+User、Administrator、refresh 与 exchange 使用不同命名空间/限额。只有显式开启可信代理并将
+immediate peer 的 IP 字面量列入 allowlist 时才读取 `X-Forwarded-For`；应用把 immediate peer
+加入链尾，从右向左跳过连续可信代理，选取第一个不可信 IP。hostname、DNS 解析、空/非法元素、
+多行、超过 1024 字符或 32 hops 的 header 整体忽略。计数采用 Redis 原子 Lua `INCR` + 首次 `EXPIRE`；
+key 仅含最小化 IP hash/username hash并设置 TTL。认证写入口的 Redis 不可用策略为 fail-closed：
+返回脱敏 503；429 必须包含 `Retry-After`。Refresh Session 的事实来源始终是 MySQL，不是 Redis。
+
 ## 2. JSON 标量规则
 
 - 编码为 UTF-8，普通成功响应使用 `application/json`。
@@ -107,7 +186,7 @@ Controller 内部与领域服务之间使用，不进入请求/响应签名或 O
   `UNSUPPORTED_MEDIA_TYPE`（415）；
 - `USERNAME_CONFLICT`、`EMAIL_CONFLICT`、`DATA_CONFLICT`、`INVENTORY_CONFLICT`；
 - `RATE_LIMITED`（同时返回 `Retry-After`）；
-- `INTERNAL_ERROR`。
+- `AUTHENTICATION_SERVICE_UNAVAILABLE`（认证依赖不可用时返回脱敏 503）、`INTERNAL_ERROR`。
 
 校验错误提供不含 rejected value 的结构化 `violations`。未知异常响应和生产错误日志不写入原始异常
 消息、堆栈、SQL、表名、内部类名、Token 或密码；外部只得到固定的 `INTERNAL_ERROR` detail。

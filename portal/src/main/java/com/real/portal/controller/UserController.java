@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @Tag(name = "User profile", description = "Authenticated User profile")
 @RequestMapping("/api/v1/users")
-@PreAuthorize("hasAuthority('ROLE_USER') or hasAuthority('ROLE_ADMIN')")
+@PreAuthorize("hasAuthority('ROLE_USER')")
 @SecurityRequirement(name = "bearerAuth")
 public class UserController {
     private final UserService userService;

@@ -7,6 +7,9 @@
 ## 1. 前置条件与凭据
 
 - Docker Engine 及 Docker Compose 可用。
+- 启动 `app` profile 前先按
+  [`authentication-operations.md`](authentication-operations.md) 运行
+  `.\script\generate-auth-keys.ps1`；生成目录被 Git/Docker 忽略，私钥不得写入 env 或镜像。
 - 不要把真实密码写入 `.env.example`。
 - `.gitignore` 已忽略 `.env` 和 `.env.*`，并显式保留 `.env.example`。可以使用仓库根目录下被
   忽略的本机 env 文件；更严格隔离凭据时，仍建议复制到仓库外并通过 `--env-file` 指定。

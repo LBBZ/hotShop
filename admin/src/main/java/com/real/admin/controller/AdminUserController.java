@@ -30,7 +30,6 @@ import java.time.Instant;
 @Validated
 @Tag(name = "Admin users", description = "Administrator User queries")
 @RequestMapping("/admin/api/v1/users")
-@PreAuthorize("hasAuthority('ROLE_ADMIN')")
 @SecurityRequirement(name = "bearerAuth")
 public class AdminUserController {
     private final UserService userService;
@@ -44,6 +43,7 @@ public class AdminUserController {
             description = "Stable keyset pagination ordered by createdAt descending, then userId descending"
     )
     @GetMapping
+    @PreAuthorize("hasAuthority('PERM_ADMIN_USER_READ')")
     public ResponseEntity<CursorPageResponse<UserResponse>> getUsers(
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit,
             @RequestParam(required = false) String cursor,

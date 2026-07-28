@@ -1,7 +1,6 @@
 # HotShop 数据库迁移与约束设计
 
-> TASK-02 基线；适用于 MySQL 8.0。本文只定义结构、迁移、接管和数据生成，不实现 API、鉴权、
-> 秒杀、Outbox 发布、支付或审计业务。
+> TASK-02 基线与 TASK-06 审计增量；适用于 MySQL 8.0。
 
 ## 1. 唯一结构来源与迁移责任
 
@@ -31,6 +30,7 @@ Compose 中只有一次性 `database-migrator` 可以执行迁移；portal、adm
 | `1.0` | `V1_0__create_hotshop_schema.sql` | 创建 11 张业务/平台表、约束和索引 |
 | `1.1` | `V1_1__take_over_legacy_tables.sql` | 条件导入旧四表，清理旧裸表及旧维护过程 |
 | `1.2` | `V1_2__secure_refresh_sessions.sql` | 为分域 Refresh Session 增加 session type、CSRF hash、family 索引和 SERVICE 审计 actor |
+| `1.3` | `V1_3__unified_append_only_audit_log.sql` | 增加 delegated actor、source、调查索引与 UPDATE/DELETE 阻断触发器 |
 
 ## 2. 表、业务键与状态
 
@@ -49,7 +49,7 @@ Compose 中只有一次性 `database-migrator` 可以执行迁移；portal、adm
 | `refresh_token` | Refresh Session；应用生成 BIGINT 主键；只保存 Refresh/CSRF 的 SHA-256 hash；token hash 唯一，family 用于轮换/泄露处理 | `session_type=USER/ADMIN`；每个非空 `parent_token_id` 最多一个后继且不能指向自身；状态 `ACTIVE/ROTATED/REVOKED/EXPIRED/REUSED`；无外键；过期晚于创建 |
 | `outbox_event` | 事务事件；`event_id` 唯一 | JSON payload；`NEW/PUBLISHING/PUBLISHED/FAILED`；attempts≥0 |
 | `processed_event` | 消费去重 | `(consumer_name,event_id)` 主键，同一事件可被不同消费者各处理一次 |
-| `audit_log` | 只追加审计结构 | actor/result 枚举受限；仅保存 JSON 状态摘要，不提供更新/删除业务 |
+| `audit_log` | 只追加统一审计；`audit_id` 为稳定游标 | actor/delegated actor、action、resource、result、request/trace、source、微秒发生时间和脱敏 JSON 摘要；触发器拒绝 UPDATE/DELETE |
 
 预约的 `effective_slot` 是生成列：`RESERVED`、`ORDER_CREATED`、`COMPENSATING` 映射为 1，
 其他状态映射为 NULL；唯一键 `(activity_id,user_id,effective_slot)` 保证活动内同一用户最多一个有效
@@ -103,6 +103,15 @@ ROTATED token 会将其置为 REUSED、撤销同 family 的所有 ACTIVE token�
 | `outbox_event(aggregate_type,aggregate_id,outbox_id)` | 聚合事件追溯 |
 | `processed_event(event_id)` | 跨消费者调查同一事件 |
 | `audit_log` 的 occurred/actor/resource/request 索引 | 按时间、操作者、资源或 request ID 调查 |
+
+V1.3 将 actor、delegated actor、action、resource、result 和 source 的调查索引统一扩展为
+`occurred_at,audit_id` 稳定尾部；另外保留 request ID 并增加 trace ID 索引，用于从 HTTP/trace
+关联到审计事实。查询固定按 `occurred_at DESC,audit_id DESC`，相同微秒也不会乱序。
+
+`audit_log_prevent_update` 和 `audit_log_prevent_delete` 在数据库层以 SQLSTATE `45000` 拒绝任何
+行更新或删除，包括绕过业务 API 的普通 SQL。部署迁移由 Compose 中的 MySQL root 迁移身份执行；
+启用 binary log 且使用非特权迁移用户的隔离环境，必须由数据库管理员预先允许受控创建 trigger。
+应用运行期只执行 INSERT/SELECT，不提供任何修改或清空审计数据的业务能力。
 
 `LIKE '%keyword%'` 不能有效使用普通 B-tree；TASK-02 不提前引入全文检索。后续搜索设计需按数据规模
 选择前缀查询、专用搜索或受控降级，不能误称当前索引覆盖任意子串。

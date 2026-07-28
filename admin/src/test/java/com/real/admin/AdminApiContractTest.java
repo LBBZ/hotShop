@@ -99,6 +99,9 @@ class AdminApiContractTest {
         mockMvc.perform(get("/v3/api-docs/admin"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.paths['/admin/api/v1/products']").exists())
+                .andExpect(jsonPath("$.paths['/admin/api/v1/audit-logs'].get").exists())
+                .andExpect(jsonPath("$.paths['/admin/api/v1/audit-logs'].put").doesNotExist())
+                .andExpect(jsonPath("$.paths['/admin/api/v1/audit-logs'].delete").doesNotExist())
                 .andExpect(jsonPath("$.paths['/admin/products/{id}']").doesNotExist())
                 .andExpect(jsonPath(
                         "$.paths['/admin/api/v1/products/{productId}'].get.parameters"
@@ -120,7 +123,8 @@ class AdminApiContractTest {
                 .andExpect(jsonPath("$.components.schemas.ApiProblem.required").isArray())
                 .andExpect(jsonPath("$.components.schemas.Product").doesNotExist())
                 .andExpect(jsonPath("$.components.schemas.User").doesNotExist())
-                .andExpect(jsonPath("$.components.schemas.Order").doesNotExist());
+                .andExpect(jsonPath("$.components.schemas.Order").doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.AuditLogResponse").exists());
     }
 
     @Test

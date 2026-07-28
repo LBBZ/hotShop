@@ -32,7 +32,7 @@ Spring Security 验证旧路径在已认证请求下返回 404；生成的三个
 
 - public：注册、登录、商品详情、商品列表/搜索；
 - user：登出、刷新令牌、当前 User、创建 Order、本人 Order 列表；
-- admin：登录、登出、Catalog Product CRUD/列表、Order 详情/列表、User 列表。
+- admin：登录、登出、Catalog Product CRUD/列表、Order 详情/列表、User 列表、只读审计日志查询。
 
 Controller 的 HTTP 签名只使用 `*Request`、`*Response` 和 `CursorPageResponse` DTO。持久化实体只在
 Controller 内部与领域服务之间使用，不进入请求/响应签名或 OpenAPI schema。
@@ -150,10 +150,32 @@ key 仅含最小化 IP hash/username hash并设置 TTL。认证写入口的 Redi
 | User Order | `created_at DESC, order_id DESC` | 复合键严格小于游标 |
 | Admin Order | `created_at DESC, order_id DESC` | 复合键严格小于游标 |
 | Admin User | `created_at DESC, user_id DESC` | 复合键严格小于游标 |
+| Admin Audit Log | `occurred_at DESC, audit_id DESC` | 复合键严格小于游标 |
 
 排序包含唯一 ID，因此相同时间值不会产生不确定顺序。数据库集成测试固定多个相同
 `created_at` 的 Order，在第一页之后并发插入排序位于游标之前的新 Order，验证第二页不重复、不跳过
 原有游标之后的记录。游标与筛选条件由调用方共同保持；筛选变化时必须丢弃旧游标重新开始。
+
+### 3.1 管理员审计日志
+
+`GET /admin/api/v1/audit-logs` 是唯一审计业务 API，只接受 Administrator Access。User Access、
+Agent Delegation、匿名请求和错误 audience 的令牌都被拒绝；不存在审计日志的 POST、PUT、PATCH、
+DELETE 或清空端点。
+
+查询支持 `occurredFrom`、`occurredTo`、`actorType`、`actorId`、`action`、`resourceType`、
+`resourceId`、`result`、`limit` 和 `cursor`。时间按第 2 节规则转换为 UTC。游标包含筛选 scope；
+改变任一筛选条件后复用旧游标返回 `CURSOR_INVALID`，不会把不同调查条件的页拼接在一起。
+
+响应项包含 `auditId`、actor、可选 delegated actor、action、resource、result、request ID、
+trace ID、source、`occurredAt` 和脱敏 `stateSummary`。`stateSummary` 只来自服务端强类型摘要，
+不回显管理写请求、凭据、完整提示词、思维链或原始异常消息。
+
+管理写入的提交语义：
+
+- 成功的 Catalog Product 管理写与 SUCCESS 审计 INSERT 共用本地事务；审计失败则业务回滚；
+- 业务写失败后，FAILURE 审计用独立事务提交，只记录稳定原因码；
+- 登录成功和 refresh reuse 继续与 Refresh Session 事务共同提交；登录失败用独立事务记录；
+- Agent Delegation 只有在审计 INSERT 成功后才作为成功返回。
 
 ## 4. Problem Details
 

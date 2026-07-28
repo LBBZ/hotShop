@@ -21,6 +21,7 @@ class LegacyTakeoverTest {
             .withDatabaseName("hotshop_legacy")
             .withUsername("hotshop")
             .withPassword("hotshop-test")
+            .withCommand("--log-bin-trust-function-creators=1")
             .withInitScript("legacy/legacy-schema.sql");
 
     @Test
@@ -40,7 +41,7 @@ class LegacyTakeoverTest {
                 .load();
 
         flyway.baseline();
-        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(3);
+        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(4);
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
 
         try (Connection connection = DriverManager.getConnection(

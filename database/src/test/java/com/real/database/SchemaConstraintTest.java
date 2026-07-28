@@ -38,7 +38,8 @@ class SchemaConstraintTest {
     private static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0.46")
             .withDatabaseName("hotshop_constraints")
             .withUsername("hotshop")
-            .withPassword("hotshop-test");
+            .withPassword("hotshop-test")
+            .withCommand("--log-bin-trust-function-creators=1");
 
     private static Flyway flyway;
     private static int initialMigrationCount;
@@ -57,8 +58,8 @@ class SchemaConstraintTest {
 
     @Test
     void emptyDatabaseMigratesToLatestAndValidates() {
-        assertThat(initialMigrationCount).isEqualTo(3);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1.2");
+        assertThat(initialMigrationCount).isEqualTo(4);
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1.3");
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
     }
 
@@ -224,6 +225,44 @@ class SchemaConstraintTest {
     }
 
     @Test
+    void auditLogIsAppendOnlyAtTheDatabaseLayer() throws SQLException {
+        try (Connection connection = connection()) {
+            long auditId = insertAuditLog(connection);
+
+            assertThatThrownBy(() -> {
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "UPDATE audit_log SET result = 'FAILURE' WHERE audit_id = ?"
+                )) {
+                    statement.setLong(1, auditId);
+                    statement.executeUpdate();
+                }
+            }).isInstanceOf(SQLException.class)
+                    .hasMessageContaining("audit_log is append-only");
+
+            assertThatThrownBy(() -> {
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "DELETE FROM audit_log WHERE audit_id = ?"
+                )) {
+                    statement.setLong(1, auditId);
+                    statement.executeUpdate();
+                }
+            }).isInstanceOf(SQLException.class)
+                    .hasMessageContaining("audit_log is append-only");
+
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "SELECT result, source FROM audit_log WHERE audit_id = ?"
+            )) {
+                statement.setLong(1, auditId);
+                try (ResultSet resultSet = statement.executeQuery()) {
+                    assertThat(resultSet.next()).isTrue();
+                    assertThat(resultSet.getString("result")).isEqualTo("SUCCESS");
+                    assertThat(resultSet.getString("source")).isEqualTo("ADMIN_API");
+                }
+            }
+        }
+    }
+
+    @Test
     void applicationReferenceGuardRejectsMissingParentBeforeWrite() throws SQLException {
         try (Connection connection = connection()) {
             long missingUserId = 9_999_999L;
@@ -319,6 +358,29 @@ class SchemaConstraintTest {
             }
             statement.executeUpdate();
             return tokenId;
+        }
+    }
+
+    private static long insertAuditLog(Connection connection) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                """
+                INSERT INTO audit_log (
+                    actor_type, actor_id, action, resource_type, resource_id,
+                    result, request_id, trace_id, source, state_summary
+                ) VALUES (
+                    'ADMIN', '42', 'CATALOG_PRODUCT_UPDATED', 'CATALOG_PRODUCT', '7',
+                    'SUCCESS', 'append-only-test',
+                    '0123456789abcdef0123456789abcdef', 'ADMIN_API',
+                    JSON_OBJECT('changedFields', JSON_ARRAY('stock'))
+                )
+                """,
+                Statement.RETURN_GENERATED_KEYS
+        )) {
+            statement.executeUpdate();
+            try (ResultSet generatedKeys = statement.getGeneratedKeys()) {
+                assertThat(generatedKeys.next()).isTrue();
+                return generatedKeys.getLong(1);
+            }
         }
     }
 

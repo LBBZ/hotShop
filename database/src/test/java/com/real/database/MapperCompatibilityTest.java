@@ -51,7 +51,10 @@ class MapperCompatibilityTest {
             .withUsername("hotshop")
             .withPassword("hotshop-test")
             .withEnv("TZ", "UTC")
-            .withCommand("--default-time-zone=+00:00")
+            .withCommand(
+                    "--default-time-zone=+00:00",
+                    "--log-bin-trust-function-creators=1"
+            )
             .withUrlParam("serverTimezone", "UTC")
             .withUrlParam("connectionTimeZone", "UTC")
             .withUrlParam("forceConnectionTimeZoneToSession", "true");

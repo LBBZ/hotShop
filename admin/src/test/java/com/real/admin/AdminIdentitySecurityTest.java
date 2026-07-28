@@ -2,6 +2,9 @@ package com.real.admin;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.real.admin.service.AdminProductAuditService;
+import com.real.common.api.RequestContext;
+import com.real.domain.entity.Product;
 import com.real.security.entity.CustomUserDetails;
 import com.real.security.identity.IdentityType;
 import com.real.security.identity.IssuedAccessToken;
@@ -23,6 +26,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.testcontainers.containers.GenericContainer;
@@ -31,17 +35,24 @@ import org.testcontainers.utility.DockerImageName;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.math.BigDecimal;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -66,7 +77,8 @@ class AdminIdentitySecurityTest {
     static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0.46")
             .withDatabaseName("hotShop")
             .withUsername("hotshop")
-            .withPassword("hotshop-test");
+            .withPassword("hotshop-test")
+            .withCommand("--log-bin-trust-function-creators=1");
     static final GenericContainer<?> REDIS =
             new GenericContainer<>(DockerImageName.parse("redis:8.8.1-alpine"))
                     .withExposedPorts(6379);
@@ -96,6 +108,8 @@ class AdminIdentitySecurityTest {
     JdbcTemplate jdbcTemplate;
     @Autowired
     JwtTokenUtil jwtTokenUtil;
+    @Autowired
+    AdminProductAuditService productAuditService;
 
     long adminId;
     long userId;
@@ -108,7 +122,7 @@ class AdminIdentitySecurityTest {
                 .validateMigrationNaming(true)
                 .cleanDisabled(true)
                 .load();
-        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(3);
+        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(4);
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
         String hash = new BCryptPasswordEncoder().encode(PASSWORD);
         jdbcTemplate.update(
@@ -235,6 +249,238 @@ class AdminIdentitySecurityTest {
                 .andExpect(content().string(not(containsString("wrong"))));
     }
 
+    @Test
+    void auditQueryFiltersAndPaginatesWithStableDescendingCompositeOrder() throws Exception {
+        LocalDateTime occurredAt = LocalDateTime.of(2026, 7, 28, 12, 0, 0, 123_456_000);
+        long firstId = insertAudit("audit-page-1", "7001", occurredAt);
+        long secondId = insertAudit("audit-page-2", "7002", occurredAt);
+        long thirdId = insertAudit("audit-page-3", "7003", occurredAt);
+
+        MvcResult firstPage = mockMvc.perform(get("/admin/api/v1/audit-logs")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess()))
+                        .param("limit", "2")
+                        .param("occurredFrom", "2026-07-28T11:59:59Z")
+                        .param("occurredTo", "2026-07-28T12:00:01Z")
+                        .param("actorType", "ADMIN")
+                        .param("actorId", "audit-query-admin")
+                        .param("action", "CATALOG_PRODUCT_UPDATED")
+                        .param("resourceType", "CATALOG_PRODUCT")
+                        .param("result", "SUCCESS"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].auditId").value(Long.toString(thirdId)))
+                .andExpect(jsonPath("$.items[1].auditId").value(Long.toString(secondId)))
+                .andExpect(jsonPath("$.items[0].source").value("ADMIN_API"))
+                .andExpect(jsonPath("$.hasMore").value(true))
+                .andExpect(jsonPath("$.nextCursor").isNotEmpty())
+                .andReturn();
+        String cursor = objectMapper.readTree(firstPage.getResponse().getContentAsString())
+                .get("nextCursor")
+                .asText();
+
+        mockMvc.perform(get("/admin/api/v1/audit-logs")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess()))
+                        .param("limit", "2")
+                        .param("cursor", cursor)
+                        .param("occurredFrom", "2026-07-28T11:59:59Z")
+                        .param("occurredTo", "2026-07-28T12:00:01Z")
+                        .param("actorType", "ADMIN")
+                        .param("actorId", "audit-query-admin")
+                        .param("action", "CATALOG_PRODUCT_UPDATED")
+                        .param("resourceType", "CATALOG_PRODUCT")
+                        .param("result", "SUCCESS"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].auditId").value(Long.toString(firstId)))
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.hasMore").value(false));
+
+        mockMvc.perform(get("/admin/api/v1/audit-logs")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess()))
+                        .param("cursor", cursor)
+                        .param("occurredFrom", "2026-07-28T11:59:59Z")
+                        .param("occurredTo", "2026-07-28T12:00:01Z")
+                        .param("actorType", "ADMIN")
+                        .param("actorId", "audit-query-admin")
+                        .param("action", "CATALOG_PRODUCT_UPDATED")
+                        .param("resourceType", "CATALOG_PRODUCT")
+                        .param("result", "FAILURE"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CURSOR_INVALID"));
+
+        mockMvc.perform(get("/admin/api/v1/audit-logs")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess()))
+                        .param("resourceType", "CATALOG_PRODUCT")
+                        .param("resourceId", "7002"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].auditId").value(Long.toString(secondId)))
+                .andExpect(jsonPath("$.items.length()").value(1));
+    }
+
+    @Test
+    void onlyAdministratorAccessCanReadAuditLogs() throws Exception {
+        CustomUserDetails userPrincipal = CustomUserDetails.builder()
+                .userId(userId)
+                .username(USERNAME)
+                .password("")
+                .authorities(List.of(new SimpleGrantedAuthority("ROLE_USER")))
+                .build();
+        String userAccess = jwtTokenUtil.issueUserAccess(userPrincipal).value();
+        String agentDelegation = jwtTokenUtil.issueAgentDelegation(
+                userId,
+                USERNAME,
+                "hotshop-agent-service",
+                Set.of("catalog:read")
+        ).value();
+
+        mockMvc.perform(get("/admin/api/v1/audit-logs")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess())))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/admin/api/v1/audit-logs")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(userAccess)))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/admin/api/v1/audit-logs")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentDelegation)))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/admin/api/v1/audit-logs"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void auditBusinessApiExposesNoMutationOperations() throws Exception {
+        String access = adminAccess();
+        mockMvc.perform(delete("/admin/api/v1/audit-logs")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(access)))
+                .andExpect(status().isMethodNotAllowed());
+        mockMvc.perform(put("/admin/api/v1/audit-logs")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(access))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isMethodNotAllowed());
+    }
+
+    @Test
+    void successfulAdminWriteAndAuditCommitTogetherWithMinimizedSummary() {
+        MockHttpServletRequest request = auditRequest(
+                "admin-product-success",
+                "11111111111111111111111111111111"
+        );
+        Product product = new Product(
+                null,
+                "Audited product success",
+                new BigDecimal("25.00"),
+                4,
+                "Audit",
+                "password=NeverPersist Authorization=Bearer NeverPersist fullPrompt=NeverPersist",
+                null
+        );
+
+        Product created = productAuditService.create(product, adminId, request);
+
+        assertThat(created.getProductId()).isPositive();
+        String summary = jdbcTemplate.queryForObject(
+                """
+                SELECT state_summary
+                FROM audit_log
+                WHERE request_id = 'admin-product-success'
+                  AND action = 'CATALOG_PRODUCT_CREATED'
+                  AND result = 'SUCCESS'
+                """,
+                String.class
+        );
+        assertThat(summary)
+                .contains("changedFields")
+                .doesNotContain("NeverPersist")
+                .doesNotContain("password")
+                .doesNotContain("Authorization")
+                .doesNotContain("fullPrompt");
+    }
+
+    @Test
+    void businessFailureIsAuditedInIndependentTransaction() {
+        jdbcTemplate.execute("DROP TRIGGER IF EXISTS test_catalog_product_insert_failure");
+        jdbcTemplate.execute("""
+                CREATE TRIGGER test_catalog_product_insert_failure
+                BEFORE INSERT ON catalog_product
+                FOR EACH ROW
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'forced product failure'
+                """);
+        try {
+            Product product = new Product(
+                    null,
+                    "Audited product failure",
+                    new BigDecimal("10.00"),
+                    1,
+                    "Audit",
+                    null,
+                    null
+            );
+            MockHttpServletRequest request = auditRequest(
+                    "admin-product-failure",
+                    "22222222222222222222222222222222"
+            );
+
+            assertThatThrownBy(() -> productAuditService.create(product, adminId, request))
+                    .isInstanceOf(RuntimeException.class);
+        } finally {
+            jdbcTemplate.execute("DROP TRIGGER IF EXISTS test_catalog_product_insert_failure");
+        }
+
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM audit_log
+                WHERE request_id = 'admin-product-failure'
+                  AND action = 'CATALOG_PRODUCT_CREATED'
+                  AND result = 'FAILURE'
+                  AND JSON_UNQUOTE(JSON_EXTRACT(state_summary, '$.reasonCode')) = 'OPERATION_FAILED'
+                """,
+                Integer.class
+        )).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM catalog_product WHERE name = 'Audited product failure'",
+                Integer.class
+        )).isZero();
+    }
+
+    @Test
+    void unavailableAuditStorageRollsBackHighRiskAdminWrite() {
+        jdbcTemplate.execute("DROP TRIGGER IF EXISTS test_audit_log_insert_failure");
+        jdbcTemplate.execute("""
+                CREATE TRIGGER test_audit_log_insert_failure
+                BEFORE INSERT ON audit_log
+                FOR EACH ROW
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'forced audit failure'
+                """);
+        try {
+            Product product = new Product(
+                    null,
+                    "Must roll back without audit",
+                    new BigDecimal("15.00"),
+                    2,
+                    "Audit",
+                    null,
+                    null
+            );
+            MockHttpServletRequest request = auditRequest(
+                    "admin-audit-unavailable",
+                    "33333333333333333333333333333333"
+            );
+
+            assertThatThrownBy(() -> productAuditService.create(product, adminId, request))
+                    .isInstanceOf(RuntimeException.class);
+        } finally {
+            jdbcTemplate.execute("DROP TRIGGER IF EXISTS test_audit_log_insert_failure");
+        }
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM catalog_product WHERE name = 'Must roll back without audit'",
+                Integer.class
+        )).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM audit_log WHERE request_id = 'admin-audit-unavailable'",
+                Integer.class
+        )).isZero();
+    }
+
     private LoginResult loginAdmin() throws Exception {
         MvcResult result = mockMvc.perform(post("/admin/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -242,6 +488,49 @@ class AdminIdentitySecurityTest {
                 .andExpect(status().isOk())
                 .andReturn();
         return parse(result);
+    }
+
+    private String adminAccess() {
+        CustomUserDetails principal = CustomUserDetails.builder()
+                .userId(adminId)
+                .username(ADMIN_USERNAME)
+                .password("")
+                .authorities(
+                        JwtTokenUtil.administratorAuthorities().stream()
+                                .map(SimpleGrantedAuthority::new)
+                                .toList()
+                )
+                .build();
+        return jwtTokenUtil.issueAdministratorAccess(principal).value();
+    }
+
+    private long insertAudit(String requestId, String resourceId, LocalDateTime occurredAt) {
+        jdbcTemplate.update(
+                """
+                INSERT INTO audit_log (
+                    occurred_at, actor_type, actor_id, action, resource_type, resource_id,
+                    result, request_id, trace_id, source, state_summary
+                ) VALUES (?, 'ADMIN', 'audit-query-admin', 'CATALOG_PRODUCT_UPDATED',
+                    'CATALOG_PRODUCT', ?, 'SUCCESS', ?,
+                    '44444444444444444444444444444444', 'ADMIN_API',
+                    JSON_OBJECT('changedFields', JSON_ARRAY('stock')))
+                """,
+                Timestamp.valueOf(occurredAt),
+                resourceId,
+                requestId
+        );
+        return jdbcTemplate.queryForObject(
+                "SELECT audit_id FROM audit_log WHERE request_id = ?",
+                Long.class,
+                requestId
+        );
+    }
+
+    private MockHttpServletRequest auditRequest(String requestId, String traceId) {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setAttribute(RequestContext.REQUEST_ID_ATTRIBUTE, requestId);
+        request.setAttribute(RequestContext.TRACE_ID_ATTRIBUTE, traceId);
+        return request;
     }
 
     private LoginResult parse(MvcResult result) throws Exception {

@@ -1,22 +1,29 @@
 package com.real.security.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.real.common.api.RequestContext;
+import com.real.common.audit.AgentDelegationAuditState;
+import com.real.common.audit.AuditAction;
+import com.real.common.audit.AuditActor;
+import com.real.common.audit.AuditActorType;
+import com.real.common.audit.AuditEvent;
+import com.real.common.audit.AuditResource;
+import com.real.common.audit.AuditResourceType;
+import com.real.common.audit.AuditResult;
+import com.real.common.audit.AuditSource;
+import com.real.common.audit.AuthenticationAuditState;
+import com.real.common.audit.RefreshReuseAuditState;
+import com.real.security.audit.AuditLogWriter;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
-import java.util.Map;
+import java.time.Instant;
 
 @Service
 public class SecurityAuditService {
-    private final JdbcTemplate jdbcTemplate;
-    private final ObjectMapper objectMapper;
+    private final AuditLogWriter auditLogWriter;
 
-    public SecurityAuditService(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
-        this.jdbcTemplate = jdbcTemplate;
-        this.objectMapper = objectMapper;
+    public SecurityAuditService(AuditLogWriter auditLogWriter) {
+        this.auditLogWriter = auditLogWriter;
     }
 
     public void loginSucceeded(
@@ -25,16 +32,16 @@ public class SecurityAuditService {
             String authenticationDomain,
             HttpServletRequest request
     ) {
-        append(
-                actorType,
-                Long.toString(userId),
-                "AUTHENTICATION_LOGIN",
-                "AUTHENTICATION_SESSION",
+        auditLogWriter.append(event(
+                AuditActor.identified(AuditActorType.valueOf(actorType), userId),
                 null,
-                "SUCCESS",
-                Map.of("authenticationDomain", authenticationDomain),
+                AuditAction.AUTHENTICATION_LOGIN,
+                new AuditResource(AuditResourceType.AUTHENTICATION_SESSION, null),
+                AuditResult.SUCCESS,
+                source(authenticationDomain),
+                AuthenticationAuditState.succeeded(authenticationDomain),
                 request
-        );
+        ));
     }
 
     public void loginFailed(
@@ -42,20 +49,20 @@ public class SecurityAuditService {
             String usernameHash,
             HttpServletRequest request
     ) {
-        append(
-                "SYSTEM",
+        auditLogWriter.appendFailure(event(
+                AuditActor.system(),
                 null,
-                "AUTHENTICATION_LOGIN",
-                "AUTHENTICATION_SESSION",
-                null,
-                "DENIED",
-                Map.of(
-                        "authenticationDomain", authenticationDomain,
-                        "usernameHash", usernameHash,
-                        "reason", "INVALID_CREDENTIALS"
+                AuditAction.AUTHENTICATION_LOGIN,
+                new AuditResource(AuditResourceType.AUTHENTICATION_SESSION, null),
+                AuditResult.DENIED,
+                source(authenticationDomain),
+                AuthenticationAuditState.denied(
+                        authenticationDomain,
+                        usernameHash,
+                        "INVALID_CREDENTIALS"
                 ),
                 request
-        );
+        ));
     }
 
     public void refreshReuse(
@@ -64,19 +71,16 @@ public class SecurityAuditService {
             String familyId,
             HttpServletRequest request
     ) {
-        append(
-                actorType,
-                Long.toString(userId),
-                "REFRESH_TOKEN_REUSE_DETECTED",
-                "REFRESH_TOKEN_FAMILY",
-                familyId,
-                "DENIED",
-                Map.of(
-                        "reason", "ROTATED_TOKEN_REUSED",
-                        "familyRevoked", true
-                ),
+        auditLogWriter.append(event(
+                AuditActor.identified(AuditActorType.valueOf(actorType), userId),
+                null,
+                AuditAction.REFRESH_TOKEN_REUSE_DETECTED,
+                AuditResource.identified(AuditResourceType.REFRESH_TOKEN_FAMILY, familyId),
+                AuditResult.DENIED,
+                "ADMIN".equals(actorType) ? AuditSource.ADMIN_API : AuditSource.PORTAL_API,
+                new RefreshReuseAuditState("ROTATED_TOKEN_REUSED", true),
                 request
-        );
+        ));
     }
 
     public void agentDelegationIssued(
@@ -85,52 +89,45 @@ public class SecurityAuditService {
             int scopeCount,
             HttpServletRequest request
     ) {
-        append(
-                "SERVICE",
-                serviceClientId,
-                "AGENT_DELEGATION_ISSUED",
-                "USER",
-                Long.toString(delegatedUserId),
-                "SUCCESS",
-                Map.of("scopeCount", scopeCount),
+        auditLogWriter.append(event(
+                AuditActor.identified(AuditActorType.SERVICE, serviceClientId),
+                AuditActor.identified(AuditActorType.USER, delegatedUserId),
+                AuditAction.AGENT_DELEGATION_ISSUED,
+                AuditResource.identified(AuditResourceType.USER, delegatedUserId),
+                AuditResult.SUCCESS,
+                AuditSource.AGENT_API,
+                new AgentDelegationAuditState(scopeCount),
                 request
-        );
+        ));
     }
 
-    private void append(
-            String actorType,
-            String actorId,
-            String action,
-            String resourceType,
-            String resourceId,
-            String result,
-            Map<String, Object> state,
+    private AuditEvent event(
+            AuditActor actor,
+            AuditActor delegatedActor,
+            AuditAction action,
+            AuditResource resource,
+            AuditResult result,
+            AuditSource source,
+            com.real.common.audit.AuditStateSummary state,
             HttpServletRequest request
     ) {
-        jdbcTemplate.update(
-                """
-                INSERT INTO audit_log (
-                    actor_type, actor_id, action, resource_type, resource_id,
-                    result, request_id, trace_id, state_summary
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                actorType,
-                actorId,
+        return new AuditEvent(
+                actor,
+                delegatedActor,
                 action,
-                resourceType,
-                resourceId,
+                resource,
                 result,
                 RequestContext.requestId(request),
                 RequestContext.traceId(request),
-                toJson(state)
+                source,
+                Instant.now(),
+                state
         );
     }
 
-    private String toJson(Map<String, Object> value) {
-        try {
-            return objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Could not serialize security audit summary", exception);
-        }
+    private AuditSource source(String authenticationDomain) {
+        return "ADMIN".equals(authenticationDomain)
+                ? AuditSource.ADMIN_API
+                : AuditSource.PORTAL_API;
     }
 }

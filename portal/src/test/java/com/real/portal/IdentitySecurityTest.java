@@ -88,7 +88,8 @@ class IdentitySecurityTest {
     static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0.46")
             .withDatabaseName("hotShop")
             .withUsername("hotshop")
-            .withPassword("hotshop-test");
+            .withPassword("hotshop-test")
+            .withCommand("--log-bin-trust-function-creators=1");
 
     static final GenericContainer<?> REDIS =
             new GenericContainer<>(DockerImageName.parse("redis:8.8.1-alpine"))
@@ -134,7 +135,7 @@ class IdentitySecurityTest {
                 .validateMigrationNaming(true)
                 .cleanDisabled(true)
                 .load();
-        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(3);
+        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(4);
         assertThat(flyway.migrate().migrationsExecuted).isZero();
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
 

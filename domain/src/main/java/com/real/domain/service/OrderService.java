@@ -1,6 +1,8 @@
 package com.real.domain.service;
 
 import com.github.pagehelper.PageInfo;
+import com.real.common.api.CursorCodec;
+import com.real.common.api.CursorSlice;
 import com.real.common.enums.OrderStatus;
 import com.real.common.util.PageHelperUtils;
 import com.real.domain.entity.Order;
@@ -74,5 +76,74 @@ public class OrderService {
         List<Order> orders;
         orders = getOrdersByConditions(userId, status, startTime, endTime);
         return pageHelperUtils.getPageInfo(pageNum, pageSize, orders);
+    }
+
+    public CursorSlice<Order> getUserOrdersByCursor(
+            Long userId,
+            int limit,
+            String cursor,
+            OrderStatus status,
+            LocalDateTime startTime,
+            LocalDateTime endTime
+    ) {
+        return getOrdersByCursor(
+                "user-orders",
+                userId,
+                limit,
+                cursor,
+                status,
+                startTime,
+                endTime
+        );
+    }
+
+    public CursorSlice<Order> getAdminOrdersByCursor(
+            Long userId,
+            int limit,
+            String cursor,
+            OrderStatus status,
+            LocalDateTime startTime,
+            LocalDateTime endTime
+    ) {
+        return getOrdersByCursor(
+                "admin-orders",
+                userId,
+                limit,
+                cursor,
+                status,
+                startTime,
+                endTime
+        );
+    }
+
+    private CursorSlice<Order> getOrdersByCursor(
+            String scope,
+            Long userId,
+            int limit,
+            String cursor,
+            OrderStatus status,
+            LocalDateTime startTime,
+            LocalDateTime endTime
+    ) {
+        CursorCodec.TimeStringCursor decoded = CursorCodec.decodeTimeAndString(cursor, scope);
+        List<Order> fetched = orderMapper.selectOrdersByCursor(
+                userId,
+                status,
+                startTime,
+                endTime,
+                decoded == null ? null : decoded.time(),
+                decoded == null ? null : decoded.id(),
+                limit + 1
+        );
+        boolean hasMore = fetched.size() > limit;
+        List<Order> items = hasMore ? List.copyOf(fetched.subList(0, limit)) : List.copyOf(fetched);
+        String nextCursor = hasMore
+                ? CursorCodec.encodeTimeAndString(
+                        scope,
+                        items.get(items.size() - 1).getCreatedAt(),
+                        items.get(items.size() - 1).getOrderId()
+                )
+                : null;
+        return new CursorSlice<>(items, nextCursor, hasMore);
     }
 }

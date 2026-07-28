@@ -33,6 +33,15 @@ public interface OrderMapper {
             @Param("startTime") LocalDateTime startTime,
             @Param("endTime") LocalDateTime endTime
     );
+    List<Order> selectOrdersByCursor(
+            @Param("userId") Long userId,
+            @Param("status") OrderStatus status,
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime,
+            @Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
+            @Param("cursorOrderId") String cursorOrderId,
+            @Param("limit") int limit
+    );
 
     int insertOrderItem(OrderItem item);
     @Options(useGeneratedKeys = true, keyProperty = "orderItemId")

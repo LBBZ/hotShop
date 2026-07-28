@@ -23,6 +23,17 @@ public interface UserMapper {
                                        @Param("role") Role role,
                                        @Param("startTime") LocalDateTime startTime,
                                        @Param("endTime") LocalDateTime endTime);
+    List<User> selectUsersByCursor(
+            @Param("userId") Long userId,
+            @Param("username") String username,
+            @Param("email") String email,
+            @Param("role") Role role,
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime,
+            @Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
+            @Param("cursorUserId") Long cursorUserId,
+            @Param("limit") int limit
+    );
 
     boolean existsByEmail(String email);
     boolean existsByUsername(String username);

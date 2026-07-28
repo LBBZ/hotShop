@@ -31,6 +31,10 @@ spring:
         retry:
           enabled: true   # 开启消费重试
           max-attempts: 3 # 最大重试次数
+  jackson:
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
 
 rabbitmq:
   enabled: true
@@ -43,6 +47,7 @@ springdoc:
     enabled: true
   api-docs:
     enabled: true
+    version: openapi_3_1
 
 logging:
   level:

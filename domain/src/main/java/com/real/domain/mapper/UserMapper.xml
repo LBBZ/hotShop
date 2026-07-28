@@ -6,33 +6,41 @@
 
     <insert id="insert" parameterType="User"
             useGeneratedKeys="true" keyProperty="userId">
-        INSERT INTO `user` (username, password, email, role)
+        INSERT INTO app_user (username, password_hash, email, role)
         VALUES (#{username}, #{password}, #{email}, #{role})
     </insert>
-    <delete id="delete">
-        DELETE FROM `user` WHERE user_id = #{userId}
-    </delete>
-    <delete id="deleteByUsername">
-        DELETE FROM `user` WHERE `username` = #{username}
-    </delete>
+    <update id="delete">
+        UPDATE app_user
+        SET status = 'DISABLED', deleted_at = CURRENT_TIMESTAMP(6), version = version + 1
+        WHERE user_id = #{userId} AND deleted_at IS NULL
+    </update>
+    <update id="deleteByUsername">
+        UPDATE app_user
+        SET status = 'DISABLED', deleted_at = CURRENT_TIMESTAMP(6), version = version + 1
+        WHERE username = #{username} AND deleted_at IS NULL
+    </update>
     <update id="update" parameterType="User">
-        UPDATE `user`
-        SET username = #{username}, password = #{password}, email = #{email}
-        WHERE user_id = #{userId}
+        UPDATE app_user
+        SET username = #{username}, password_hash = #{password}, email = #{email}
+        WHERE user_id = #{userId} AND deleted_at IS NULL
     </update>
 
     <select id="selectAll" resultType="User">
-        SELECT * FROM `user`
+        SELECT user_id, username, password_hash AS password, email, role, created_at
+        FROM app_user
+        WHERE deleted_at IS NULL
     </select>
     <select id="selectByUsername" resultType="User">
-        SELECT * FROM `user` WHERE username = #{username}
+        SELECT user_id, username, password_hash AS password, email, role, created_at
+        FROM app_user
+        WHERE username = #{username} AND deleted_at IS NULL
     </select>
 
 
     <select id="selectUsersByConditions" resultType="User">
-        SELECT *
-        FROM `user`
-        WHERE 1=1
+        SELECT user_id, username, password_hash AS password, email, role, created_at
+        FROM app_user
+        WHERE deleted_at IS NULL
         <if test="userId != null">
             AND user_id = #{userId}
         </if>
@@ -55,13 +63,44 @@
 
     <select id="existsByUsername" parameterType="String" resultType="Boolean">
         SELECT COUNT(*) > 0 AS user_exists
-        FROM `user`
-        WHERE `username` = #{username}
+        FROM app_user
+        WHERE username = #{username}
+    </select>
+    <select id="selectUsersByCursor" resultType="User">
+        SELECT user_id, username, password_hash AS password, email, role, created_at
+        FROM app_user
+        WHERE deleted_at IS NULL
+        <if test="userId != null">
+            AND user_id = #{userId}
+        </if>
+        <if test="username != null and username != ''">
+            AND username LIKE CONCAT('%', #{username}, '%')
+        </if>
+        <if test="email != null and email != ''">
+            AND email = #{email}
+        </if>
+        <if test="role != null">
+            AND role = #{role}
+        </if>
+        <if test="startTime != null">
+            AND created_at &gt;= #{startTime}
+        </if>
+        <if test="endTime != null">
+            AND created_at &lt;= #{endTime}
+        </if>
+        <if test="cursorCreatedAt != null">
+            AND (
+                created_at &lt; #{cursorCreatedAt}
+                OR (created_at = #{cursorCreatedAt} AND user_id &lt; #{cursorUserId})
+            )
+        </if>
+        ORDER BY created_at DESC, user_id DESC
+        LIMIT #{limit}
     </select>
     <select id="existsByEmail" parameterType="String" resultType="Boolean">
         SELECT COUNT(*) > 0 AS user_exists
-        FROM `user`
-        WHERE `email` = #{email}
+        FROM app_user
+        WHERE email = #{email}
     </select>
 
 </mapper>

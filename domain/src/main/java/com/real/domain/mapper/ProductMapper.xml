@@ -5,36 +5,48 @@
 <mapper namespace="com.real.domain.mapper.ProductMapper">
     <insert id="insert" parameterType="Product"
             useGeneratedKeys="true" keyProperty="productId">
-        INSERT INTO product (name, price, stock, category, description)
-        VALUES (#{name}, #{price}, #{stock}, #{category}, #{description})
+        INSERT INTO catalog_product (sku, name, price, stock, category, description)
+        VALUES (CONCAT('APP-', REPLACE(UUID(), '-', '')), #{name}, #{price}, #{stock}, #{category}, #{description})
     </insert>
-    <delete id="delete">
-        DELETE FROM product WHERE product_id = #{productId}
-    </delete>
+    <update id="delete">
+        UPDATE catalog_product
+        SET status = 'INACTIVE', deleted_at = CURRENT_TIMESTAMP(6), version = version + 1
+        WHERE product_id = #{productId} AND deleted_at IS NULL
+    </update>
     <update id="update" parameterType="Product">
-        UPDATE product
+        UPDATE catalog_product
         SET name = #{name}, price = #{price}, stock = #{stock}, category = #{category}, description = #{description}
-        WHERE product_id = #{productId}
+        WHERE product_id = #{productId} AND deleted_at IS NULL
     </update>
     <update id="reduceStock" parameterType="Product">
-        UPDATE product
+        UPDATE catalog_product
         SET stock = stock - #{quantity}
-        WHERE product_id = #{productId} AND stock >= #{quantity}
+        WHERE product_id = #{productId} AND deleted_at IS NULL
+          AND #{quantity} > 0
+          AND stock >= #{quantity}
     </update>
     <update id="increaseStock" parameterType="Product">
-        UPDATE product
+        UPDATE catalog_product
         SET stock = stock + #{quantity}
         WHERE product_id = #{productId}
+          AND #{quantity} > 0
+          AND deleted_at IS NULL
     </update>
 
     <select id="selectById" resultType="Product">
-        SELECT * FROM product WHERE product_id = #{productId}
+        SELECT product_id, name, price, stock, category, description, created_at
+        FROM catalog_product
+        WHERE product_id = #{productId} AND deleted_at IS NULL
     </select>
     <select id="selectAll" resultType="Product">
-        SELECT * FROM product
+        SELECT product_id, name, price, stock, category, description, created_at
+        FROM catalog_product
+        WHERE deleted_at IS NULL
     </select>
     <select id="selectByCategory" resultType="Product">
-        SELECT * FROM product WHERE category = #{category}
+        SELECT product_id, name, price, stock, category, description, created_at
+        FROM catalog_product
+        WHERE category = #{category} AND deleted_at IS NULL
     </select>
     <select id="selectProductsByConditions" resultType="Product">
         SELECT
@@ -45,9 +57,9 @@
             category,
             description,
             created_at
-        FROM product
+        FROM catalog_product
         <where>
-            1 = 1
+            deleted_at IS NULL
             <if test="keyword != null and keyword != ''">
                 AND name LIKE CONCAT('%', #{keyword}, '%')
             </if>
@@ -61,6 +73,37 @@
                 AND price &lt;= #{maxPrice}
             </if>
         </where>
+    </select>
+    <select id="selectProductsByCursor" resultType="Product">
+        SELECT
+            product_id,
+            name,
+            price,
+            stock,
+            category,
+            description,
+            created_at
+        FROM catalog_product
+        <where>
+            deleted_at IS NULL
+            <if test="keyword != null and keyword != ''">
+                AND name LIKE CONCAT('%', #{keyword}, '%')
+            </if>
+            <if test="category != null and category != ''">
+                AND category = #{category}
+            </if>
+            <if test="minPrice != null">
+                AND price &gt;= #{minPrice}
+            </if>
+            <if test="maxPrice != null">
+                AND price &lt;= #{maxPrice}
+            </if>
+            <if test="afterProductId != null">
+                AND product_id &gt; #{afterProductId}
+            </if>
+        </where>
+        ORDER BY product_id ASC
+        LIMIT #{limit}
     </select>
 
 </mapper>

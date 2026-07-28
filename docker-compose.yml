@@ -1,113 +1,208 @@
-# 文件路径：/opt/hotShop/docker-compose.yml
-version: '3.8'
+name: ${COMPOSE_PROJECT_NAME:-hotshop}
 
 services:
-  # 数据库服务
   mysql:
-    image: mysql:8.0
-    container_name: hotShop-mysql
+    image: ${MYSQL_IMAGE:-mysql:8.0.46}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=${MYSQL_TIME_ZONE:-+00:00}
+      - --max-connections=${MYSQL_MAX_CONNECTIONS:-300}
+      - --performance-schema=ON
+      - --slow-query-log=ON
+      - --slow-query-log-file=/var/lib/mysql/slow.log
+      - --long-query-time=${MYSQL_SLOW_QUERY_SECONDS:-1}
+      - --log-error-verbosity=2
     environment:
-      MYSQL_ROOT_PASSWORD: 123456
-      MYSQL_DATABASE: hotShop
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me-local-mysql}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-hotShop}
+      TZ: ${TZ:-UTC}
+    ports:
+      - "${MYSQL_PORT:-4306}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
-    ports:
-      - "4306:3306"
+      - ./database/data:/opt/hotshop/data:ro
     networks:
       - hotShop-network
     healthcheck:
-      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      test:
+        - CMD-SHELL
+        - MYSQL_PWD="$${MYSQL_ROOT_PASSWORD}" mysql --protocol=TCP --host=127.0.0.1 --user=root --database="$${MYSQL_DATABASE}" --execute="SELECT 1" --silent
       interval: 5s
-      timeout: 3s
-      retries: 5
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+    mem_limit: ${MYSQL_MEMORY_LIMIT:-1g}
+    cpus: ${MYSQL_CPU_LIMIT:-1.5}
+    stop_grace_period: 1m
+    restart: unless-stopped
 
-  # Redis服务
-  redis:
-    image: redis:alpine
-    container_name: hotShop-redis
-    ports:
-      - "7379:6379"
+  database-migrator:
+    image: ${FLYWAY_IMAGE:-flyway/flyway:11.20.3-alpine}
+    command: migrate
+    environment:
+      FLYWAY_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-hotShop}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      FLYWAY_USER: root
+      FLYWAY_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me-local-mysql}
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql
+      FLYWAY_CONNECT_RETRIES: 20
+      FLYWAY_CONNECT_RETRIES_INTERVAL: 5
+      FLYWAY_VALIDATE_MIGRATION_NAMING: "true"
+      FLYWAY_FAIL_ON_MISSING_LOCATIONS: "true"
+      FLYWAY_OUT_OF_ORDER: "false"
+      FLYWAY_CLEAN_DISABLED: "true"
+      FLYWAY_BASELINE_ON_MIGRATE: "false"
     volumes:
-      - redis_data:/data
+      - ./database/src/main/resources/db/migration:/flyway/sql:ro
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - hotShop-network
+    restart: "no"
+
+  redis-cache:
+    image: ${REDIS_IMAGE:-redis:8.8.1-alpine}
+    command:
+      - redis-server
+      - /usr/local/etc/redis/redis.conf
+      - --requirepass
+      - ${REDIS_CACHE_PASSWORD:-change-me-local-redis-cache}
+    environment:
+      REDISCLI_AUTH: ${REDIS_CACHE_PASSWORD:-change-me-local-redis-cache}
+      TZ: ${TZ:-UTC}
+    ports:
+      - "${REDIS_CACHE_PORT:-7379}:6379"
+    volumes:
+      - ./docker/redis/cache.conf:/usr/local/etc/redis/redis.conf:ro
+      - redis_cache_data:/data
     networks:
       - hotShop-network
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
+      test:
+        - CMD-SHELL
+        - test "$$(redis-cli --raw ping)" = PONG
       interval: 5s
       timeout: 3s
-      retries: 5
+      retries: 10
+      start_period: 10s
+    mem_limit: ${REDIS_CACHE_MEMORY_LIMIT:-384m}
+    restart: unless-stopped
 
-  # RabbitMQ服务
-  rabbitmq:
-    image: rabbitmq:4.0.7-management-alpine
-    container_name: hotShop-rabbitmq
-    user: "0:0"
-    command: |
-      bash -c "
-      chown -R rabbitmq:rabbitmq /plugins /var/lib/rabbitmq;
-      if [ ! -f /plugins/rabbitmq_delayed_message_exchange-4.0.7.ez ]; then
-        wget -q -P /plugins https://github.com/rabbitmq/rabbitmq-delayed-message-exchange/releases/download/v4.0.7/rabbitmq_delayed_message_exchange-v4.0.7.ez;
-      fi;
-      rabbitmq-plugins enable --offline rabbitmq_delayed_message_exchange;
-      exec su-exec rabbitmq rabbitmq-server
-      "
+  redis-seckill:
+    image: ${REDIS_IMAGE:-redis:8.8.1-alpine}
+    command:
+      - redis-server
+      - /usr/local/etc/redis/redis.conf
+      - --requirepass
+      - ${REDIS_SECKILL_PASSWORD:-change-me-local-redis-seckill}
+    environment:
+      REDISCLI_AUTH: ${REDIS_SECKILL_PASSWORD:-change-me-local-redis-seckill}
+      TZ: ${TZ:-UTC}
     ports:
-      - "6672:5672"
-      - "15672:15672"
+      - "${REDIS_SECKILL_PORT:-7380}:6379"
+    volumes:
+      - ./docker/redis/seckill.conf:/usr/local/etc/redis/redis.conf:ro
+      - redis_seckill_data:/data
+    networks:
+      - hotShop-network
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - test "$$(redis-cli --raw ping)" = PONG
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    mem_limit: ${REDIS_SECKILL_MEMORY_LIMIT:-640m}
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+  rabbitmq:
+    build:
+      context: .
+      dockerfile: docker/rabbitmq/Dockerfile
+      args:
+        RABBITMQ_IMAGE: ${RABBITMQ_IMAGE:-rabbitmq:4.0.7-management-alpine}
+    image: ${RABBITMQ_PROJECT_IMAGE:-hotshop-rabbitmq:4.0.7}
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-hotshop}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-change-me-local-rabbitmq}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_DEFAULT_VHOST:-/}
+      TZ: ${TZ:-UTC}
+    ports:
+      - "${RABBITMQ_AMQP_PORT:-6672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15673}:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
-      - rabbitmq_plugins:/plugins
     networks:
       - hotShop-network
     healthcheck:
-      test: [ "CMD", "rabbitmq-diagnostics", "status" ]
+      test:
+        - CMD-SHELL
+        - rabbitmq-diagnostics -q ping && rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms
       interval: 10s
-      timeout: 5s
-      retries: 5
-
+      timeout: 10s
+      retries: 12
+      start_period: 40s
+    mem_limit: ${RABBITMQ_MEMORY_LIMIT:-768m}
+    stop_grace_period: 1m
+    restart: unless-stopped
 
   admin-service:
+    profiles: [app]
     build:
       context: .
       args:
         MODULE: admin
-        PROFILE: ""
-    container_name: hotShop-admin
+        PROFILE: ${SPRING_PROFILES_ACTIVE:-}
+    image: ${ADMIN_IMAGE:-hotshop-admin:local}
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/hotShop
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-hotShop}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: 123456
-      SPRING_REDIS_HOST: redis
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me-local-mysql}
+      SPRING_REDIS_HOST: redis-cache
+      SPRING_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_CACHE_PASSWORD:-change-me-local-redis-cache}
       SERVER_PORT: 8088
+      TZ: ${TZ:-UTC}
     ports:
-      - "8088:8088"
+      - "${ADMIN_PORT:-8088}:8088"
     depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
+      database-migrator:
+        condition: service_completed_successfully
+      redis-cache:
         condition: service_healthy
     networks:
       - hotShop-network
 
   portal-service:
+    profiles: [app]
     build:
       context: .
       args:
         MODULE: portal
-        PROFILE: ""
-    container_name: hotShop-portal
+        PROFILE: ${SPRING_PROFILES_ACTIVE:-}
+    image: ${PORTAL_IMAGE:-hotshop-portal:local}
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/hotShop
-      SPRING_REDIS_HOST: redis
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-hotShop}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me-local-mysql}
+      SPRING_REDIS_HOST: redis-cache
+      SPRING_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_CACHE_PASSWORD:-change-me-local-redis-cache}
       SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_DEFAULT_USER:-hotshop}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_DEFAULT_PASS:-change-me-local-rabbitmq}
       SERVER_PORT: 8080
+      TZ: ${TZ:-UTC}
     ports:
-       - "8080:8080"
+      - "${PORTAL_PORT:-8080}:8080"
     depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
+      database-migrator:
+        condition: service_completed_successfully
+      redis-cache:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -115,23 +210,32 @@ services:
       - hotShop-network
 
   task-service:
+    profiles: [app]
     build:
       context: .
       args:
         MODULE: task
-        PROFILE: ""
-    container_name: hotShop-task
+        PROFILE: ${SPRING_PROFILES_ACTIVE:-}
+    image: ${TASK_IMAGE:-hotshop-task:local}
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/hotShop
-      SPRING_REDIS_HOST: redis
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-hotShop}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me-local-mysql}
+      SPRING_REDIS_HOST: redis-cache
+      SPRING_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_CACHE_PASSWORD:-change-me-local-redis-cache}
       SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_DEFAULT_USER:-hotshop}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_DEFAULT_PASS:-change-me-local-rabbitmq}
       SERVER_PORT: 8888
+      TZ: ${TZ:-UTC}
     ports:
-      - "8888:8888"
+      - "${TASK_PORT:-8888}:8888"
     depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
+      database-migrator:
+        condition: service_completed_successfully
+      redis-cache:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -140,9 +244,9 @@ services:
 
 volumes:
   mysql_data:
-  redis_data:
+  redis_cache_data:
+  redis_seckill_data:
   rabbitmq_data:
-  rabbitmq_plugins:
 
 networks:
   hotShop-network:

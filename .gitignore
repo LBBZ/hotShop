@@ -3,6 +3,13 @@ target/
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+__pycache__/
+*.py[cod]
+
+### Local environment ###
+.env
+.env.*
+!.env.example
 
 ### STS ###
 .apt_generated

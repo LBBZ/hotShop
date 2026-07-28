@@ -10,10 +10,9 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
-import java.time.Duration;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Component
 @EnableScheduling
@@ -23,16 +22,23 @@ public class OrderTimeoutJob {
     private long timeoutThreshold;
     private final OrderService orderService;
     private final OrderStateService orderStateService;
+    private final Clock clock;
+
     @Autowired
     public OrderTimeoutJob(OrderService orderService, OrderStateService orderStateService) {
+        this(orderService, orderStateService, Clock.systemUTC());
+    }
+
+    OrderTimeoutJob(OrderService orderService, OrderStateService orderStateService, Clock clock) {
         this.orderService = orderService;
         this.orderStateService = orderStateService;
+        this.clock = clock;
     }
 
     // 定时处理订单
     @Scheduled(fixedRate = 60_000)
     public void checkTimeoutOrders() {
-        LocalDateTime threshold = LocalDateTime.now().minusMinutes(timeoutThreshold);
+        LocalDateTime threshold = LocalDateTime.now(clock).minusMinutes(timeoutThreshold);
         List<Order> timeoutOrders = orderService.getOrdersByConditions(null, OrderStatus.PENDING, null, threshold);
 
         timeoutOrders.parallelStream().forEach(order ->

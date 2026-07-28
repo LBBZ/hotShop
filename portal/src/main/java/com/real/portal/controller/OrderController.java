@@ -1,108 +1,118 @@
 package com.real.portal.controller;
 
+import com.real.common.api.CursorSlice;
+import com.real.common.api.ApiException;
+import com.real.common.api.dto.CreateOrderRequest;
+import com.real.common.api.dto.CursorPageResponse;
+import com.real.common.api.dto.OrderCreatedResponse;
+import com.real.common.api.dto.OrderResponse;
 import com.real.common.enums.OrderStatus;
+import com.real.domain.api.ApiDtoMapper;
 import com.real.domain.entity.Order;
 import com.real.domain.infra.RabbitMQService;
-import com.real.security.entity.CustomUserDetails;
 import com.real.domain.service.OrderService;
 import com.real.domain.service.advance.OrderStateService;
+import com.real.security.entity.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.Schema;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
-import java.time.LocalDateTime;
-import java.util.List;
+import java.time.Instant;
 
 @RestController
-@Tag(name = "订单接口", description = "用户订单管理（需要用户权限）")
-@RequestMapping("/portal/orders")
-@PreAuthorize("hasRole('ROLE_USER')")
+@Validated
+@Tag(name = "User orders", description = "Orders owned by the authenticated User")
+@RequestMapping("/api/v1/orders")
+@PreAuthorize("hasAuthority('ROLE_USER')")
+@SecurityRequirement(name = "bearerAuth")
 public class OrderController {
     @Value("${timeout.orderCancel}")
     private long timeoutThreshold;
+
     private final OrderService orderService;
     private final OrderStateService orderStateService;
     private final RabbitMQService rabbitMQService;
-    @Autowired
-    public OrderController(OrderService orderService, OrderStateService orderStateService, RabbitMQService rabbitMQService) {
+
+    public OrderController(
+            OrderService orderService,
+            OrderStateService orderStateService,
+            RabbitMQService rabbitMQService
+    ) {
         this.orderService = orderService;
         this.orderStateService = orderStateService;
         this.rabbitMQService = rabbitMQService;
     }
 
     @Operation(
-        summary = "创建订单",
-        description = "根据购物车生成新订单,并发送延时消息",
-        security = @SecurityRequirement(name = "JWT"),
-        responses = {
-            @ApiResponse(responseCode = "200", description = "订单创建成功"),
-            @ApiResponse(responseCode = "401", description = "未授权访问"),
-            @ApiResponse(responseCode = "400", description = "库存不足或其他验证错误")
-        }
+            summary = "Create an Order",
+            description = "Creates an Order synchronously. Idempotency-Key is not supported until persistent replay is implemented."
     )
-    @PostMapping("/add")
-    public ResponseEntity<String> createOrderByUserToken(
-            @AuthenticationPrincipal CustomUserDetails customUserDetails,
-            @RequestBody Order order) {
-        order.setUserId(customUserDetails.getUserId());
+    @PostMapping
+    public ResponseEntity<OrderCreatedResponse> createOrder(
+            @AuthenticationPrincipal CustomUserDetails principal,
+            @RequestBody @Valid CreateOrderRequest request
+    ) {
+        Order order = ApiDtoMapper.toOrder(request);
+        order.setUserId(principal.getUserId());
         String orderId = orderStateService.createOrder(order);
-        // 发送延时消息
         rabbitMQService.sendOrderTimeoutMessage(orderId, timeoutThreshold);
-        return ResponseEntity.ok("订单创建成功，订单号: " + orderId);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(new OrderCreatedResponse(orderId, OrderStatus.PENDING));
     }
 
     @Operation(
-        summary = "分页查询订单",
-        description = "获取用户的分页订单列表（包含订单项分页）",
-        security = @SecurityRequirement(name = "JWT"),
-        parameters = {
-            @Parameter(name = "orderPage", description = "订单页码", example = "1"),
-            @Parameter(name = "orderPageSize", description = "每页订单数量", example = "10"),
-            @Parameter(name = "itemPage", description = "订单项页码", example = "1"),
-            @Parameter(name = "itemPageSize", description = "每页订单项数量", example = "3")
-        }
+            summary = "List the current User's Orders",
+            description = "Stable keyset pagination ordered by createdAt descending, then orderId descending"
     )
-    @GetMapping("/page")
-    public ResponseEntity<List<Order>> getOrdersByUserToken(
-            @AuthenticationPrincipal CustomUserDetails customUserDetails,
-            @RequestParam(defaultValue = "1") int orderPage,
-            @RequestParam(defaultValue = "10") int orderPageSize,
-            @RequestParam(defaultValue = "1") int itemPage,
-            @RequestParam(defaultValue = "3") int itemPageSize
+    @GetMapping
+    public ResponseEntity<CursorPageResponse<OrderResponse>> getOrders(
+            @AuthenticationPrincipal CustomUserDetails principal,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(required = false) OrderStatus status,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant createdFrom,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant createdTo
     ) {
-        return ResponseEntity.ok(orderService.getOrdersByUserId(customUserDetails.getUserId(), orderPage, orderPageSize, itemPage, itemPageSize));
+        validateTimeRange(createdFrom, createdTo);
+        CursorSlice<Order> slice = orderService.getUserOrdersByCursor(
+                principal.getUserId(),
+                limit,
+                cursor,
+                status,
+                ApiDtoMapper.toUtcLocalDateTime(createdFrom),
+                ApiDtoMapper.toUtcLocalDateTime(createdTo)
+        );
+        return ResponseEntity.ok(new CursorPageResponse<>(
+                slice.items().stream().map(ApiDtoMapper::toOrderResponse).toList(),
+                slice.nextCursor(),
+                slice.hasMore()
+        ));
     }
 
-    @Operation(
-        summary = "条件搜索订单",
-        description = "根据状态和时间范围查询订单",
-        security = @SecurityRequirement(name = "JWT"),
-        parameters = {
-            @Parameter(name = "statusStr", description = "订单状态", example = "PAID",
-                schema = @Schema(implementation = OrderStatus.class)),
-            @Parameter(name = "startTime", description = "开始时间", example = "2023-01-01 00:00:00"),
-            @Parameter(name = "endTime", description = "结束时间", example = "2023-12-31 23:59:59")
+    private void validateTimeRange(Instant createdFrom, Instant createdTo) {
+        if (createdFrom != null && createdTo != null && createdFrom.isAfter(createdTo)) {
+            throw ApiException.badRequest(
+                    "TIME_RANGE_INVALID",
+                    "createdFrom must be before or equal to createdTo"
+            );
         }
-    )
-    @GetMapping("/search")
-    public ResponseEntity<List<Order>> getOrdersByUserToken(
-            @AuthenticationPrincipal CustomUserDetails customUserDetails,
-            @RequestParam(required = false) String statusStr,
-            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime startTime,
-            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime endTime
-    ) {
-        OrderStatus status = OrderStatus.strTransitionToEnums(statusStr);
-        List<Order> orders = orderService.getOrdersByConditions(customUserDetails.getUserId(), status, startTime, endTime);
-        return ResponseEntity.ok(orders);
     }
 }

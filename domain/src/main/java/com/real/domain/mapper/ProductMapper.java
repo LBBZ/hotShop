@@ -4,6 +4,7 @@ import com.real.domain.entity.Product;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Mapper
@@ -20,7 +21,16 @@ public interface ProductMapper {
     List<Product> selectProductsByConditions(
             @Param("keyword") String keyword,
             @Param("category") String category,
-            @Param("minPrice") Long minPrice,
-            @Param("maxPrice") Long maxPrice
+            @Param("minPrice") BigDecimal minPrice,
+            @Param("maxPrice") BigDecimal maxPrice
+    );
+
+    List<Product> selectProductsByCursor(
+            @Param("keyword") String keyword,
+            @Param("category") String category,
+            @Param("minPrice") BigDecimal minPrice,
+            @Param("maxPrice") BigDecimal maxPrice,
+            @Param("afterProductId") Long afterProductId,
+            @Param("limit") int limit
     );
 }

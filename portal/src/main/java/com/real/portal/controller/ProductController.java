@@ -1,77 +1,80 @@
 package com.real.portal.controller;
 
-import com.github.pagehelper.PageInfo;
+import com.real.common.api.ApiException;
+import com.real.common.api.CursorSlice;
+import com.real.common.api.dto.CursorPageResponse;
+import com.real.common.api.dto.ProductResponse;
+import com.real.domain.api.ApiDtoMapper;
 import com.real.domain.entity.Product;
 import com.real.domain.service.ProductService;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Size;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
+import java.math.BigDecimal;
 
 @RestController
-@Tag(name = "商品接口", description = "商品信息查询（公开接口）")
-@RequestMapping("/portal/products")
+@Validated
+@Tag(name = "Public products", description = "Anonymous Catalog Product discovery")
+@RequestMapping("/api/v1/products")
 public class ProductController {
     private final ProductService productService;
-    @Autowired
+
     public ProductController(ProductService productService) {
         this.productService = productService;
     }
 
-    @Operation(summary = "获取商品详情", description = "根据ID查询商品详细信息")
+    @Operation(summary = "Get a Catalog Product")
     @GetMapping("/{productId}")
-    public ResponseEntity<Product> getProduct(@PathVariable Long productId) {
+    public ResponseEntity<ProductResponse> getProduct(@PathVariable @Min(1) Long productId) {
         Product product = productService.getProductById(productId);
-        return ResponseEntity.ok(product);
+        if (product == null) {
+            throw ApiException.notFound("Catalog Product");
+        }
+        return ResponseEntity.ok(ApiDtoMapper.toProductResponse(product));
     }
 
     @Operation(
-        summary = "分页查询商品",
-        description = "按分类筛选商品列表",
-        parameters = {
-            @Parameter(name = "pageNum", description = "页码", example = "1"),
-            @Parameter(name = "pageSize", description = "每页数量", example = "10"),
-            @Parameter(name = "category", description = "商品分类", example = "电子产品")
-        }
+            summary = "List Catalog Products",
+            description = "Stable keyset pagination ordered by productId ascending"
     )
-    @GetMapping("/page")
-    public ResponseEntity<PageInfo<Product>> getProductPage(
-            @RequestParam(defaultValue = "1") int pageNum,
-            @RequestParam(defaultValue = "10") int pageSize,
-            @RequestParam(required = false) String category) {
-        return ResponseEntity.ok(productService.getProductByPage(pageNum, pageSize, category));
-    }
-
-    @Operation(summary = "获取所有商品", description = "获取全部商品列表（测试用）")
-    @GetMapping("/all")
-    public ResponseEntity<List<Product>> getAllProducts() {
-        return ResponseEntity.ok(productService.getAllProducts());
-    }
-
-    @Operation(
-        summary = "多条件搜索商品",
-        description = "根据关键词、分类、价格区间筛选商品",
-        parameters = {
-            @Parameter(name = "keyword", description = "搜索关键词", example = "手机"),
-            @Parameter(name = "minPrice", description = "最低价格（分）", example = "1000"),
-            @Parameter(name = "maxPrice", description = "最高价格（分）", example = "10000")
-        }
-    )
-    @GetMapping("/search")
-    public ResponseEntity<PageInfo<Product>> searchProducts(
-            @RequestParam(defaultValue = "1") int pageNum,
-            @RequestParam(defaultValue = "10") int pageSize,
-            @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) String category,
-            @RequestParam(required = false) Long minPrice,
-            @RequestParam(required = false) Long maxPrice
+    @GetMapping
+    public ResponseEntity<CursorPageResponse<ProductResponse>> getProducts(
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(required = false) @Size(max = 200) String keyword,
+            @RequestParam(required = false) @Size(max = 100) String category,
+            @RequestParam(required = false) @DecimalMin("0.00") BigDecimal minPrice,
+            @RequestParam(required = false) @DecimalMin("0.00") BigDecimal maxPrice
     ) {
-        PageInfo<Product> products = productService.getProductsByConditions(pageNum, pageSize, keyword, category, minPrice, maxPrice);
-        return ResponseEntity.ok(products);
+        if (minPrice != null && maxPrice != null && minPrice.compareTo(maxPrice) > 0) {
+            throw ApiException.badRequest(
+                    "PRICE_RANGE_INVALID",
+                    "minPrice must be less than or equal to maxPrice"
+            );
+        }
+        CursorSlice<Product> slice = productService.getProductsByCursor(
+                limit,
+                cursor,
+                keyword,
+                category,
+                minPrice,
+                maxPrice
+        );
+        return ResponseEntity.ok(new CursorPageResponse<>(
+                slice.items().stream().map(ApiDtoMapper::toProductResponse).toList(),
+                slice.nextCursor(),
+                slice.hasMore()
+        ));
     }
-
 }

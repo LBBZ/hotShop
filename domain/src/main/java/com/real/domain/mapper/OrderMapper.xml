@@ -23,11 +23,11 @@
     </resultMap>
 
     <insert id="insertOrder" parameterType="Order">
-        INSERT INTO `order` (order_id, user_id, total_amount, status)
+        INSERT INTO sales_order (order_id, user_id, total_amount, status)
         VALUES (#{orderId}, #{userId}, #{totalAmount}, #{status})
     </insert>
     <update id="updateOrder" parameterType="Order">
-        UPDATE `order`
+        UPDATE sales_order
         SET user_id = #{userId}, total_amount = #{totalAmount}, status = #{status}
         WHERE order_id = #{orderId}
     </update>
@@ -36,8 +36,8 @@
         SELECT
             o.order_id, o.user_id, o.total_amount, o.status, o.created_at,
             i.order_item_id, i.order_id, i.product_id, i.quantity, i.price
-        FROM `order` o
-        LEFT JOIN order_item i ON o.order_id = i.order_id
+        FROM sales_order o
+        LEFT JOIN sales_order_item i ON o.order_id = i.order_id
         WHERE o.order_id = #{orderId}
     </select>
     <select id="selectOrdersByUserId" resultMap="orderResultMap">
@@ -48,7 +48,7 @@
                 total_amount,
                 status,
                 created_at
-            FROM `order`
+            FROM sales_order
             WHERE user_id = #{userId}
             ORDER BY created_at DESC
             LIMIT #{orderLimit} OFFSET #{orderOffset}
@@ -57,7 +57,7 @@
             SELECT
                 oi.*,
                 ROW_NUMBER() OVER (PARTITION BY order_id ORDER BY order_item_id) AS rn
-            FROM order_item oi
+            FROM sales_order_item oi
             WHERE oi.order_id IN (SELECT order_id FROM paginated_orders)
         )
         SELECT
@@ -80,7 +80,7 @@
     </select>
     <select id="selectOrdersByOrderStatus" resultType="Order">
         SELECT *
-        FROM `order` o
+        FROM sales_order o
         WHERE o.status = #{status}
     </select>
     <select id="selectOrdersByConditions" resultMap="orderResultMap">
@@ -95,8 +95,8 @@
             oi.product_id,
             oi.quantity,
             oi.price
-        FROM `order` o
-        LEFT JOIN order_item oi ON o.order_id = oi.order_id
+        FROM sales_order o
+        LEFT JOIN sales_order_item oi ON o.order_id = oi.order_id
         <where>
             1 = 1
             <if test="userId != null">
@@ -113,17 +113,65 @@
             </if>
         </where>
     </select>
+    <select id="selectOrdersByCursor" resultMap="orderResultMap">
+        WITH paginated_orders AS (
+            SELECT
+                o.order_id,
+                o.user_id,
+                o.total_amount,
+                o.status,
+                o.created_at
+            FROM sales_order o
+            <where>
+                1 = 1
+                <if test="userId != null">
+                    AND o.user_id = #{userId}
+                </if>
+                <if test="status != null">
+                    AND o.status = #{status}
+                </if>
+                <if test="startTime != null">
+                    AND o.created_at &gt;= #{startTime}
+                </if>
+                <if test="endTime != null">
+                    AND o.created_at &lt;= #{endTime}
+                </if>
+                <if test="cursorCreatedAt != null">
+                    AND (
+                        o.created_at &lt; #{cursorCreatedAt}
+                        OR (o.created_at = #{cursorCreatedAt} AND o.order_id &lt; #{cursorOrderId})
+                    )
+                </if>
+            </where>
+            ORDER BY o.created_at DESC, o.order_id DESC
+            LIMIT #{limit}
+        )
+        SELECT
+            po.order_id,
+            po.user_id,
+            po.total_amount,
+            po.status,
+            po.created_at,
+            oi.order_item_id,
+            oi.order_id,
+            oi.product_id,
+            oi.quantity,
+            oi.price
+        FROM paginated_orders po
+        LEFT JOIN sales_order_item oi ON po.order_id = oi.order_id
+        ORDER BY po.created_at DESC, po.order_id DESC, oi.order_item_id ASC
+    </select>
 
     <insert id="insertOrderItem" parameterType="OrderItem"
             useGeneratedKeys="true" keyProperty="orderItemId">
-        INSERT INTO order_item (order_id, product_id, quantity, price)
-        VALUES (#{orderId}, #{productId}, #{quantity}, #{price})
+        INSERT INTO sales_order_item (order_id, product_id, quantity, price, line_amount)
+        VALUES (#{orderId}, #{productId}, #{quantity}, #{price}, #{price} * #{quantity})
     </insert>
     <insert id="insertOrderItems" parameterType="list" useGeneratedKeys="true" keyProperty="orderItemId">
-        INSERT INTO order_item (order_id, product_id, quantity, price)
+        INSERT INTO sales_order_item (order_id, product_id, quantity, price, line_amount)
         VALUES
         <foreach collection="list" item="item" separator = ",">
-            (#{item.orderId}, #{item.productId}, #{item.quantity}, #{item.price})
+            (#{item.orderId}, #{item.productId}, #{item.quantity}, #{item.price}, #{item.price} * #{item.quantity})
         </foreach>
     </insert>
 

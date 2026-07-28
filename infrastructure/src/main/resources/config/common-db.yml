@@ -1,9 +1,15 @@
 spring:
+  flyway:
+    # Schema changes are owned by the one-shot Compose database-migrator.
+    # The three long-running Java processes must never race migrations.
+    enabled: false
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       data-source-properties:
         rewriteBatchedStatements: true
+        connectionTimeZone: UTC
+        forceConnectionTimeZoneToSession: true
 
 mybatis:
   mapper-locations: classpath*:mapper/*.xml

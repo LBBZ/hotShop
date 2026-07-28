@@ -2,6 +2,8 @@ package com.real.domain.service;
 
 
 import com.github.pagehelper.PageInfo;
+import com.real.common.api.CursorCodec;
+import com.real.common.api.CursorSlice;
 import com.real.common.enums.Role;
 import com.real.common.util.PageHelperUtils;
 import com.real.domain.entity.User;
@@ -44,5 +46,39 @@ public class UserService {
     }
     public Boolean userExistsByEmail(String email) {
         return userMapper.existsByEmail(email);
+    }
+
+    public CursorSlice<User> getUsersByCursor(
+            int limit,
+            String cursor,
+            Long userId,
+            String username,
+            String email,
+            Role role,
+            LocalDateTime startTime,
+            LocalDateTime endTime
+    ) {
+        CursorCodec.TimeLongCursor decoded = CursorCodec.decodeTimeAndLong(cursor, "admin-users");
+        List<User> fetched = userMapper.selectUsersByCursor(
+                userId,
+                username,
+                email,
+                role,
+                startTime,
+                endTime,
+                decoded == null ? null : decoded.time(),
+                decoded == null ? null : decoded.id(),
+                limit + 1
+        );
+        boolean hasMore = fetched.size() > limit;
+        List<User> items = hasMore ? List.copyOf(fetched.subList(0, limit)) : List.copyOf(fetched);
+        String nextCursor = hasMore
+                ? CursorCodec.encodeTimeAndLong(
+                        "admin-users",
+                        items.get(items.size() - 1).getCreatedAt(),
+                        items.get(items.size() - 1).getUserId()
+                )
+                : null;
+        return new CursorSlice<>(items, nextCursor, hasMore);
     }
 }

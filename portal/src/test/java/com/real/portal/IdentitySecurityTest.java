@@ -25,6 +25,8 @@ import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -75,7 +77,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "hotshop.security.rate-limit.user-login-failure.limit=2",
         "hotshop.security.rate-limit.user-login-failure.window-seconds=120",
         "hotshop.security.rate-limit.user-refresh.limit=100",
-        "hotshop.security.rate-limit.agent-exchange.limit=100"
+        "hotshop.security.rate-limit.agent-exchange.limit=100",
+        "hotshop.redis.cache.timeout=2s",
+        "hotshop.redis.seckill.timeout=2s"
 })
 @AutoConfigureMockMvc
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -89,6 +93,7 @@ class IdentitySecurityTest {
             .withDatabaseName("hotShop")
             .withUsername("hotshop")
             .withPassword("hotshop-test")
+            .withUrlParam("connectTimeout", "5000")
             .withCommand("--log-bin-trust-function-creators=1");
 
     static final GenericContainer<?> REDIS =
@@ -107,6 +112,7 @@ class IdentitySecurityTest {
         registry.add("spring.datasource.url", MYSQL::getJdbcUrl);
         registry.add("spring.datasource.username", MYSQL::getUsername);
         registry.add("spring.datasource.password", MYSQL::getPassword);
+        registry.add("spring.datasource.hikari.initialization-fail-timeout", () -> 60_000);
         registry.add("spring.data.redis.host", REDIS::getHost);
         registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
         registry.add("spring.data.redis.password", () -> "");
@@ -121,6 +127,12 @@ class IdentitySecurityTest {
     JdbcTemplate jdbcTemplate;
     @Autowired
     JwtTokenUtil jwtTokenUtil;
+    @Autowired
+    @Qualifier("cacheRedisConnectionFactory")
+    LettuceConnectionFactory cacheRedisConnectionFactory;
+    @Autowired
+    @Qualifier("seckillRedisConnectionFactory")
+    LettuceConnectionFactory seckillRedisConnectionFactory;
     @MockitoBean
     RabbitMQService rabbitMQService;
 
@@ -180,12 +192,10 @@ class IdentitySecurityTest {
     }
 
     @AfterAll
-    void keysAreTemporary() {
+    void keysAreTemporary() throws Exception {
+        cacheRedisConnectionFactory.destroy();
+        seckillRedisConnectionFactory.destroy();
         KEYS.delete();
-        if (REDIS.isRunning()) {
-            REDIS.stop();
-        }
-        MYSQL.stop();
     }
 
     @Test
@@ -609,13 +619,21 @@ class IdentitySecurityTest {
     @Test
     @Order(99)
     void redisFailureIsFailClosedForAuthenticationWrites() throws Exception {
-        REDIS.stop();
-        mockMvc.perform(post("/api/v1/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(loginJson(USERNAME, PASSWORD)))
-                .andExpect(status().isServiceUnavailable())
-                .andExpect(jsonPath("$.code").value("AUTHENTICATION_SERVICE_UNAVAILABLE"))
-                .andExpect(content().string(not(containsString(PASSWORD))));
+        REDIS.getDockerClient().pauseContainerCmd(REDIS.getContainerId()).exec();
+        try {
+            org.junit.jupiter.api.Assertions.assertTimeout(
+                    java.time.Duration.ofSeconds(10),
+                    () -> mockMvc.perform(post("/api/v1/auth/login")
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(loginJson(USERNAME, PASSWORD)))
+                            .andExpect(status().isServiceUnavailable())
+                            .andExpect(jsonPath("$.code")
+                                    .value("AUTHENTICATION_SERVICE_UNAVAILABLE"))
+                            .andExpect(content().string(not(containsString(PASSWORD))))
+            );
+        } finally {
+            REDIS.getDockerClient().unpauseContainerCmd(REDIS.getContainerId()).exec();
+        }
     }
 
     @Test
@@ -627,43 +645,48 @@ class IdentitySecurityTest {
         ListAppender<ILoggingEvent> appender = new ListAppender<>();
         appender.start();
         root.addAppender(appender);
+        MvcResult loginFailure;
+        MvcResult bearerFailure;
+        MvcResult openApi;
+        String audit;
         try {
-            MvcResult loginFailure = mockMvc.perform(post("/api/v1/auth/login")
+            loginFailure = mockMvc.perform(post("/api/v1/auth/login")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(loginJson("scan-user", passwordMarker)))
                     .andExpect(status().isUnauthorized())
                     .andReturn();
-            MvcResult bearerFailure = mockMvc.perform(get("/api/v1/orders")
+            bearerFailure = mockMvc.perform(get("/api/v1/orders")
                             .header(
                                     HttpHeaders.AUTHORIZATION,
                                     bearer(authorizationMarker)
                             ))
                     .andExpect(status().isUnauthorized())
                     .andReturn();
-            MvcResult openApi = mockMvc.perform(get("/v3/api-docs/agent-boundary"))
+            openApi = mockMvc.perform(get("/v3/api-docs/agent-boundary"))
                     .andExpect(status().isOk())
                     .andReturn();
 
-            String audit = jdbcTemplate.queryForObject(
+            audit = jdbcTemplate.queryForObject(
                     "SELECT COALESCE(GROUP_CONCAT(CAST(state_summary AS CHAR)), '') FROM audit_log",
                     String.class
             );
-            String logs = appender.list.stream()
-                    .map(ILoggingEvent::getFormattedMessage)
-                    .reduce("", (left, right) -> left + "\n" + right);
-            String problems = loginFailure.getResponse().getContentAsString()
-                    + bearerFailure.getResponse().getContentAsString();
-            String contract = openApi.getResponse().getContentAsString();
-
-            for (String sensitive : List.of(passwordMarker, authorizationMarker, "PRIVATE KEY")) {
-                assertThat(logs).doesNotContain(sensitive);
-                assertThat(problems).doesNotContain(sensitive);
-                assertThat(audit).doesNotContain(sensitive);
-                assertThat(contract).doesNotContain(sensitive);
-            }
         } finally {
             root.detachAppender(appender);
             appender.stop();
+        }
+        List<ILoggingEvent> stableLogSnapshot = List.copyOf(appender.list);
+        String logs = stableLogSnapshot.stream()
+                .map(ILoggingEvent::getFormattedMessage)
+                .reduce("", (left, right) -> left + "\n" + right);
+        String problems = loginFailure.getResponse().getContentAsString()
+                + bearerFailure.getResponse().getContentAsString();
+        String contract = openApi.getResponse().getContentAsString();
+
+        for (String sensitive : List.of(passwordMarker, authorizationMarker, "PRIVATE KEY")) {
+            assertThat(logs).doesNotContain(sensitive);
+            assertThat(problems).doesNotContain(sensitive);
+            assertThat(audit).doesNotContain(sensitive);
+            assertThat(contract).doesNotContain(sensitive);
         }
     }
 
@@ -954,20 +977,16 @@ class IdentitySecurityTest {
             );
         }
 
-        void delete() {
-            try {
-                for (Path file : List.of(
-                        user.privatePath(), user.publicPath(),
-                        administrator.privatePath(), administrator.publicPath(),
-                        agentDelegation.privatePath(), agentDelegation.publicPath(),
-                        agentService.privatePath(), agentService.publicPath()
-                )) {
-                    Files.deleteIfExists(file);
-                }
-                Files.deleteIfExists(directory);
-            } catch (Exception ignored) {
-                // The operating system temp directory remains the recovery boundary.
+        void delete() throws Exception {
+            for (Path file : List.of(
+                    user.privatePath(), user.publicPath(),
+                    administrator.privatePath(), administrator.publicPath(),
+                    agentDelegation.privatePath(), agentDelegation.publicPath(),
+                    agentService.privatePath(), agentService.publicPath()
+            )) {
+                Files.deleteIfExists(file);
             }
+            Files.deleteIfExists(directory);
         }
 
         private static KeyMaterial createKey(Path directory, String name) throws Exception {

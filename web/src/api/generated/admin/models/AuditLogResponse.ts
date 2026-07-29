@@ -115,7 +115,8 @@ export const AuditLogResponseActionEnum = {
     AgentDelegationIssued: 'AGENT_DELEGATION_ISSUED',
     CatalogProductCreated: 'CATALOG_PRODUCT_CREATED',
     CatalogProductUpdated: 'CATALOG_PRODUCT_UPDATED',
-    CatalogProductDeleted: 'CATALOG_PRODUCT_DELETED'
+    CatalogProductDeleted: 'CATALOG_PRODUCT_DELETED',
+    FlashSaleActivityLoaded: 'FLASH_SALE_ACTIVITY_LOADED'
 } as const;
 export type AuditLogResponseActionEnum = typeof AuditLogResponseActionEnum[keyof typeof AuditLogResponseActionEnum];
 
@@ -150,7 +151,8 @@ export const AuditLogResponseResourceTypeEnum = {
     AuthenticationSession: 'AUTHENTICATION_SESSION',
     RefreshTokenFamily: 'REFRESH_TOKEN_FAMILY',
     User: 'USER',
-    CatalogProduct: 'CATALOG_PRODUCT'
+    CatalogProduct: 'CATALOG_PRODUCT',
+    FlashSaleActivity: 'FLASH_SALE_ACTIVITY'
 } as const;
 export type AuditLogResponseResourceTypeEnum = typeof AuditLogResponseResourceTypeEnum[keyof typeof AuditLogResponseResourceTypeEnum];
 

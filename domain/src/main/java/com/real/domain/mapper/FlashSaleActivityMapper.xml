@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.real.domain.mapper.FlashSaleActivityMapper">
+    <select id="findFactById" resultType="com.real.domain.entity.FlashSaleActivityFact">
+        SELECT
+            activity.activity_id,
+            activity.activity_code,
+            activity.product_id,
+            activity.sale_price,
+            activity.total_stock,
+            activity.available_stock,
+            activity.per_user_limit,
+            activity.status,
+            activity.starts_at,
+            activity.ends_at,
+            activity.version,
+            product.product_id AS catalog_product_id,
+            product.price AS catalog_price,
+            product.stock AS catalog_stock,
+            product.status AS catalog_status,
+            product.deleted_at AS catalog_deleted_at
+        FROM flash_sale_activity activity
+        LEFT JOIN catalog_product product
+            ON product.product_id = activity.product_id
+        WHERE activity.activity_id = #{activityId}
+    </select>
+</mapper>

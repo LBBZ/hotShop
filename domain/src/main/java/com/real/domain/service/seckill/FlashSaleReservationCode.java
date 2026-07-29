@@ -1,0 +1,15 @@
+package com.real.domain.service.seckill;
+
+public enum FlashSaleReservationCode {
+    ACCEPTED,
+    IDEMPOTENT_REPLAY,
+    IDEMPOTENCY_CONFLICT,
+    ACTIVITY_NOT_FOUND,
+    ACTIVITY_NOT_STARTED,
+    ACTIVITY_ENDED,
+    ACTIVITY_NOT_ACTIVE,
+    SOLD_OUT,
+    USER_LIMIT_REACHED,
+    INVALID_QUANTITY,
+    INTERNAL_STATE_INVALID
+}

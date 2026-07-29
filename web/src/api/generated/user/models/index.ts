@@ -6,6 +6,8 @@ export * from './AuthTokenResponse';
 export * from './CreateOrderItemRequest';
 export * from './CreateOrderRequest';
 export * from './CursorPageResponseOrderResponse';
+export * from './FlashSaleReservationRequest';
+export * from './FlashSaleReservationResponse';
 export * from './MessageResponse';
 export * from './OrderCreatedResponse';
 export * from './OrderItemResponse';

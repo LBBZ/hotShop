@@ -1,5 +1,6 @@
 package com.real.admin;
 
+import com.real.admin.service.AdminFlashSaleActivityLoadService;
 import com.real.domain.entity.Product;
 import com.real.domain.service.OrderService;
 import com.real.domain.service.ProductService;
@@ -7,6 +8,8 @@ import com.real.domain.service.UserService;
 import com.real.security.entity.CustomUserDetails;
 import com.real.security.service.TokenBlacklistService;
 import com.real.security.util.JwtTokenUtil;
+import com.real.domain.service.seckill.FlashSaleLoadCode;
+import com.real.domain.service.seckill.FlashSaleLoadResult;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -45,6 +48,41 @@ class AdminApiContractTest {
     private UserService userService;
     @MockitoBean
     private TokenBlacklistService tokenBlacklistService;
+    @MockitoBean
+    private AdminFlashSaleActivityLoadService flashSaleActivityLoadService;
+
+    @Test
+    void onlyAdministratorCanLoadAndVerifyFlashSaleActivity() throws Exception {
+        when(flashSaleActivityLoadService.load(
+                org.mockito.ArgumentMatchers.eq(7001L),
+                org.mockito.ArgumentMatchers.eq(100L),
+                org.mockito.ArgumentMatchers.any()
+        )).thenReturn(new FlashSaleLoadResult(
+                FlashSaleLoadCode.LOADED,
+                7001L,
+                4,
+                4,
+                50,
+                50,
+                0,
+                0,
+                0,
+                true,
+                "Activity facts loaded into redis-seckill"
+        ));
+
+        mockMvc.perform(post("/admin/api/v1/flash-sales/{activityId}/load", 7001)
+                        .with(user(adminPrincipal())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.activityId").value("7001"))
+                .andExpect(jsonPath("$.result").value("LOADED"))
+                .andExpect(jsonPath("$.consistent").value(true));
+
+        mockMvc.perform(post("/admin/api/v1/flash-sales/{activityId}/load", 7001)
+                        .with(user(userPrincipal())))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+    }
 
     @Test
     void administratorCanReadProductDto() throws Exception {

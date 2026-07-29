@@ -1,11 +1,16 @@
-spring:
-  data:
-    redis:
-      password:
-      timeout: 2000ms
-      jedis:
-        pool:
-          max-active: 8
-          max-idle: 8
-          min-idle: 0
-          max-wait: -1ms
+hotshop:
+  redis:
+    cache:
+      host: ${HOTSHOP_REDIS_CACHE_HOST:${spring.data.redis.host:${SPRING_REDIS_HOST:localhost}}}
+      port: ${HOTSHOP_REDIS_CACHE_PORT:${spring.data.redis.port:${SPRING_REDIS_PORT:6379}}}
+      password: ${HOTSHOP_REDIS_CACHE_PASSWORD:${spring.data.redis.password:${SPRING_DATA_REDIS_PASSWORD:}}}
+      timeout: ${HOTSHOP_REDIS_CACHE_TIMEOUT:2s}
+    seckill:
+      host: ${HOTSHOP_REDIS_SECKILL_HOST:localhost}
+      port: ${HOTSHOP_REDIS_SECKILL_PORT:6379}
+      password: ${HOTSHOP_REDIS_SECKILL_PASSWORD:}
+      timeout: ${HOTSHOP_REDIS_SECKILL_TIMEOUT:2s}
+  seckill:
+    reservation-ttl: ${HOTSHOP_SECKILL_RESERVATION_TTL:7d}
+    idempotency-ttl: ${HOTSHOP_SECKILL_IDEMPOTENCY_TTL:24h}
+    activity-retention: ${HOTSHOP_SECKILL_ACTIVITY_RETENTION:7d}

@@ -5,5 +5,6 @@ public sealed interface AuditStateSummary permits
         RefreshReuseAuditState,
         AgentDelegationAuditState,
         ProductMutationAuditState,
+        FlashSaleActivityLoadAuditState,
         OperationFailureAuditState {
 }

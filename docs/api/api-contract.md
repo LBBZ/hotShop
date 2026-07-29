@@ -31,8 +31,9 @@ Spring Security 验证旧路径在已认证请求下返回 404；生成的三个
 当前接口：
 
 - public：注册、登录、商品详情、商品列表/搜索；
-- user：登出、刷新令牌、当前 User、创建 Order、本人 Order 列表；
-- admin：登录、登出、Catalog Product CRUD/列表、Order 详情/列表、User 列表、只读审计日志查询。
+- user：登出、刷新令牌、当前 User、创建普通 Order、本人 Order 列表、Redis Lua 秒杀 Reservation；
+- admin：登录、登出、Catalog Product CRUD/列表、Order 详情/列表、User 列表、只读审计日志查询、
+  审计化 Flash Sale Activity 装载/校验。
 
 Controller 的 HTTP 签名只使用 `*Request`、`*Response` 和 `CursorPageResponse` DTO。持久化实体只在
 Controller 内部与领域服务之间使用，不进入请求/响应签名或 OpenAPI schema。
@@ -223,23 +224,41 @@ trace ID、source、`occurredAt` 和脱敏 `stateSummary`。`stateSummary` 只�
 - Trace ID 在 `X-Trace-Id`、MDC `traceId` 和错误体 `traceId` 中一致。当前边界保留
   `traceparent` 传播语义，TASK-13 接入 Tempo 时不得把 Request ID 复用为 Trace ID。
 
-## 6. Idempotency-Key 预留语义
+## 6. Idempotency-Key
 
-运行时 OpenAPI 的 components 定义了尚未挂到任何操作的 `Idempotency-Key` 和
-`Idempotency-Replayed`。本任务没有伪造存储或重放能力；包括当前 `POST /api/v1/orders` 在内的写接口
-在持久化实现完成前均明确不宣称支持幂等键。
+运行时 OpenAPI 的 components 定义 `Idempotency-Key` 和 `Idempotency-Replayed`。
+`POST /api/v1/flash-sales/{activityId}/reservations` 是第一个正式启用的操作；幂等结果保存在
+`redis-seckill` DB 0，保留 24 小时。当前 `POST /api/v1/orders` 仍不宣称支持幂等键。
 
 未来某个写操作启用时必须同时满足：
 
 - key 是 16–128 位可见 ASCII，正则
   `^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$`；
-- scope 是“已认证 actor + HTTP operation”，并持久化规范化请求 fingerprint；
+- scope 是“已认证 User + Flash Sale Reservation operation”；v1 fingerprint 绑定 activityId 与
+  quantity，Key 本身以 SHA-256 进入 Redis；
 - 相同 key、scope 和 fingerprint 重放首次完成的 HTTP status、业务 body 与契约相关 headers，并返回
   `Idempotency-Replayed: true`；
 - 相同 key/scope 但 fingerprint 不同返回 409 `IDEMPOTENCY_KEY_CONFLICT`；
 - 首次请求仍处理中时返回 409 `IDEMPOTENCY_REQUEST_IN_PROGRESS` 和 `Retry-After`；
-- 5xx 或事务未提交不得缓存为成功重放；保留期必须由具体业务契约声明；
-- 实现与业务事务的一致性、并发仲裁和清理策略必须有持久化测试后，才能把 component 挂到具体操作。
+- 5xx 或 Lua 未完整提交不得缓存为成功重放；TASK-07 保留期为 24 小时；
+- Reservation 接口用单个 Lua 同时仲裁业务事实、幂等结果与 Stream 事件；其他操作必须完成自己的
+  一致性和持久化测试后，才能把 component 挂到具体操作。
+
+秒杀 Reservation 成功返回 202：
+
+```json
+{
+  "reservationNo": "rsv_0123456789abcdef0123456789abcdef",
+  "activityId": "7001",
+  "status": "RESERVED",
+  "requestId": "reserve-7001-user"
+}
+```
+
+相同 User/Key/fingerprint 重放相同 body 并返回 `Idempotency-Replayed: true`；相同 Key 更换
+activityId 或 quantity 返回 409 `IDEMPOTENCY_KEY_CONFLICT`。服务端只信任 Access Principal 的
+User ID，请求 body 不接受 userId。详细 Redis/Lua/Stream 契约见
+`docs/architecture/flash-sale-reservation.md`。
 
 ## 7. OpenAPI、客户端与兼容门禁
 

@@ -8,6 +8,7 @@ export * from './CursorPageResponseAuditLogResponse';
 export * from './CursorPageResponseOrderResponse';
 export * from './CursorPageResponseProductResponse';
 export * from './CursorPageResponseUserResponse';
+export * from './FlashSaleActivityLoadResponse';
 export * from './LoginRequestDto';
 export * from './MessageResponse';
 export * from './OrderItemResponse';

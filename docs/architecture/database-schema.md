@@ -2,6 +2,10 @@
 
 > TASK-02 基线与 TASK-06 审计增量；适用于 MySQL 8.0。
 
+TASK-07 没有新增或修改数据库结构，也未编辑已发布的 V1.0～V1.3。秒杀 HTTP 热路径只写
+`redis-seckill`；`sale_reservation`、`sales_order` 和 `outbox_event` 仍由后续 TASK-08/TASK-09
+负责落库。Redis Reservation 不是最终 Order 事实来源。
+
 ## 1. 唯一结构来源与迁移责任
 
 生产结构的唯一事实来源是

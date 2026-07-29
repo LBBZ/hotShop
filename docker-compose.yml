@@ -161,9 +161,15 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-hotShop}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me-local-mysql}
-      SPRING_REDIS_HOST: redis-cache
-      SPRING_REDIS_PORT: 6379
-      SPRING_DATA_REDIS_PASSWORD: ${REDIS_CACHE_PASSWORD:-change-me-local-redis-cache}
+      HOTSHOP_REDIS_CACHE_HOST: redis-cache
+      HOTSHOP_REDIS_CACHE_PORT: 6379
+      HOTSHOP_REDIS_CACHE_PASSWORD: ${REDIS_CACHE_PASSWORD:-change-me-local-redis-cache}
+      HOTSHOP_REDIS_CACHE_TIMEOUT: ${HOTSHOP_REDIS_CACHE_TIMEOUT:-2s}
+      HOTSHOP_REDIS_SECKILL_HOST: redis-seckill
+      HOTSHOP_REDIS_SECKILL_PORT: 6379
+      HOTSHOP_REDIS_SECKILL_PASSWORD: ${REDIS_SECKILL_PASSWORD:-change-me-local-redis-seckill}
+      HOTSHOP_REDIS_SECKILL_TIMEOUT: ${HOTSHOP_REDIS_SECKILL_TIMEOUT:-2s}
+      HOTSHOP_SECKILL_ACTIVITY_RETENTION: ${HOTSHOP_SECKILL_ACTIVITY_RETENTION:-7d}
       HOTSHOP_ADMIN_PRIVATE_KEY_PATH: /run/secrets/hotshop/administrator-private.pem
       HOTSHOP_ADMIN_PUBLIC_KEY_PATH: /run/secrets/hotshop/administrator-public.pem
       HOTSHOP_SECURE_COOKIES: ${HOTSHOP_SECURE_COOKIES:-true}
@@ -184,6 +190,8 @@ services:
         condition: service_completed_successfully
       redis-cache:
         condition: service_healthy
+      redis-seckill:
+        condition: service_healthy
     networks:
       - hotShop-network
 
@@ -199,9 +207,17 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-hotShop}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me-local-mysql}
-      SPRING_REDIS_HOST: redis-cache
-      SPRING_REDIS_PORT: 6379
-      SPRING_DATA_REDIS_PASSWORD: ${REDIS_CACHE_PASSWORD:-change-me-local-redis-cache}
+      HOTSHOP_REDIS_CACHE_HOST: redis-cache
+      HOTSHOP_REDIS_CACHE_PORT: 6379
+      HOTSHOP_REDIS_CACHE_PASSWORD: ${REDIS_CACHE_PASSWORD:-change-me-local-redis-cache}
+      HOTSHOP_REDIS_CACHE_TIMEOUT: ${HOTSHOP_REDIS_CACHE_TIMEOUT:-2s}
+      HOTSHOP_REDIS_SECKILL_HOST: redis-seckill
+      HOTSHOP_REDIS_SECKILL_PORT: 6379
+      HOTSHOP_REDIS_SECKILL_PASSWORD: ${REDIS_SECKILL_PASSWORD:-change-me-local-redis-seckill}
+      HOTSHOP_REDIS_SECKILL_TIMEOUT: ${HOTSHOP_REDIS_SECKILL_TIMEOUT:-2s}
+      HOTSHOP_SECKILL_RESERVATION_TTL: ${HOTSHOP_SECKILL_RESERVATION_TTL:-7d}
+      HOTSHOP_SECKILL_IDEMPOTENCY_TTL: ${HOTSHOP_SECKILL_IDEMPOTENCY_TTL:-24h}
+      HOTSHOP_SECKILL_ACTIVITY_RETENTION: ${HOTSHOP_SECKILL_ACTIVITY_RETENTION:-7d}
       SPRING_RABBITMQ_HOST: rabbitmq
       SPRING_RABBITMQ_PORT: 5672
       SPRING_RABBITMQ_USERNAME: ${RABBITMQ_DEFAULT_USER:-hotshop}
@@ -234,6 +250,8 @@ services:
         condition: service_completed_successfully
       redis-cache:
         condition: service_healthy
+      redis-seckill:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
     networks:
@@ -251,9 +269,10 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-hotShop}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me-local-mysql}
-      SPRING_REDIS_HOST: redis-cache
-      SPRING_REDIS_PORT: 6379
-      SPRING_DATA_REDIS_PASSWORD: ${REDIS_CACHE_PASSWORD:-change-me-local-redis-cache}
+      HOTSHOP_REDIS_CACHE_HOST: redis-cache
+      HOTSHOP_REDIS_CACHE_PORT: 6379
+      HOTSHOP_REDIS_CACHE_PASSWORD: ${REDIS_CACHE_PASSWORD:-change-me-local-redis-cache}
+      HOTSHOP_REDIS_CACHE_TIMEOUT: ${HOTSHOP_REDIS_CACHE_TIMEOUT:-2s}
       SPRING_RABBITMQ_HOST: rabbitmq
       SPRING_RABBITMQ_PORT: 5672
       SPRING_RABBITMQ_USERNAME: ${RABBITMQ_DEFAULT_USER:-hotshop}

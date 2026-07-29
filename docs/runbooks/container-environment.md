@@ -51,8 +51,9 @@ docker compose --env-file .env.example --profile app up -d --build
 
 当前 Java RabbitMQ 配置仍声明 `x-delayed-message` exchange，而 TASK-03 按总纲移除了对应第三方
 插件；因此 portal/task 在 TASK-09 改成 TTL 队列 + DLX 前可能无法完成启动。这里的 `app` profile
-用于清晰隔离构建与启动范围，不把当前已知的不兼容伪装成通过。应用目前只连接
-`redis-cache`；`redis-seckill` 只做基础设施预配，后续任务再接入。
+用于清晰隔离构建与启动范围，不把当前已知的不兼容伪装成通过。TASK-07 起 Java 应用使用两个启动期
+固定、仅 DB 0 的具名连接：认证/缓存/限流只注入 `redis-cache`，秒杀装载与 Reservation 只注入
+`redis-seckill`；请求期间不创建连接工厂，也不按 dbIndex 选择逻辑库。
 
 可观测与测试服务将分别由后续任务加入独立 profile；TASK-03 不提前添加占位容器。
 
@@ -115,6 +116,11 @@ docker compose --env-file .env.example exec -T redis-seckill redis-cli CONFIG GE
 
 容器已设置 `REDISCLI_AUTH`，所以以上命令不需要把密码放在命令行。预期两者 `databases` 都是
 `1`；cache 为 `allkeys-lfu`/RDB，seckill 为 `noeviction`/AOF + RDB。
+
+TASK-07 活动装载、预约、Key 查询和 Redis/MySQL/Stream 对账命令见
+`docs/architecture/flash-sale-reservation.md`。`redis-seckill` OOM 时预约返回脱敏 503，不会同步
+写 MySQL；不要把 policy 改为淘汰。`redis-cache` 故障不会改变 seckill 已有库存、Reservation 或
+Stream，反之亦然。
 
 确认 RabbitMQ 运行且没有 delayed-message 插件：
 

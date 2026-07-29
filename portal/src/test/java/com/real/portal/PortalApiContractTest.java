@@ -11,6 +11,9 @@ import com.real.domain.service.OrderService;
 import com.real.domain.service.ProductService;
 import com.real.domain.service.UserService;
 import com.real.domain.service.advance.OrderStateService;
+import com.real.domain.service.seckill.FlashSaleReservationCode;
+import com.real.domain.service.seckill.FlashSaleReservationResult;
+import com.real.domain.service.seckill.FlashSaleReservationService;
 import com.real.security.entity.CustomUserDetails;
 import com.real.security.service.TokenBlacklistService;
 import org.junit.jupiter.api.Test;
@@ -36,6 +39,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -65,6 +69,8 @@ class PortalApiContractTest {
     private RabbitMQService rabbitMQService;
     @MockitoBean
     private TokenBlacklistService tokenBlacklistService;
+    @MockitoBean
+    private FlashSaleReservationService flashSaleReservationService;
 
     @Test
     void anonymousProductListReturnsDtoFormatsAndCorrelatedIds() throws Exception {
@@ -106,6 +112,100 @@ class PortalApiContractTest {
                 .andExpect(jsonPath("$.instance").value("/api/v1/orders"))
                 .andExpect(jsonPath("$.requestId").value("missing-auth-1"))
                 .andExpect(jsonPath("$.traceId").value(org.hamcrest.Matchers.matchesPattern("[0-9a-f]{32}")));
+    }
+
+    @Test
+    void flashSaleReservationRequiresUserIdempotencyAndReturnsAcceptedReplayContract()
+            throws Exception {
+        CustomUserDetails principal = CustomUserDetails.builder()
+                .userId(77L)
+                .username("reservation-user")
+                .password("")
+                .authorities(List.of(new SimpleGrantedAuthority("ROLE_USER")))
+                .build();
+        when(flashSaleReservationService.reserve(
+                901L,
+                77L,
+                2,
+                "reservation-key-000000000000000000000001",
+                "reservation-request-1"
+        )).thenReturn(new FlashSaleReservationResult(
+                FlashSaleReservationCode.ACCEPTED,
+                "rsv_0123456789abcdef0123456789abcdef",
+                901L,
+                "RESERVED",
+                "reservation-request-1",
+                "1-0"
+        ));
+
+        mockMvc.perform(post("/api/v1/flash-sales/{activityId}/reservations", 901)
+                        .with(user(principal))
+                        .header("X-Request-Id", "reservation-request-1")
+                        .header(
+                                "Idempotency-Key",
+                                "reservation-key-000000000000000000000001"
+                        )
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"quantity\":2}"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.reservationNo")
+                        .value("rsv_0123456789abcdef0123456789abcdef"))
+                .andExpect(jsonPath("$.activityId").value("901"))
+                .andExpect(jsonPath("$.status").value("RESERVED"))
+                .andExpect(jsonPath("$.requestId").value("reservation-request-1"));
+
+        verify(flashSaleReservationService).reserve(
+                901L,
+                77L,
+                2,
+                "reservation-key-000000000000000000000001",
+                "reservation-request-1"
+        );
+    }
+
+    @Test
+    void flashSaleReservationRejectsMissingIdempotencyAndChangedFingerprint() throws Exception {
+        CustomUserDetails principal = CustomUserDetails.builder()
+                .userId(78L)
+                .username("reservation-user-2")
+                .password("")
+                .authorities(List.of(new SimpleGrantedAuthority("ROLE_USER")))
+                .build();
+        mockMvc.perform(post("/api/v1/flash-sales/{activityId}/reservations", 902)
+                        .with(user(principal))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"quantity\":1}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value("PARAMETER_MISSING"))
+                .andExpect(jsonPath("$.violations[0].field").value("Idempotency-Key"));
+
+        when(flashSaleReservationService.reserve(
+                902L,
+                78L,
+                2,
+                "conflicting-key-0000000000000000000000001",
+                "conflict-request"
+        )).thenReturn(new FlashSaleReservationResult(
+                FlashSaleReservationCode.IDEMPOTENCY_CONFLICT,
+                null,
+                902L,
+                null,
+                null,
+                null
+        ));
+        mockMvc.perform(post("/api/v1/flash-sales/{activityId}/reservations", 902)
+                        .with(user(principal))
+                        .header("X-Request-Id", "conflict-request")
+                        .header(
+                                "Idempotency-Key",
+                                "conflicting-key-0000000000000000000000001"
+                        )
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"quantity\":2}"))
+                .andExpect(status().isConflict())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_CONFLICT"));
     }
 
     @Test
@@ -285,6 +385,14 @@ class PortalApiContractTest {
         mockMvc.perform(get("/v3/api-docs/user"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.paths['/api/v1/orders']").exists())
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/flash-sales/{activityId}/reservations']"
+                                + ".post.responses['202']"
+                ).exists())
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/flash-sales/{activityId}/reservations']"
+                                + ".post.responses['200']"
+                ).doesNotExist())
                 .andExpect(jsonPath("$.paths['/admin/api/v1/orders']").doesNotExist())
                 .andExpect(jsonPath("$.components.schemas.Order").doesNotExist());
 

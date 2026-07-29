@@ -103,6 +103,7 @@ public class OpenApiConfig {
                 .pathsToMatch(
                         "/api/v1/users/**",
                         "/api/v1/orders/**",
+                        "/api/v1/flash-sales/**",
                         "/api/v1/auth/logout",
                         "/api/v1/auth/refresh"
                 )
@@ -278,7 +279,9 @@ public class OpenApiConfig {
                 .filter(parameter -> parameter.get$ref() == null)
                 .filter(parameter -> "path".equals(parameter.getIn()) || "query".equals(parameter.getIn()))
                 .forEach(parameter -> {
-                    if ("productId".equals(parameter.getName()) || "userId".equals(parameter.getName())) {
+                    if ("productId".equals(parameter.getName())
+                            || "userId".equals(parameter.getName())
+                            || "activityId".equals(parameter.getName())) {
                         parameter.setSchema(new StringSchema()
                                 .pattern(POSITIVE_LONG_ID_PATTERN)
                                 .minLength(1)

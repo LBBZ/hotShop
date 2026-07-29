@@ -5,6 +5,7 @@ import com.real.common.api.ApiViolation;
 import com.real.common.api.ProblemDetailsFactory;
 import com.real.common.api.RequestContext;
 import com.real.common.exception.InventoryShortageException;
+import com.real.common.exception.SeckillServiceUnavailableException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
@@ -22,6 +23,7 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.HttpMediaTypeNotAcceptableException;
@@ -147,6 +149,27 @@ public class GlobalExceptionHandler {
         );
     }
 
+    @ExceptionHandler(MissingRequestHeaderException.class)
+    public ResponseEntity<ProblemDetail> handleMissingHeader(
+            MissingRequestHeaderException exception,
+            HttpServletRequest request
+    ) {
+        ApiViolation violation = new ApiViolation(
+                exception.getHeaderName(),
+                "Missing",
+                "is required"
+        );
+        return response(
+                request,
+                HttpStatus.BAD_REQUEST,
+                "PARAMETER_MISSING",
+                "Missing parameter",
+                "A required request header is missing",
+                List.of(violation),
+                new HttpHeaders()
+        );
+    }
+
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ProblemDetail> handleUnreadableBody(HttpServletRequest request) {
         return response(
@@ -253,6 +276,19 @@ public class GlobalExceptionHandler {
                 "DATA_CONFLICT",
                 "Conflict",
                 "The request conflicts with the current resource state",
+                null,
+                new HttpHeaders()
+        );
+    }
+
+    @ExceptionHandler(SeckillServiceUnavailableException.class)
+    public ResponseEntity<ProblemDetail> handleSeckillUnavailable(HttpServletRequest request) {
+        return response(
+                request,
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "SECKILL_SERVICE_UNAVAILABLE",
+                "Service unavailable",
+                "The flash-sale reservation service is temporarily unavailable",
                 null,
                 new HttpHeaders()
         );

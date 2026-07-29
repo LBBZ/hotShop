@@ -1,89 +1,70 @@
 package com.real.domain.infra;
 
-import com.real.infrastructure.Redis.RedisTemplateGenerator;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
-import java.util.concurrent.TimeUnit;
+import java.time.Duration;
 
+/**
+ * Fixed redis-cache access for legacy non-seckill callers.
+ *
+ * <p>The deprecated database-index arguments are intentionally ignored while callers are migrated
+ * by their owning tasks. They can no longer select a logical database or create a connection.
+ * Both Redis instances expose only DB 0.</p>
+ */
 @Service
 public class RedisService {
-    private final RedisTemplateGenerator redisTemplateGenerator;
-    @Autowired
-    public RedisService(RedisTemplateGenerator redisTemplateGenerator) {
-        this.redisTemplateGenerator = redisTemplateGenerator;
+    private final StringRedisTemplate cacheRedis;
+
+    public RedisService(
+            @Qualifier("cacheStringRedisTemplate") StringRedisTemplate cacheRedis
+    ) {
+        this.cacheRedis = cacheRedis;
     }
 
-    /**
-     * 设置键值对到指定的 Redis 数据库
-     * @param dbIndex 数据库索引
-     * @param key 键
-     * @param value 值
-     * @param ttl （存活时间），单位为秒
-     */
-    public Boolean setWithTTL(Object key, Object value, int dbIndex, long ttl) {
-        // 设置键值对
-        return
-                redisTemplateGenerator
-                .getRedisTemplate(dbIndex)
-                .opsForValue()
-                .setIfAbsent(
-                key, value,
-                ttl, TimeUnit.SECONDS);
+    public Boolean setWithTTL(String key, String value, long ttlSeconds) {
+        return cacheRedis.opsForValue().setIfAbsent(key, value, Duration.ofSeconds(ttlSeconds));
     }
 
-    /**
-     * 设置键值对到指定的 Redis 数据库
-     * @param dbIndex 数据库索引
-     * @param key 键
-     * @param value 值
-     */
-    public Boolean setNoTTL(Object key, Object value, int dbIndex) {
-        // 设置键值对
-        return
-                redisTemplateGenerator
-                        .getRedisTemplate(dbIndex)
-                        .opsForValue()
-                        .setIfAbsent(
-                                key, value
-                        );
+    public Boolean setNoTTL(String key, String value) {
+        return cacheRedis.opsForValue().setIfAbsent(key, value);
     }
 
-    /**
-     * 获取指定键的值从指定的 Redis 数据库
-     * @param dbIndex 数据库索引
-     * @param key 键
-     * @return 是否存在
-     */
-    public Boolean hasKey(String key, int dbIndex) {
-        return Boolean.TRUE.equals(
-                redisTemplateGenerator
-                        .getRedisTemplate(dbIndex)
-                        .hasKey(key)
-        );
+    public Boolean hasKey(String key) {
+        return Boolean.TRUE.equals(cacheRedis.hasKey(key));
     }
 
-    /**
-     * 获取指定键的值从指定的 Redis 数据库
-     * @param dbIndex 数据库索引
-     * @param key 键
-     * @return 值
-     */
-    public Object get(String key, int dbIndex) {
-        return redisTemplateGenerator
-                .getRedisTemplate(dbIndex)
-                .opsForValue()
-                .get(key);
+    public String get(String key) {
+        return cacheRedis.opsForValue().get(key);
     }
 
-    /**
-     * 删除指定键从指定的 Redis 数据库
-     * @param dbIndex 数据库索引
-     * @param key 键
-     */
-    public void delete(String key, int dbIndex) {
-        redisTemplateGenerator
-                .getRedisTemplate(dbIndex)
-                .delete(key);
+    public void delete(String key) {
+        cacheRedis.delete(key);
+    }
+
+    @Deprecated(forRemoval = true)
+    public Boolean setWithTTL(Object key, Object value, int ignoredDbIndex, long ttlSeconds) {
+        return setWithTTL(String.valueOf(key), String.valueOf(value), ttlSeconds);
+    }
+
+    @Deprecated(forRemoval = true)
+    public Boolean setNoTTL(Object key, Object value, int ignoredDbIndex) {
+        return setNoTTL(String.valueOf(key), String.valueOf(value));
+    }
+
+    @Deprecated(forRemoval = true)
+    public Boolean hasKey(String key, int ignoredDbIndex) {
+        return hasKey(key);
+    }
+
+    @Deprecated(forRemoval = true)
+    public String get(String key, int ignoredDbIndex) {
+        return get(key);
+    }
+
+    @Deprecated(forRemoval = true)
+    public void delete(String key, int ignoredDbIndex) {
+        delete(key);
     }
 }

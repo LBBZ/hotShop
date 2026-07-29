@@ -272,6 +272,53 @@ services:
     networks:
       - hotShop-network
 
+  agent-service:
+    profiles: [agent]
+    build:
+      context: ./agent
+      dockerfile: Dockerfile
+    image: ${AGENT_IMAGE:-hotshop-agent:local}
+    environment:
+      AGENT_ENVIRONMENT: ${AGENT_ENVIRONMENT:-local}
+      AGENT_PROVIDER: ${AGENT_PROVIDER:-fake}
+      AGENT_STATE_BACKEND: redis
+      AGENT_REDIS_URL: redis://:${REDIS_CACHE_PASSWORD:-change-me-local-redis-cache}@redis-cache:6379/0
+      AGENT_REDIS_KEY_PREFIX: "hotshop:agent:"
+      AGENT_SESSION_TTL_SECONDS: ${AGENT_SESSION_TTL_SECONDS:-3600}
+      AGENT_RUN_TTL_SECONDS: ${AGENT_RUN_TTL_SECONDS:-900}
+      AGENT_PORTAL_BASE_URL: http://portal-service:8080
+      AGENT_TOKEN_EXCHANGE_TIMEOUT_SECONDS: ${AGENT_TOKEN_EXCHANGE_TIMEOUT_SECONDS:-3}
+      AGENT_ASSERTION_PRIVATE_KEY_PATH: /run/secrets/hotshop/agent-service-private.pem
+      AGENT_USER_PUBLIC_KEYS: '{"user-local-1":"/run/secrets/hotshop/user-public.pem"}'
+      AGENT_ADMINISTRATOR_PUBLIC_KEYS: '{"administrator-local-1":"/run/secrets/hotshop/administrator-public.pem"}'
+      AGENT_DELEGATION_PUBLIC_KEYS: '{"agent-delegation-local-1":"/run/secrets/hotshop/agent-delegation-public.pem"}'
+      AGENT_QWEN_API_KEY: ${AGENT_QWEN_API_KEY:-}
+      AGENT_QWEN_BASE_URL: ${AGENT_QWEN_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      AGENT_QWEN_MODEL: ${AGENT_QWEN_MODEL:-qwen-plus}
+      AGENT_QWEN_INPUT_COST_PER_MILLION_USD: ${AGENT_QWEN_INPUT_COST_PER_MILLION_USD:-0}
+      AGENT_QWEN_OUTPUT_COST_PER_MILLION_USD: ${AGENT_QWEN_OUTPUT_COST_PER_MILLION_USD:-0}
+      AGENT_MODEL_TIMEOUT_SECONDS: ${AGENT_MODEL_TIMEOUT_SECONDS:-15}
+      AGENT_MODEL_MAX_RETRIES: ${AGENT_MODEL_MAX_RETRIES:-2}
+      AGENT_CIRCUIT_FAILURE_THRESHOLD: ${AGENT_CIRCUIT_FAILURE_THRESHOLD:-3}
+      AGENT_CIRCUIT_RECOVERY_SECONDS: ${AGENT_CIRCUIT_RECOVERY_SECONDS:-30}
+      AGENT_GLOBAL_CONCURRENCY_LIMIT: ${AGENT_GLOBAL_CONCURRENCY_LIMIT:-16}
+      AGENT_USER_CONCURRENCY_LIMIT: ${AGENT_USER_CONCURRENCY_LIMIT:-2}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ${HOTSHOP_KEY_DIR:-./.local/keys/hotshop}/agent-service-private.pem:/run/secrets/hotshop/agent-service-private.pem:ro
+      - ${HOTSHOP_KEY_DIR:-./.local/keys/hotshop}/user-public.pem:/run/secrets/hotshop/user-public.pem:ro
+      - ${HOTSHOP_KEY_DIR:-./.local/keys/hotshop}/administrator-public.pem:/run/secrets/hotshop/administrator-public.pem:ro
+      - ${HOTSHOP_KEY_DIR:-./.local/keys/hotshop}/agent-delegation-public.pem:/run/secrets/hotshop/agent-delegation-public.pem:ro
+    ports:
+      - "${AGENT_PORT:-8090}:8090"
+    depends_on:
+      redis-cache:
+        condition: service_healthy
+    networks:
+      - hotShop-network
+    mem_limit: ${AGENT_MEMORY_LIMIT:-512m}
+    restart: unless-stopped
+
 volumes:
   mysql_data:
   redis_cache_data:

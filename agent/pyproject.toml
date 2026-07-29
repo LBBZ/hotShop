@@ -1,0 +1,49 @@
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hotshop-agent"
+version = "0.1.0"
+description = "Independent HotShop Agent process"
+requires-python = "==3.12.*"
+dependencies = [
+  "cryptography==45.0.4",
+  "fastapi==0.115.12",
+  "httpx==0.28.1",
+  "langgraph==0.4.8",
+  "prometheus-client==0.22.1",
+  "pydantic-settings==2.9.1",
+  "PyJWT==2.10.1",
+  "redis==6.2.0",
+  "uvicorn[standard]==0.34.3",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy==2.3.0",
+  "pytest==8.4.0",
+  "pytest-asyncio==1.0.0",
+  "ruff==0.11.13",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hotshop_agent"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "ASYNC", "S"]
+ignore = ["S101"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["hotshop_agent"]

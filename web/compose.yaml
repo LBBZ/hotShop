@@ -1,0 +1,19 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /workspace/web
+    init: true
+    environment:
+      CI: "true"
+    volumes:
+      - .:/workspace/web
+      - ../docs:/workspace/docs:ro
+      - web_node_modules:/workspace/web/node_modules
+    ports:
+      - "4173:4173"
+    command: pnpm test:e2e
+
+volumes:
+  web_node_modules:

@@ -8,29 +8,25 @@ spring:
       - classpath:config/common-db.yml
       - classpath:config/common-redis.yml
       - classpath:config/common-jwt.yml
-      - classpath:config/orderTimeoutConfig.yml
-
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/hotShop?useSSL=false&serverTimezone=UTC}
     username: ${SPRING_DATASOURCE_USERNAME:root}
     password: ${SPRING_DATASOURCE_PASSWORD:123456}
-
   data:
     redis:
       host: ${SPRING_REDIS_HOST:localhost}
       port: ${SPRING_REDIS_PORT:6379}
-
   rabbitmq:
     host: ${SPRING_RABBITMQ_HOST:localhost}
     port: ${SPRING_RABBITMQ_PORT:5672}
     username: ${SPRING_RABBITMQ_USERNAME:guest}
     password: ${SPRING_RABBITMQ_PASSWORD:guest}
     publisher-confirm-type: correlated
+    publisher-returns: true
     listener:
       simple:
-        retry:
-          enabled: true   # 开启消费重试
-          max-attempts: 3 # 最大重试次数
+        acknowledge-mode: manual
+        default-requeue-rejected: true
 
 rabbitmq:
   enabled: true
@@ -40,9 +36,22 @@ server:
 
 logging:
   level:
-    com.real: TRACE
+    com.real: INFO
 
 hotshop:
+  order:
+    legacy-payment-timeout: ${HOTSHOP_LEGACY_ORDER_TIMEOUT:15m}
+  outbox:
+    publisher:
+      enabled: ${HOTSHOP_OUTBOX_ENABLED:true}
+      batch-size: ${HOTSHOP_OUTBOX_BATCH_SIZE:50}
+      poll-delay: ${HOTSHOP_OUTBOX_POLL_DELAY:250ms}
+      lease: ${HOTSHOP_OUTBOX_LEASE:30s}
+      confirm-timeout: ${HOTSHOP_OUTBOX_CONFIRM_TIMEOUT:5s}
+      initial-backoff: ${HOTSHOP_OUTBOX_INITIAL_BACKOFF:1s}
+      max-backoff: ${HOTSHOP_OUTBOX_MAX_BACKOFF:5m}
+      multiplier: ${HOTSHOP_OUTBOX_BACKOFF_MULTIPLIER:2}
+      max-attempts: ${HOTSHOP_OUTBOX_MAX_ATTEMPTS:8}
   seckill:
     order-consumer:
       enabled: ${HOTSHOP_SECKILL_ORDER_CONSUMER_ENABLED:true}

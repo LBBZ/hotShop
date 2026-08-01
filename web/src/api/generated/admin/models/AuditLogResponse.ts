@@ -116,7 +116,8 @@ export const AuditLogResponseActionEnum = {
     CatalogProductCreated: 'CATALOG_PRODUCT_CREATED',
     CatalogProductUpdated: 'CATALOG_PRODUCT_UPDATED',
     CatalogProductDeleted: 'CATALOG_PRODUCT_DELETED',
-    FlashSaleActivityLoaded: 'FLASH_SALE_ACTIVITY_LOADED'
+    FlashSaleActivityLoaded: 'FLASH_SALE_ACTIVITY_LOADED',
+    OutboxReplay: 'OUTBOX_REPLAY'
 } as const;
 export type AuditLogResponseActionEnum = typeof AuditLogResponseActionEnum[keyof typeof AuditLogResponseActionEnum];
 
@@ -152,7 +153,8 @@ export const AuditLogResponseResourceTypeEnum = {
     RefreshTokenFamily: 'REFRESH_TOKEN_FAMILY',
     User: 'USER',
     CatalogProduct: 'CATALOG_PRODUCT',
-    FlashSaleActivity: 'FLASH_SALE_ACTIVITY'
+    FlashSaleActivity: 'FLASH_SALE_ACTIVITY',
+    OutboxEvent: 'OUTBOX_EVENT'
 } as const;
 export type AuditLogResponseResourceTypeEnum = typeof AuditLogResponseResourceTypeEnum[keyof typeof AuditLogResponseResourceTypeEnum];
 

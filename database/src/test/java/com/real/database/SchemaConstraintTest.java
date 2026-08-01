@@ -58,8 +58,8 @@ class SchemaConstraintTest {
 
     @Test
     void emptyDatabaseMigratesToLatestAndValidates() {
-        assertThat(initialMigrationCount).isEqualTo(5);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1.4");
+        assertThat(initialMigrationCount).isEqualTo(6);
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1.5");
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
     }
 
@@ -162,6 +162,68 @@ class SchemaConstraintTest {
             insertProcessedEvent(connection, "order-projector", eventId);
             assertConstraintViolation(() -> insertProcessedEvent(connection, "order-projector", eventId));
             insertProcessedEvent(connection, "audit-projector", eventId);
+        }
+    }
+
+    @Test
+    void outboxEventIdRemainsUnique() throws SQLException {
+        try (Connection connection = connection()) {
+            String eventId = UUID.randomUUID().toString();
+            insertOutbox(connection, eventId);
+            assertConstraintViolation(() -> insertOutbox(connection, eventId));
+        }
+    }
+
+    @Test
+    void outboxLeaseTokenAndExpiryMustAppearTogether() throws SQLException {
+        try (Connection connection = connection()) {
+            String eventId = UUID.randomUUID().toString();
+            insertOutbox(connection, eventId);
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                    UPDATE outbox_event SET lease_token = '%s', lease_expires_at = NULL
+                    WHERE event_id = '%s'
+                    """.formatted(UUID.randomUUID(), eventId)));
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                    UPDATE outbox_event SET lease_token = NULL, lease_expires_at = UTC_TIMESTAMP(6)
+                    WHERE event_id = '%s'
+                    """.formatted(eventId)));
+        }
+    }
+
+    @Test
+    void outboxConsecutiveAttemptsCannotBeNegative() throws SQLException {
+        assertNegativeOutboxCounterRejected("consecutive_attempts");
+    }
+
+    @Test
+    void outboxManualReplayCountCannotBeNegative() throws SQLException {
+        assertNegativeOutboxCounterRejected("manual_replay_count");
+    }
+
+    @Test
+    void outboxVersionCannotBeNegative() throws SQLException {
+        assertNegativeOutboxCounterRejected("version");
+    }
+
+    private static void assertNegativeOutboxCounterRejected(String column) throws SQLException {
+        try (Connection connection = connection()) {
+            String eventId = UUID.randomUUID().toString();
+            insertOutbox(connection, eventId);
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                    UPDATE outbox_event SET %s = -1 WHERE event_id = '%s'
+                    """.formatted(column, eventId)));
+        }
+    }
+
+    @Test
+    void outboxClaimAndFailedCursorIndexesHaveRequiredColumnOrder() throws SQLException {
+        try (Connection connection = connection()) {
+            assertThat(indexColumns(connection, "outbox_event", "idx_outbox_claim"))
+                    .isEqualTo("status,available_at,lease_expires_at,outbox_id");
+            assertThat(indexColumns(connection, "outbox_event", "idx_outbox_failed_cursor"))
+                    .isEqualTo("status,outbox_id");
+            assertThat(indexColumns(connection, "outbox_event", "uk_outbox_event_id"))
+                    .isEqualTo("event_id");
         }
     }
 
@@ -366,6 +428,31 @@ class SchemaConstraintTest {
             statement.setString(1, consumer);
             statement.setString(2, eventId);
             statement.executeUpdate();
+        }
+    }
+
+    private static void insertOutbox(Connection connection, String eventId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO outbox_event(event_id, aggregate_type, aggregate_id, event_type, payload)
+                VALUES (?, 'ORDER', 'constraint-order', 'ORDER_CREATED', JSON_OBJECT('schemaVersion', 1))
+                """)) {
+            statement.setString(1, eventId);
+            statement.executeUpdate();
+        }
+    }
+
+    private static String indexColumns(Connection connection, String table, String index) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',')
+                  FROM information_schema.statistics
+                 WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?
+                """)) {
+            statement.setString(1, table);
+            statement.setString(2, index);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                assertThat(resultSet.next()).isTrue();
+                return resultSet.getString(1);
+            }
         }
     }
 

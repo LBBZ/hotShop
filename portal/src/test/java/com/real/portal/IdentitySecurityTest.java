@@ -10,7 +10,6 @@ import com.real.security.identity.IdentityType;
 import com.real.security.identity.IssuedAccessToken;
 import com.real.security.service.RefreshCookieService;
 import com.real.security.util.JwtTokenUtil;
-import com.real.domain.infra.RabbitMQService;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import jakarta.servlet.http.Cookie;
@@ -133,9 +132,6 @@ class IdentitySecurityTest {
     @Autowired
     @Qualifier("seckillRedisConnectionFactory")
     LettuceConnectionFactory seckillRedisConnectionFactory;
-    @MockitoBean
-    RabbitMQService rabbitMQService;
-
     long userId;
     long adminId;
 
@@ -147,7 +143,7 @@ class IdentitySecurityTest {
                 .validateMigrationNaming(true)
                 .cleanDisabled(true)
                 .load();
-        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(5);
+        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(6);
         assertThat(flyway.migrate().migrationsExecuted).isZero();
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
 

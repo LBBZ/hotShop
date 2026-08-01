@@ -339,3 +339,16 @@ python .\script\check_openapi_compatibility.py
 response schema 和 component，至少拒绝删除路径、删除字段、改变类型、把可选字段收紧为 required。
 HotShop 额外不变量会拒绝 `productId`/`userId` URL 参数退回 `integer/int64`，或 `orderId` path
 丢失长度和字符集约束。
+
+## 8. TASK-09 管理员 Outbox 运维契约
+
+以下接口只接受 Administrator Access；User Access、匿名请求和 Agent Delegation 在身份边界被拒绝，
+Agent OpenAPI 和工具面不提供等价能力：
+
+- `GET /admin/api/v1/outbox/failed?limit=20&cursor=...`：按 `outbox_id DESC` 做稳定 keyset 分页；
+- `POST /admin/api/v1/outbox/{eventId}/replay`：body 为 `{"reason":"..."}`，仅接受 `FAILED`。
+
+失败列表只返回 eventId、eventType、aggregate type/id、累计/本轮 attempts、人工重放次数、脱敏
+failure category 与时间，不返回 payload、`last_error`、凭据、SQL 或堆栈。重放成功返回 202，只修改
+MySQL 状态并追加 append-only `audit_log`；RabbitMQ 发布由 task 异步完成。`NEW`、`PUBLISHING` 和
+`PUBLISHED` 均返回 409 `OUTBOX_NOT_FAILED`，不能借此重复发布已经完成的事件。

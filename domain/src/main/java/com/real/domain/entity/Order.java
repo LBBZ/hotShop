@@ -15,6 +15,15 @@ import java.util.List;
 @NoArgsConstructor
 @Schema(description = "订单实体")
 public class Order {
+    public Order(String orderId, Long userId, BigDecimal totalAmount, OrderStatus status,
+                 LocalDateTime createdAt, List<OrderItem> items) {
+        this.orderId = orderId;
+        this.userId = userId;
+        this.totalAmount = totalAmount;
+        this.status = status;
+        this.createdAt = createdAt;
+        this.items = items;
+    }
     @Schema(description = "订单号（UUID）", example = "ORDER_20231001123456")
     private String orderId;
 
@@ -33,6 +42,8 @@ public class Order {
 
     @Schema(description = "创建时间", example = "2023-10-01T12:00:00")
     private LocalDateTime createdAt;
+
+    private LocalDateTime expiresAt;
 
     @Schema(description = "订单项列表")
     private List<OrderItem> items;

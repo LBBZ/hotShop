@@ -60,7 +60,10 @@ export function normalizeGeneratedTypeScriptFiles(directory) {
 }
 
 function generateDomain(domain, outputRoot) {
-  const input = join(baselineRoot, `${domain}.json`);
+  const input = relative(
+    webRoot,
+    join(baselineRoot, `${domain}.json`),
+  ).replaceAll("\\", "/");
   const output = join(outputRoot, domain);
   rmSync(output, { recursive: true, force: true });
   mkdirSync(output, { recursive: true });

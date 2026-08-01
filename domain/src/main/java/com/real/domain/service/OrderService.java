@@ -72,10 +72,6 @@ public class OrderService {
         return orderMapper.selectOrdersByConditions(userId, status, startTime, endTime);
     }
 
-    public List<Order> getLegacyPendingOrdersBefore(LocalDateTime endTime) {
-        return orderMapper.selectLegacyPendingOrdersBefore(endTime);
-    }
-
     public PageInfo<Order> getOrdersByConditions(int pageNum, int pageSize, Long userId, OrderStatus status, LocalDateTime startTime, LocalDateTime endTime) {
         List<Order> orders;
         orders = getOrdersByConditions(userId, status, startTime, endTime);

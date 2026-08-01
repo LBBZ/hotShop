@@ -67,9 +67,8 @@ TASK-00 的 TLS 问题在本次通过以下证据得到明确规避：
 ./mvnw -B clean verify
 ```
 
-默认生命周期只由 Surefire 执行 `*Test` 单元测试。原
-`task/src/test/java/com/real/task/test/RabbitMQConnectionTest.java` 已改名为
-`RabbitMQConnectionIT.java`，只有显式启用下列 profile 时才由 Failsafe 执行：
+默认生命周期由 Surefire 执行 `*Test`。本节记录的旧 Rabbit 联通测试后来已删除；TASK-09 改用
+Testcontainers RabbitMQ 与有业务断言的正式可靠性套件，不再依赖本机 broker：
 
 ```powershell
 .\mvnw.cmd -B -pl task -am -Pintegration-tests verify
@@ -187,7 +186,7 @@ docker run --rm `
 结果：`BUILD FAILURE`，总耗时 36.776 秒。
 
 - profile 启用前的单元测试仍为 12 passed；
-- Failsafe 实际执行 `RabbitMQConnectionIT`：1 test，0 failures，1 error，0 skipped；
+- Failsafe 当时执行旧联通测试：1 test，0 failures，1 error，0 skipped；
 - 原始失败为 `AmqpConnectException: java.net.ConnectException: Connection refused`，
   目标 `localhost:5672`；
 - 应用定时任务还记录 `CannotCreateTransactionException`，MySQL 目标 `localhost:3306` 未启动；
@@ -220,8 +219,8 @@ docker run --rm `
 
 - 单元测试运行时 Mockito 记录动态加载 Byte Buddy agent 的未来兼容性警告；Java 21 当前测试通过，
   但未来 JDK 默认禁止动态 agent 后需要按 Mockito 官方建议显式配置 `-javaagent`。
-- `RabbitMQConnectionIT` 仍是旧的联通测试，只验证发送调用未抛异常，没有验证消息最终被消费；
-  TASK-01 只负责正确分层，没有改变其业务语义。后续消息测试任务应以 Testcontainers 或受控 Compose
-  环境补充可断言的投递结果。
-- 当前仓库没有为集成测试提供独立 Testcontainers 配置；因此本次只能如实记录外部依赖未启动时的
-  失败，不能声称集成测试通过。
+- 旧联通测试已由 TASK-09 删除，并由 MySQL 8.0.46 与官方 RabbitMQ management 镜像组成的
+  Testcontainers 套件替代，覆盖 confirm、return、TTL/DLX、崩溃接管、重复投递与 Inbox。
+- 本节前文是 TASK-01 当时的历史结果。TASK-09 现已提供独立 Testcontainers 配置，并使用全新
+  MySQL 8.0.46 与官方 RabbitMQ management 镜像完成可断言的可靠消息集成验证；当前结果记录在
+  `docs/quality/baseline.md` 第 6 节。

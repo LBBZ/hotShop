@@ -5,5 +5,6 @@ public enum AuditResourceType {
     REFRESH_TOKEN_FAMILY,
     USER,
     CATALOG_PRODUCT,
-    FLASH_SALE_ACTIVITY
+    FLASH_SALE_ACTIVITY,
+    OUTBOX_EVENT
 }

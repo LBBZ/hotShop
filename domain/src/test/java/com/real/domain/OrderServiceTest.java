@@ -7,6 +7,8 @@ import com.real.domain.entity.OrderItem;
 import com.real.domain.entity.Product;
 import com.real.domain.mapper.OrderMapper;
 import com.real.domain.mapper.ProductMapper;
+import com.real.domain.messaging.OutboxMapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.real.domain.service.OrderService;
 import com.real.domain.service.advance.OrderStateService;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,6 +18,7 @@ import org.mockito.MockitoAnnotations;
 
 import java.math.BigDecimal;
 import java.util.Arrays;
+import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -27,6 +30,8 @@ class OrderServiceTest {
     private ProductMapper productMapper;
     @Mock
     private OrderMapper orderMapper;
+    @Mock
+    private OutboxMapper outboxMapper;
     private OrderStateService orderStateService;
     private OrderService orderService;
     @Mock
@@ -36,7 +41,7 @@ class OrderServiceTest {
         try (AutoCloseable ignored = MockitoAnnotations.openMocks(this)) {
             // 初始化 Mock 对象
             orderService = new OrderService(orderMapper, pageHelperUtils);
-            orderStateService = new OrderStateService(orderMapper, productMapper);
+            orderStateService = new OrderStateService(orderMapper, productMapper, outboxMapper, new ObjectMapper(), Duration.ofMinutes(15));
         }
     }
 
@@ -68,27 +73,9 @@ class OrderServiceTest {
     }
 
     @Test
-    void cancelLegacyPendingOrderRejectsOrdersExcludedByTheReservationFilter() {
-        when(orderMapper.selectLegacyPendingOrderById("seckill-order")).thenReturn(null);
-
-        assertFalse(orderStateService.cancelLegacyPendingOrder("seckill-order"));
-
-        verify(orderMapper, never()).cancelLegacyPendingOrder(anyString());
-        verify(productMapper, never()).increaseStock(anyLong(), anyInt());
-    }
-
-    @Test
-    void cancelLegacyPendingOrderReleasesStockOnlyAfterConditionalUpdateWins() {
-        Order order = buildTestOrder();
-        order.setOrderId("legacy-order");
-        when(orderMapper.selectLegacyPendingOrderById("legacy-order")).thenReturn(order);
-        when(orderMapper.cancelLegacyPendingOrder("legacy-order")).thenReturn(1);
-
-        assertTrue(orderStateService.cancelLegacyPendingOrder("legacy-order"));
-
-        verify(orderMapper).cancelLegacyPendingOrder("legacy-order");
-        verify(productMapper).increaseStock(1001L, 2);
-        verify(productMapper).increaseStock(1002L, 1);
+    void legacyOrderTimeoutRejectsNonPositiveConfiguration() {
+        assertThrows(IllegalArgumentException.class, () -> new OrderStateService(
+                orderMapper, productMapper, outboxMapper, new ObjectMapper(), Duration.ZERO));
     }
 
     @Test
@@ -124,7 +111,7 @@ class OrderServiceTest {
     }
 
     @Test
-    void testCreateOrder_RetryOnConflict() {
+    void createOrderDoesNotRetryInsideTheSameBean() {
         Order order = buildTestOrder();
 
         // 模拟商品数据
@@ -142,8 +129,8 @@ class OrderServiceTest {
         when(productMapper.reduceStock(1002L, 1)).thenReturn(1);
 
         // 执行并验证
-        assertDoesNotThrow(() -> orderStateService.createOrder(order));
-        verify(productMapper, times(2)).reduceStock(1001L, 2); // 验证重试次数
+        assertThrows(InventoryShortageException.class, () -> orderStateService.createOrder(order));
+        verify(productMapper, times(1)).reduceStock(1001L, 2);
     }
 
 }

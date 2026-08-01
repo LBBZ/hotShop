@@ -37,6 +37,7 @@ Compose 中只有一次性 `database-migrator` 可以执行迁移；portal、adm
 | `1.2` | `V1_2__secure_refresh_sessions.sql` | 为分域 Refresh Session 增加 session type、CSRF hash、family 索引和 SERVICE 审计 actor |
 | `1.3` | `V1_3__unified_append_only_audit_log.sql` | 增加 delegated actor、source、调查索引与 UPDATE/DELETE 阻断触发器 |
 | `1.4` | `V1_4__reliable_seckill_order_processing.sql` | 扩展 Reservation immutable facts；新增 Stream 处理账本、对账问题与断点表 |
+| `1.5` | `V1_5__reliable_outbox_delivery.sql` | 增加 Outbox 租约、fencing、连续尝试、人工重放历史、CHECK 与领取/FAILED 索引 |
 
 ## 2. 表、业务键与状态
 
@@ -125,7 +126,8 @@ ROTATED token 会将其置为 REUSED、撤销同 family 的所有 ACTIVE token�
 | `refresh_token(family_id,created_at)` | 令牌复用后撤销整个 family |
 | `refresh_token(user_id,status,expires_at)` | 用户有效 token 查询和过期清理 |
 | `refresh_token(parent_token_id)`（唯一） | 由父令牌定位唯一后继，并仲裁并发轮换 |
-| `outbox_event(status,available_at,outbox_id)` | 发布器领取可投递事件，稳定批量翻页 |
+| `outbox_event(status,available_at,lease_expires_at,outbox_id)` | 发布器领取到期 NEW 或过期 PUBLISHING 租约 |
+| `outbox_event(status,outbox_id)` | 管理员按稳定降序游标调查 FAILED 事件 |
 | `outbox_event(aggregate_type,aggregate_id,outbox_id)` | 聚合事件追溯 |
 | `processed_event(event_id)` | 跨消费者调查同一事件 |
 | `seckill_event_processing(status,next_attempt_at,processing_id)` | Pending 恢复和到期退避重试 |
@@ -253,3 +255,23 @@ Testcontainers 隔离和回收。
 
 验收没有停止、修改或删除原有 HotShop 容器/卷。隔离 project 的容器和网络在验证后移除；遵守任务
 约束，验证过程中创建的命名卷未删除。
+
+## 9. TASK-09：V1.5 Outbox 与 Inbox 约束
+
+`V1_5__reliable_outbox_delivery.sql` 只扩展现有 `outbox_event`，不修改 V1.0～V1.4，且继续禁止
+数据库外键。`event_id` 唯一键是业务事件去重边界；`status` 仍只允许 `NEW`、`PUBLISHING`、
+`PUBLISHED`、`FAILED`。`publish_attempts` 是从创建起累计的发布尝试次数，人工重放不会清零；
+`consecutive_attempts` 是本轮自动重试次数，管理员重放时清零；`manual_replay_count` 保留人工操作历史。
+V1.5 接管时，旧版本遗留且无法证明所有权的 `PUBLISHING` 行会重置为 `NEW`，保留累计
+`publish_attempts`，并记录 `LEGACY_PUBLISHING_RECOVERED` 类别，避免 NULL 租约造成永久卡住。
+
+发布所有权由 `lease_token + lease_expires_at + version` 共同表达。领取事务以
+`FOR UPDATE SKIP LOCKED` 分批锁定到期 `NEW` 或租约过期的 `PUBLISHING`，写入新 token、递增
+`version` 后立即提交。发布结果更新必须同时匹配 `outbox_id`、状态、token 和 version；因此旧实例的
+迟到 confirm 无法越过 fencing。`idx_outbox_claim(status, available_at, lease_expires_at, outbox_id)`
+支持领取和过期接管，`idx_outbox_failed_cursor(status, outbox_id)` 支持管理员稳定游标查询。
+
+新增计数与版本均有非负 `CHECK`，租约 token/到期时间必须同时为空或同时存在。`last_error` 与
+`failure_category` 只写稳定、有限的脱敏类别，不写 payload、凭据、SQL、异常堆栈或原始错误。
+消费者 Inbox 继续使用 `processed_event` 的 `(consumer_name, event_id)` 主键，并与业务效果在同一
+MySQL 事务提交。

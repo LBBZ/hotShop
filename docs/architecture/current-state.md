@@ -4,6 +4,7 @@
 > `Dockerfile`、`docker-compose.yml`、`.dockerignore` 与 `docker/rabbitmq/` 在 TASK-00
 > 开始前已有用户未提交修改；下文按当前工作区盘点，但 TASK-00 未改写这些文件。
 > 数据库第 4 节及相关已知问题已由 TASK-02 更新到 Flyway 1.1 基线。
+> TASK-09 已在 2026-08-01 更新第 1、2、3、5、6、7、8 节中与可靠消息相关的现状。
 
 ## 1. 运行时全景
 
@@ -28,12 +29,12 @@ flowchart LR
     portal --> redis[("单 Redis 实例")]
     admin --> redis
     task --> redis
-    portal --> rabbit[["RabbitMQ 4"]]
+    task --> rabbit[["RabbitMQ 4"]]
     rabbit --> task
 ```
 
-当前不是微服务架构，也没有服务注册、配置中心、API 网关或分布式事务框架。进程之间目前只通过
-RabbitMQ 的订单超时消息发生异步协作。
+当前不是微服务架构，也没有服务注册、配置中心、API 网关或分布式事务框架。portal 只在 MySQL
+事务内写业务数据和 Outbox；task 从 MySQL 领取 Outbox 后向 RabbitMQ 投递，并消费普通订单超时消息。
 
 ## 2. Maven 模块与依赖
 
@@ -48,7 +49,7 @@ MyBatis Spring Boot Starter 3.0.4。仓库有 `.mvn/` 目录，但没有 `mvnw` 
 | `security` | library | `domain` | Spring Security、JWT、Token 黑名单 |
 | `portal` | application | `security` | 用户认证、商品、用户与订单 HTTP API |
 | `admin` | application | `security` | 管理员认证、用户、商品与订单 HTTP API |
-| `task` | application | `domain` | RabbitMQ 超时消费与定时订单扫描 |
+| `task` | application | `domain` | Outbox 发布与普通订单 RabbitMQ 超时消费 |
 
 因为 `security -> domain -> infrastructure/common`，`portal` 和 `admin` 会传递获得数据库、Redis、
 RabbitMQ/OpenAPI 等能力；`task -> domain` 也会传递获得这些能力。
@@ -67,8 +68,7 @@ RabbitMQ/OpenAPI 等能力；`task -> domain` 也会传递获得这些能力。
 
 - 三个进程都从各自的 `application.yml` 启动；`SPRING_PROFILES_ACTIVE` 默认为空，不会自动启用
   `dev`。
-- 三个进程都导入 `classpath:config/common-db.yml`、`common-redis.yml`；
-  `portal` 和 `task` 还导入 `common-jwt.yml` 与 `orderTimeoutConfig.yml`，`admin` 导入
+- 三个进程都导入 `classpath:config/common-db.yml`、`common-redis.yml`；portal 和 admin 还导入
   `common-jwt.yml`。
 - `application-prod.yml` 只有显式激活 `prod` 时生效；`application-dev.yml` 只有显式激活
   `dev` 时生效。
@@ -78,16 +78,14 @@ RabbitMQ/OpenAPI 等能力；`task -> domain` 也会传递获得这些能力。
   MySQL 4306、Redis 7379、RabbitMQ AMQP 6672、RabbitMQ Management 15673。
   因此从宿主机直接启动 Java 进程时，必须显式覆盖基础设施端口；当前 YAML 只提供了 host
   环境变量，没有为这些宿主机映射端口提供统一启动命令。
-- `rabbitmq.enabled=true` 时加载 `RabbitMQConfig` 和 `RabbitMQService`；admin 将其设为
-  `false`，portal/task 为 `true`。
+- task 加载 RabbitMQ 拓扑、Outbox 发布器和手动 ACK 消费者。portal 排除 RabbitMQ 自动配置，
+  创建普通订单时不建立 RabbitMQ 连接；admin 也不发布消息。
 
 ### 3.3 Compose 服务
 
 当前 Compose 定义 `mysql`、`redis`、`rabbitmq`、`portal-service`、`admin-service`、
 `task-service`。MySQL、Redis、RabbitMQ 使用持久卷；三个应用由根 `Dockerfile` 的 Maven
-builder 阶段按模块构建。当前工作区的 RabbitMQ 镜像会下载并启用
-`rabbitmq_delayed_message_exchange` 插件，这与总纲最终约束不一致，留待 TASK-03/TASK-09
-处理。
+builder 阶段按模块构建。RabbitMQ wrapper 仅基于官方 management 镜像，不下载或启用第三方插件。
 
 ## 4. 数据库基线
 
@@ -95,7 +93,7 @@ TASK-02 已将结构事实切换到 `database/src/main/resources/db/migration`�
 `database-migrator` 是唯一迁移执行者，三个 Java 进程显式关闭 Flyway 并等待迁移成功；旧
 `docker/mysql/init.sql` 及其自动挂载已移除。
 
-当前版本 `1.1` 包含 `app_user`、`catalog_product`、`flash_sale_activity`、`sale_reservation`、
+当前版本 `1.5` 包含 `app_user`、`catalog_product`、`flash_sale_activity`、`sale_reservation`、
 `sales_order`、`sales_order_item`、`payment_order`、`refresh_token`、`outbox_event`、
 `processed_event`、`audit_log`。所有跨表 ID 都由应用层校验；结构使用业务唯一键、CHECK、
 NOT NULL、精确金额和查询驱动索引维持局部一致性。完整表、状态、索引和接管说明见
@@ -126,27 +124,25 @@ Key 使用 JDK value 序列化：
 | Key 模式 | DB | 值 | TTL | 写入方 |
 | --- | --- | --- | --- | --- |
 | `jwt:blacklist:{sha256(token)}` | 0 | `"invalid"` | Token 剩余秒数 | `TokenBlacklistService` |
-| `lock:order:{orderId}` | 15 | `true` | 10 秒 | `OrderTimeoutConsumer` |
-
-订单锁使用 `SET NX EX` 获取，但释放是无条件 `DEL`，没有随机所有者令牌和 compare-and-delete。
-该 Key 只用于 RabbitMQ 超时消费者，不用于创建订单。
+普通订单超时消费者不再使用 Redis 锁；它通过 MySQL Inbox、行锁和条件更新保证幂等业务效果。
 
 ## 6. RabbitMQ 基线
 
-`rabbitmq.enabled=true` 时声明：
+task 声明版本化、durable 的可靠消息拓扑：
 
 | 类型 | 名称 | 配置 |
 | --- | --- | --- |
-| Custom exchange | `order.delay.exchange` | durable、type=`x-delayed-message`、`x-delayed-type=direct` |
-| Queue | `order.delay.queue` | durable、`x-max-length=10000` |
-| Binding | queue → exchange | routing key=`order.delay.routingKey` |
+| Topic exchange | `hotshop.business.events.v1` | Outbox 业务事件 |
+| Direct exchange | `hotshop.order.timeout.schedule.v1` | 普通订单超时调度入口 |
+| TTL queue | `hotshop.order.timeout.delay.v1` | 固定 TTL，并配置 DLX 与 routing key |
+| Direct exchange / queue | `hotshop.order.timeout.ready.v1` | 到期后的手动 ACK 消费 |
+| Dead-letter exchange / queue | `hotshop.order.timeout.dead.v1` | 毒消息隔离 |
 
-portal 创建订单后发送持久化延迟消息，message body 是 `orderId`；task 的
-`OrderTimeoutConsumer` 监听队列。当前发送没有提供 `CorrelationData`，没有启用 mandatory/
-return callback；confirm callback 只在 nack 时输出一行。消费者使用容器默认 ACK 行为。
-
-另有 `OrderTimeoutJob` 每 60 秒查询一次早于阈值的 PENDING 订单并用 parallel stream 取消，
-与 RabbitMQ 超时消费路径并存。
+portal 在订单事务中写 `ORDER_CREATED` 和 `LEGACY_ORDER_TIMEOUT_REQUESTED` Outbox。task 使用租约与
+fencing 分批领取，数据库事务提交后才进行网络调用；消息持久化并使用 event ID 关联 confirm。
+只有 broker ACK、无 mandatory return 且当前租约仍有效时才标记 `PUBLISHED`。普通订单超时采用
+TTL + DLX，消费者事务提交后手动 ACK；旧定时扫描和 Redis 锁路径已移除。完整语义见
+`docs/architecture/reliable-messaging.md`。
 
 ## 7. HTTP 接口
 
@@ -166,7 +162,7 @@ Spring Security 当前允许匿名访问认证入口、portal 商品接口和 Op
 | GET | `/portal/products/all` | 全部商品 |
 | GET | `/portal/products/search` | 商品条件搜索 |
 | GET | `/portal/users/me` | 当前用户 |
-| POST | `/portal/orders/add` | 创建订单并发送超时消息 |
+| POST | `/portal/orders/add` | 在单个 MySQL 事务中创建订单并写两个 Outbox |
 | GET | `/portal/orders/page` | 当前用户订单分页 |
 | GET | `/portal/orders/search` | 当前用户订单条件搜索 |
 
@@ -185,26 +181,20 @@ Spring Security 当前允许匿名访问认证入口、portal 商品接口和 Op
 | GET | `/admin/orders/{orderId}` | 订单详情 |
 | GET | `/admin/orders/user/{userId}` | 用户订单 |
 | GET | `/admin/orders/search` | 订单搜索 |
+| GET | `/admin/api/v1/outbox/failed` | 管理员查询脱敏的 FAILED Outbox |
+| POST | `/admin/api/v1/outbox/{eventId}/replay` | 管理员记录原因并重置 FAILED 事件 |
 
 两个 Web 应用默认提供 `/v3/api-docs` 与 `/swagger-ui/**`（prod profile 关闭）。Actuator 依赖
 存在，但当前没有专门的 exposure 配置。
 
 ## 8. 已知问题与后续归属
 
-下列均为 TASK-00 盘点结果，本任务不修复。
+下列 TASK-00 问题在当前基线中的状态如下；TASK-09 已关闭的旧路径不再列为当前问题。
 
 | 问题 | 代码位置 | 触发条件与当前后果 | 后续任务 |
 | --- | --- | --- | --- |
-| RabbitMQ 超时分钟换算错误 | `domain/src/main/java/com/real/domain/infra/RabbitMQService.java:59-65` | 每分钟乘 `30 * 1000`，配置 15 分钟实际延迟约 7.5 分钟 | TASK-09 |
-| publisher confirm 不闭环 | `domain/src/main/java/com/real/domain/infra/RabbitMQService.java:22-33,43-51` | 发送不带 CorrelationData；nack 只打印，无持久状态、有限重试、告警或 return 处理 | TASK-09 |
-| 简单 Redis 锁释放不安全 | `task/src/main/java/com/real/task/timeoutOrderTask/OrderTimeoutConsumer.java:28-43` | 处理超过 10 秒后锁可能被他人重新取得，旧消费者 finally 中无条件 DEL 会删除新锁 | TASK-08 |
-| 两套超时取消路径竞态 | `task/src/main/java/com/real/task/timeoutOrderTask/OrderTimeoutJob.java:32-40` 与 `task/src/main/java/com/real/task/timeoutOrderTask/OrderTimeoutConsumer.java:26-43` | 每分钟扫描和 Rabbit 消费可能并发取消同一订单；状态读取和更新不是一条条件 SQL | TASK-09 |
-| 定时扫描无批次/租约 | `task/src/main/java/com/real/task/timeoutOrderTask/OrderTimeoutJob.java:33-40` | PENDING 数据量大或多 task 实例时全量结果并行处理，可能重复、拥塞且不可观测 | TASK-09 |
 | 条件扣库存只防正常正数超卖 | `domain/src/main/java/com/real/domain/mapper/ProductMapper.xml:19-23` | 正数并发扣减由条件 SQL 保护；零/负数量未校验，负数会反向增加库存 | TASK-02、TASK-08 |
-| 订单创建事务注解被自调用绕过 | `domain/src/main/java/com/real/domain/service/advance/OrderStateService.java:50-93` | `createOrder` 直接调用同类 `tryCreateOrder`，`REQUIRES_NEW` 代理不生效；中途失败重试可能遗留部分扣减 | TASK-08 |
 | 数据库结构与 Mapper 兼容 | `database/src/main/resources/db/migration/`、`domain/.../mapper/*.xml` | TASK-02 已切换 Flyway、移除旧初始化源并用真 MySQL 测试重命名兼容；后续业务仍须实际调用应用层引用校验 | TASK-07、TASK-08 |
-| RabbitMQ 依赖 delayed-message 插件 | `infrastructure/src/main/java/com/real/infrastructure/RabbitMQ/RabbitMQConfig.java:29-40`、`docker/rabbitmq/Dockerfile` | 无插件时 exchange 声明失败；当前工作区镜像主动下载插件 | TASK-03、TASK-09 |
-| 旧 Rabbit 测试不是隔离单测 | `task/src/test/java/com/real/task/test/RabbitMQConnectionTest.java:8-19` | `@SpringBootTest` 需要外部 MySQL/Redis/RabbitMQ，且只发送、不断言投递结果 | TASK-01 |
 | 构建与跨平台编码基线不完整 | 根 `pom.xml`、缺失的 `mvnw*`/`.gitattributes` | 无 Wrapper；Git `core.autocrlf=true`；未显式按 UTF-8 读取时中文可显示为乱码 | TASK-01 |
 | 仓库内存在固定 JWT 密钥和默认凭据 | `common-jwt.yml:2`、各 `application*.yml`、`docker-compose.yml` | 使用默认配置启动会复用仓库值，不满足最终密钥管理要求 | TASK-03、TASK-05 |
 

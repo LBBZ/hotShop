@@ -6,5 +6,6 @@ public sealed interface AuditStateSummary permits
         AgentDelegationAuditState,
         ProductMutationAuditState,
         FlashSaleActivityLoadAuditState,
+        OutboxReplayAuditState,
         OperationFailureAuditState {
 }

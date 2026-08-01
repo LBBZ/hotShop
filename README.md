@@ -115,18 +115,15 @@ graph TD
 ```
 
 ### 3.5 超时订单自动取消
-    订单新建时向 RabbitMQ 延迟交换机发送订单消息,延迟交换机在订单超时后向发送到相关队列,监听器监听并处理订单消息
-    并用定时任务扫描数据库做兜底处理
+    普通订单创建、库存扣减与两个 Outbox 事件在同一 MySQL 事务提交。task 发布器随后将
+    Outbox 事件投递到 RabbitMQ；订单超时通过 TTL 队列和 DLX 转发到 ready queue。
 ```mermaid
-graph TD
-    A1[新建订单\n发送消息] --> A2[延迟交换机延迟过后\n转发消息到消息队列] --> B{获取分布式锁}
-    B -->|成功| C[查询订单信息]
-    C --> D{订单状态是否为待处理}
-    D -->|是| E[取消订单]
-    D -->|否| F[结束]
-    B -->|失败| F
-    E --> G[释放分布式锁]
-    G --> F
+flowchart LR
+    A["订单事务"] --> B[("MySQL Outbox")]
+    B --> C["task 发布器"]
+    C --> D["TTL delay queue"]
+    D --> E["DLX / ready queue"]
+    E --> F["Inbox + 条件取消事务"]
 ```    
 ## 4. 业务架构
 
@@ -290,7 +287,7 @@ graph TD
         hotShop-admin      hotshop-admin-service              "java -jar /app.jar"                                                                                                                                                                                                                                                                                                                                                                                                                              admin-service    36 minutes ago   Up 36 minutes             0.0.0.0:8088->8088/tcp, :::8088->8088/tcp
         hotShop-mysql      mysql:8.0                          "docker-entrypoint.sh mysqld"                                                                                                                                                                                                                                                                                                                                                                                                                     mysql            36 minutes ago   Up 36 minutes (healthy)   33060/tcp, 0.0.0.0:4306->3306/tcp, :::4306->3306/tcp
         hotShop-portal     hotshop-portal-service             "java -jar /app.jar"                                                                                                                                                                                                                                                                                                                                                                                                                              portal-service   36 minutes ago   Up 36 minutes             0.0.0.0:8080->8080/tcp, :::8080->8080/tcp
-        hotShop-rabbitmq   rabbitmq:4.0.7-management-alpine   "docker-entrypoint.sh bash -c '\nchown -R rabbitmq:rabbitmq /plugins /var/lib/rabbitmq;\nif [ ! -f /plugins/rabbitmq_delayed_message_exchange-4.0.7.ez ]; then\n  wget -q -P /plugins https://github.com/rabbitmq/rabbitmq-delayed-message-exchange/releases/download/v4.0.7/rabbitmq_delayed_message_exchange-v4.0.7.ez;\nfi;\nrabbitmq-plugins enable --offline rabbitmq_delayed_message_exchange;\nexec su-exec rabbitmq rabbitmq-server\n'"   rabbitmq         36 minutes ago   Up 36 minutes (healthy)   4369/tcp, 5671/tcp, 15671/tcp, 15691-15692/tcp, 25672/tcp, 0.0.0.0:15672->15672/tcp, :::15672->15672/tcp, 0.0.0.0:6672->5672/tcp, :::6672->5672/tcp
+        hotShop-rabbitmq   rabbitmq:4.0.7-management-alpine   "docker-entrypoint.sh rabbitmq-server"   rabbitmq         36 minutes ago   Up 36 minutes (healthy)   0.0.0.0:15673->15672/tcp, 0.0.0.0:6672->5672/tcp
         hotShop-redis      redis:alpine                       "docker-entrypoint.sh redis-server"                                                                                                                                                                                                                                                                                                                                                                                                               redis            36 minutes ago   Up 36 minutes (healthy)   0.0.0.0:7379->6379/tcp, :::7379->6379/tcp
         hotShop-task       hotshop-task-service               "java -jar /app.jar"                                                                                                                                                                                                                                                                                                                                                                                                                              task-service     36 minutes ago   Up 36 minutes             0.0.0.0:8888->8888/tcp, :::8888->8888/tcp
      ```
@@ -317,4 +314,3 @@ graph TD
      ```bash
         docker-compose down -v
      ```
-   

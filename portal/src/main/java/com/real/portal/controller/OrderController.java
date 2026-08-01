@@ -9,7 +9,6 @@ import com.real.common.api.dto.OrderResponse;
 import com.real.common.enums.OrderStatus;
 import com.real.domain.api.ApiDtoMapper;
 import com.real.domain.entity.Order;
-import com.real.domain.infra.RabbitMQService;
 import com.real.domain.service.OrderService;
 import com.real.domain.service.advance.OrderStateService;
 import com.real.security.entity.CustomUserDetails;
@@ -19,7 +18,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -42,21 +40,15 @@ import java.time.Instant;
 @PreAuthorize("hasAuthority('ROLE_USER')")
 @SecurityRequirement(name = "bearerAuth")
 public class OrderController {
-    @Value("${timeout.orderCancel}")
-    private long timeoutThreshold;
-
     private final OrderService orderService;
     private final OrderStateService orderStateService;
-    private final RabbitMQService rabbitMQService;
 
     public OrderController(
             OrderService orderService,
-            OrderStateService orderStateService,
-            RabbitMQService rabbitMQService
+            OrderStateService orderStateService
     ) {
         this.orderService = orderService;
         this.orderStateService = orderStateService;
-        this.rabbitMQService = rabbitMQService;
     }
 
     @Operation(
@@ -71,7 +63,6 @@ public class OrderController {
         Order order = ApiDtoMapper.toOrder(request);
         order.setUserId(principal.getUserId());
         String orderId = orderStateService.createOrder(order);
-        rabbitMQService.sendOrderTimeoutMessage(orderId, timeoutThreshold);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(new OrderCreatedResponse(orderId, OrderStatus.PENDING));
     }

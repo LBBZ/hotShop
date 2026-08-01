@@ -7,7 +7,6 @@ import com.real.common.enums.OrderStatus;
 import com.real.common.enums.Role;
 import com.real.domain.entity.Order;
 import com.real.domain.entity.Product;
-import com.real.domain.infra.RabbitMQService;
 import com.real.domain.service.OrderService;
 import com.real.domain.service.ProductService;
 import com.real.domain.service.UserService;
@@ -24,6 +23,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.http.HttpHeaders;
+import org.springframework.context.ApplicationContext;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -58,6 +58,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class PortalApiContractTest {
     @Autowired
     private MockMvc mockMvc;
+    @Autowired
+    private ApplicationContext applicationContext;
+
+    @Test
+    void portalDoesNotCreateRabbitConnectionFactory() {
+        assertThat(applicationContext.getBeansOfType(
+                org.springframework.amqp.rabbit.connection.ConnectionFactory.class)).isEmpty();
+    }
 
     @MockitoBean
     private ProductService productService;
@@ -67,8 +75,6 @@ class PortalApiContractTest {
     private OrderService orderService;
     @MockitoBean
     private OrderStateService orderStateService;
-    @MockitoBean
-    private RabbitMQService rabbitMQService;
     @MockitoBean
     private TokenBlacklistService tokenBlacklistService;
     @MockitoBean

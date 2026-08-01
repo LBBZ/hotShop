@@ -120,7 +120,7 @@ HTTP verification passed: project=hotshop-task04-http-d77c7c2989
 - `.env.example`、Compose 默认值、MySQL `--default-time-zone`、全部 JDBC `serverTimezone`、
   Hikari `connectionTimeZone`/`forceConnectionTimeZoneToSession` 和三个 JVM 的 `TZ` 已统一为
   UTC。
-- `OrderTimeoutJob` 使用注入的 UTC `Clock` 计算无时区 `DATETIME(6)` 阈值，测试用固定时钟证明
+- 当时的普通订单扫描任务（已由 TASK-09 删除）使用注入的 UTC `Clock` 计算无时区 `DATETIME(6)` 阈值，测试用固定时钟证明
   传给 Mapper/Service 的时间没有本地时区偏移。
 - MySQL Testcontainers 测试证明确定的 UTC `LocalDateTime` 经 Mapper 时间筛选和
   `ApiDtoMapper` 后仍输出相同的 `Z` 时刻。

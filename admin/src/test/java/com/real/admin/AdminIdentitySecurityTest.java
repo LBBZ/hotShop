@@ -44,6 +44,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -122,7 +123,7 @@ class AdminIdentitySecurityTest {
                 .validateMigrationNaming(true)
                 .cleanDisabled(true)
                 .load();
-        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(5);
+        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(6);
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
         String hash = new BCryptPasswordEncoder().encode(PASSWORD);
         jdbcTemplate.update(
@@ -345,6 +346,101 @@ class AdminIdentitySecurityTest {
     }
 
     @Test
+    void onlyAdministratorAccessCanUseOutboxOperations() throws Exception {
+        CustomUserDetails userPrincipal = CustomUserDetails.builder()
+                .userId(userId).username(USERNAME).password("")
+                .authorities(List.of(new SimpleGrantedAuthority("ROLE_USER"))).build();
+        String userAccess = jwtTokenUtil.issueUserAccess(userPrincipal).value();
+        String agentAccess = jwtTokenUtil.issueAgentDelegation(
+                userId, USERNAME, "hotshop-agent-service", Set.of("catalog:read")).value();
+
+        mockMvc.perform(get("/admin/api/v1/outbox/failed")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess())))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/admin/api/v1/outbox/failed")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(userAccess)))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/admin/api/v1/outbox/failed")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentAccess)))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/admin/api/v1/outbox/failed"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void failedOutboxPaginationIsStableRedactedAndReplayPreservesHistory() throws Exception {
+        String older = insertOutbox("FAILED", 8, 8, 1, "BROKER_NACK", "secret payload");
+        String newer = insertOutbox("FAILED", 11, 8, 2, "CONFIRM_TIMEOUT", "credential=hidden");
+
+        MvcResult firstPage = mockMvc.perform(get("/admin/api/v1/outbox/failed")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess()))
+                        .param("limit", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].eventId").value(newer))
+                .andExpect(jsonPath("$.items[0].failureCategory").value("CONFIRM_TIMEOUT"))
+                .andExpect(jsonPath("$.items[0].publishAttempts").value(11))
+                .andExpect(jsonPath("$.items[0].payload").doesNotExist())
+                .andExpect(jsonPath("$.items[0].lastError").doesNotExist())
+                .andExpect(jsonPath("$.hasMore").value(true))
+                .andReturn();
+        String cursor = objectMapper.readTree(firstPage.getResponse().getContentAsString())
+                .path("nextCursor").asText();
+        mockMvc.perform(get("/admin/api/v1/outbox/failed")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess()))
+                        .param("limit", "1").param("cursor", cursor))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].eventId").value(older));
+
+        mockMvc.perform(post("/admin/api/v1/outbox/{eventId}/replay", newer)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"broker maintenance completed\"}"))
+                .andExpect(status().isAccepted());
+
+        Map<String, Object> state = jdbcTemplate.queryForMap("""
+                SELECT status,publish_attempts,consecutive_attempts,manual_replay_count,
+                       lease_token,lease_expires_at,failure_category,last_error
+                  FROM outbox_event WHERE event_id=?
+                """, newer);
+        assertThat(state.get("status")).isEqualTo("NEW");
+        assertThat(state.get("publish_attempts")).isEqualTo(11);
+        assertThat(state.get("consecutive_attempts")).isEqualTo(0);
+        assertThat(state.get("manual_replay_count")).isEqualTo(3);
+        assertThat(state.get("lease_token")).isNull();
+        assertThat(state.get("lease_expires_at")).isNull();
+        assertThat(state.get("failure_category")).isNull();
+        assertThat(state.get("last_error")).isNull();
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM audit_log
+                 WHERE action='OUTBOX_REPLAY' AND resource_id=? AND result='SUCCESS'
+                   AND JSON_UNQUOTE(JSON_EXTRACT(state_summary,'$.reason'))='broker maintenance completed'
+                """, Integer.class, newer)).isOne();
+    }
+
+    @Test
+    void outboxReplayRejectsInvalidInputAndEveryNonFailedStateWithAuditedConflict() throws Exception {
+        mockMvc.perform(post("/admin/api/v1/outbox/{eventId}/replay", "not-a-uuid")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"valid reason\"}"))
+                .andExpect(status().isBadRequest());
+
+        for (String state : List.of("NEW", "PUBLISHING", "PUBLISHED")) {
+            String eventId = insertOutbox(state, 1, 1, 0, null, "safe");
+            mockMvc.perform(post("/admin/api/v1/outbox/{eventId}/replay", eventId)
+                            .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess()))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"reason\":\"must remain terminal\"}"))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.code").value("OUTBOX_NOT_FAILED"));
+            assertThat(jdbcTemplate.queryForObject("""
+                    SELECT COUNT(*) FROM audit_log WHERE action='OUTBOX_REPLAY'
+                      AND resource_id=? AND result='FAILURE'
+                    """, Integer.class, eventId)).isOne();
+        }
+    }
+
+    @Test
     void auditBusinessApiExposesNoMutationOperations() throws Exception {
         String access = adminAccess();
         mockMvc.perform(delete("/admin/api/v1/audit-logs")
@@ -524,6 +620,21 @@ class AdminIdentitySecurityTest {
                 Long.class,
                 requestId
         );
+    }
+
+    private String insertOutbox(String status, int attempts, int consecutive, int replays,
+            String category, String payloadMarker) {
+        String eventId = UUID.randomUUID().toString();
+        String lease = "PUBLISHING".equals(status) ? UUID.randomUUID().toString() : null;
+        LocalDateTime leaseExpiry = lease == null ? null : LocalDateTime.now().plusMinutes(1);
+        jdbcTemplate.update("""
+                INSERT INTO outbox_event(event_id,aggregate_type,aggregate_id,event_type,payload,status,
+                    publish_attempts,consecutive_attempts,manual_replay_count,failure_category,last_error,
+                    lease_token,lease_expires_at)
+                VALUES(?,'ORDER',?,'ORDER_CREATED',JSON_OBJECT('marker',?),?,?,?,?,?,?,?,?)
+                """, eventId, "order-" + eventId, payloadMarker, status, attempts, consecutive,
+                replays, category, category, lease, leaseExpiry);
+        return eventId;
     }
 
     private MockHttpServletRequest auditRequest(String requestId, String traceId) {

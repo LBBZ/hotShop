@@ -1,158 +1,110 @@
 package com.real.domain.service.advance;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.real.common.enums.OrderStatus;
 import com.real.common.exception.InventoryShortageException;
-import com.real.common.util.RetryUtils;
 import com.real.domain.entity.Order;
-import com.real.domain.entity.OrderItem;
 import com.real.domain.entity.Product;
 import com.real.domain.mapper.OrderMapper;
 import com.real.domain.mapper.ProductMapper;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.real.domain.messaging.OutboxMapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.UUID;
 
-// OrderStateService.java (领域服务)
 @Service
 public class OrderStateService {
+    private final OrderMapper orders;
+    private final ProductMapper products;
+    private final OutboxMapper outbox;
+    private final ObjectMapper json;
+    private final Duration legacyTimeout;
 
-    private final OrderMapper orderMapper;
-    private final ProductMapper productMapper;
-
-    @Autowired
-    public OrderStateService(OrderMapper orderMapper, ProductMapper productMapper) {
-        this.productMapper = productMapper;
-        this.orderMapper = orderMapper;
+    public OrderStateService(OrderMapper orders, ProductMapper products, OutboxMapper outbox, ObjectMapper json,
+            @Value("${hotshop.order.legacy-payment-timeout:15m}") Duration legacyTimeout) {
+        if (legacyTimeout == null || legacyTimeout.isZero() || legacyTimeout.isNegative()
+                || legacyTimeout.toMillis() > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("Legacy order timeout must be a positive duration");
+        }
+        this.orders = orders;
+        this.products = products;
+        this.outbox = outbox;
+        this.json = json;
+        this.legacyTimeout = legacyTimeout;
     }
 
-    /**
-     * 订单状态流转（如支付、取消）
-     * 包含数据库stock和order更新操作
-     */
+    @Transactional public void changeOrderStatus(Order order, OrderStatus status) {
+        if(!order.getStatus().canTransitionTo(status)) throw new IllegalStateException("Illegal order transition");
+        order.setStatus(status); orders.updateOrder(order); if(status==OrderStatus.CANCELED) releaseStock(order);
+    }
+
     @Transactional
-    public void changeOrderStatus(Order order, OrderStatus newStatus) {
-        // 校验状态流转合法性（如"待支付"只能转"已支付"或"已取消"）
-        if (!order.getStatus().canTransitionTo(newStatus)) {
-            throw new IllegalStateException("订单状态流转非法");
-        }
-        order.setStatus(newStatus);
-        orderMapper.updateOrder(order);
-        // 触发状态变更事件（如库存释放）
-        if (newStatus == OrderStatus.CANCELED) {
-            releaseStock(order);
-        }
+    public boolean tryCreateOrder(Order order) {
+        persistOrdinaryOrder(order);
+        return true;
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public boolean tryCreateOrder(Order order) {
-        // 1. 生成订单号（幂等性保障：订单号在重试中保持不变）
+    @Transactional
+    public String createOrder(Order order) {
+        persistOrdinaryOrder(order);
+        return order.getOrderId();
+    }
+
+    private void persistOrdinaryOrder(Order order) {
         if (order.getOrderId() == null) {
             order.setOrderId(UUID.randomUUID().toString());
             order.setStatus(OrderStatus.PENDING);
         }
-
-        // 2. 扣减库存（乐观锁）
-        for (OrderItem item : order.getItems()) {
-            int rows = productMapper.reduceStock(item.getProductId(), item.getQuantity());
-            if (rows == 0) {
-                throw new InventoryShortageException("库存不足或并发冲突: 商品ID " + item.getProductId());
+        for (var item : order.getItems()) {
+            if (products.reduceStock(item.getProductId(), item.getQuantity()) == 0) {
+                throw new InventoryShortageException(
+                        "Insufficient inventory for product " + item.getProductId());
             }
         }
-
-        // 3. 计算总金额
-        BigDecimal totalAmount = order.getItems().stream()
-                .map(item -> {
-                    Product product = productMapper.selectById(item.getProductId());
-                    item.setPrice(product.getPrice());
-                    return product.getPrice().multiply(BigDecimal.valueOf(item.getQuantity()));
-                })
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        order.setTotalAmount(totalAmount);
-
-        // 4. 保存订单和订单项
-        orderMapper.insertOrder(order);
-        order.getItems().forEach(item -> {
-            item.setOrderId(order.getOrderId());
-            orderMapper.insertOrderItem(item);
-        });
-        return true;
-    }
-
-    /**
-     * 创建订单
-     */
-    public String createOrder(Order order) {
-        RetryUtils.executeWithRetry(
-                () -> tryCreateOrder(order),  // 调用带事务的方法
-                3,      // 最大重试次数
-                200     // 重试间隔 200ms
-        );
-        return order.getOrderId();
-    }
-
-    /**
-     * 支付订单
-     */
-    @Transactional
-    public void payOrder(String orderId) {
-        Order order = orderMapper.selectOrderById(orderId);
-        if (order.getStatus().canTransitionTo(OrderStatus.PAID)) {
-            order.setStatus(OrderStatus.PAID);
-            orderMapper.updateOrder(order);
-        } else throw new IllegalStateException("订单当前状态不可支付");
-    }
-
-    /**
-     * 取消订单
-     */
-    @Transactional
-    public void cancelOrder(String orderId) {
-        Order order = orderMapper.selectOrderById(orderId);
-        if (order.getStatus().canTransitionTo(OrderStatus.CANCELED)) {
-            order.setStatus(OrderStatus.CANCELED);
-            orderMapper.updateOrder(order);
-            // 释放库存
-            releaseStock(order);
-        } else throw new IllegalStateException("订单当前状态不可取消");
-    }
-
-    /**
-     * Cancels only legacy orders. Seckill orders always carry a reservation_id and are
-     * deliberately excluded from the TASK-08/TASK-09 timeout boundary.
-     */
-    @Transactional
-    public boolean cancelLegacyPendingOrder(String orderId) {
-        Order order = orderMapper.selectLegacyPendingOrderById(orderId);
-        if (order == null || orderMapper.cancelLegacyPendingOrder(orderId) != 1) {
-            return false;
+        BigDecimal total = BigDecimal.ZERO;
+        for (var item : order.getItems()) {
+            Product product = products.selectById(item.getProductId());
+            item.setPrice(product.getPrice());
+            total = total.add(product.getPrice().multiply(BigDecimal.valueOf(item.getQuantity())));
         }
-        releaseStock(order);
-        return true;
+        order.setTotalAmount(total);
+        order.setExpiresAt(LocalDateTime.now(ZoneOffset.UTC).plus(legacyTimeout));
+        orders.insertOrder(order);
+        for (var item : order.getItems()) {
+            item.setOrderId(order.getOrderId());
+            orders.insertOrderItem(item);
+        }
+        writeEvents(order);
     }
 
-    /**
-     * 完成订单
-     */
-    @Transactional
-    public void completeOrder(String orderId) {
-        Order order = orderMapper.selectOrderById(orderId);
-        if (order.getStatus().canTransitionTo(OrderStatus.COMPLETED)) {
-            order.setStatus(OrderStatus.COMPLETED);
-            orderMapper.updateOrder(order);
-        } else throw new IllegalStateException("订单当前状态不可完成");
-    }
+    @Transactional public void payOrder(String id) { transition(id,OrderStatus.PAID,false); }
+    @Transactional public void cancelOrder(String id) { transition(id,OrderStatus.CANCELED,true); }
+    @Transactional public void completeOrder(String id) { transition(id,OrderStatus.COMPLETED,false); }
 
-    /**
-     * 释放库存
-     */
-    private void releaseStock(Order order) {
-        order.getItems().forEach(item ->
-                productMapper.increaseStock(item.getProductId(), item.getQuantity())
-        );
+    private void transition(String id,OrderStatus target,boolean restore) {
+        Order order=orders.selectOrderById(id);
+        if(order==null||!order.getStatus().canTransitionTo(target)) throw new IllegalStateException("Illegal order transition");
+        order.setStatus(target); orders.updateOrder(order); if(restore) releaseStock(order);
     }
-
+    private void releaseStock(Order order) { order.getItems().forEach(i->products.increaseStock(i.getProductId(),i.getQuantity())); }
+    private void writeEvents(Order order) {
+        Map<String,Object> p=new LinkedHashMap<>(); p.put("schemaVersion",1); p.put("orderId",order.getOrderId());
+        p.put("userId",order.getUserId()); p.put("amount",order.getTotalAmount().toPlainString()); p.put("currency","CNY");
+        p.put("expiresAtMs",order.getExpiresAt().toInstant(ZoneOffset.UTC).toEpochMilli());
+        try { String body=json.writeValueAsString(p);
+            outbox.insert(eventId("ORDER_CREATED",order.getOrderId()),"ORDER",order.getOrderId(),"ORDER_CREATED",body);
+            outbox.insert(eventId("LEGACY_ORDER_TIMEOUT_REQUESTED",order.getOrderId()),"ORDER",order.getOrderId(),"LEGACY_ORDER_TIMEOUT_REQUESTED",body);
+        } catch(JsonProcessingException e) { throw new IllegalStateException("Cannot serialize order event",e); }
+    }
+    static String eventId(String type,String id) { return UUID.nameUUIDFromBytes(("hotshop/outbox/v1/"+type+"/"+id).getBytes(StandardCharsets.UTF_8)).toString(); }
 }

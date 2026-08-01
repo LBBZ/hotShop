@@ -9,6 +9,7 @@
         <result property="totalAmount" column="total_amount"/>
         <result property="status" column="status"/>
         <result property="createdAt" column="created_at"/>
+        <result property="expiresAt" column="expires_at"/>
         <collection
                 property="items"
                 ofType="OrderItem"
@@ -23,8 +24,8 @@
     </resultMap>
 
     <insert id="insertOrder" parameterType="Order">
-        INSERT INTO sales_order (order_id, user_id, total_amount, status)
-        VALUES (#{orderId}, #{userId}, #{totalAmount}, #{status})
+        INSERT INTO sales_order (order_id, user_id, total_amount, currency, status, expires_at)
+        VALUES (#{orderId}, #{userId}, #{totalAmount}, 'CNY', #{status}, #{expiresAt})
     </insert>
     <update id="updateOrder" parameterType="Order">
         UPDATE sales_order
@@ -113,49 +114,6 @@
             </if>
         </where>
     </select>
-    <select id="selectLegacyPendingOrdersBefore" resultMap="orderResultMap">
-        SELECT
-            o.order_id,
-            o.user_id,
-            o.total_amount,
-            o.status,
-            o.created_at,
-            oi.order_item_id,
-            oi.order_id,
-            oi.product_id,
-            oi.quantity,
-            oi.price
-        FROM sales_order o
-        LEFT JOIN sales_order_item oi ON o.order_id = oi.order_id
-        WHERE o.status = 'PENDING'
-          AND o.reservation_id IS NULL
-          AND o.created_at &lt;= #{endTime}
-    </select>
-    <select id="selectLegacyPendingOrderById" resultMap="orderResultMap">
-        SELECT
-            o.order_id,
-            o.user_id,
-            o.total_amount,
-            o.status,
-            o.created_at,
-            oi.order_item_id,
-            oi.order_id,
-            oi.product_id,
-            oi.quantity,
-            oi.price
-        FROM sales_order o
-        LEFT JOIN sales_order_item oi ON o.order_id = oi.order_id
-        WHERE o.order_id = #{orderId}
-          AND o.status = 'PENDING'
-          AND o.reservation_id IS NULL
-    </select>
-    <update id="cancelLegacyPendingOrder">
-        UPDATE sales_order
-           SET status = 'CANCELED'
-         WHERE order_id = #{orderId}
-           AND status = 'PENDING'
-           AND reservation_id IS NULL
-    </update>
     <select id="selectOrdersByCursor" resultMap="orderResultMap">
         WITH paginated_orders AS (
             SELECT

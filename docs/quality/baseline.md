@@ -2,6 +2,8 @@
 
 > 执行日期：2026-07-26；工作目录：仓库根目录。结果只代表本次实际执行，不把未运行、被跳过或
 > 依赖解析失败的测试写成通过。
+>
+> 第 1～5 节保留 TASK-00 当时的历史证据；当前 TASK-09-RECONCILE-01 的可复现结果见第 6 节。
 
 ## 1. 快照与环境
 
@@ -100,18 +102,18 @@ docker run --name hotshop-task00-baseline-test `
 | 测试 | 描述 |
 | --- | --- |
 | `OrderStatusCharacterizationTest` | 当前 PENDING 转移、终态与英文持久化枚举解析 |
-| `RabbitMQServiceCharacterizationTest` | confirm callback 注册、持久消息属性，以及“1 分钟按 30 秒换算”的已知旧缺陷 |
-| `OrderTimeoutConsumerCharacterizationTest` | 锁成功/失败、PENDING 判断、取消与当前无条件释放顺序 |
+| 已删除的旧 Rabbit 发布特征测试 | 曾记录不可靠直接发送和错误时间换算；TASK-09 已用可靠性测试替代 |
+| 已删除的旧超时消费者特征测试 | 曾记录 Redis 锁和旧 ACK 行为；TASK-09 已用 Inbox/DLQ 测试替代 |
 
-`RabbitMQServiceCharacterizationTest` 对 2 分钟断言当前 delay 为 60,000ms，并在测试显示名中明确
+旧 Rabbit 发布特征测试曾对 2 分钟断言错误的 60,000ms，并在测试显示名中明确
 标记 `Current known defect (TASK-09)`。这是特征化旧行为，不表示分钟换算正确；TASK-09 修复时
 应先把该断言改成正确需求再修改生产实现。
 
 定向命令最终执行结果：BUILD SUCCESS，总耗时 25.340 秒。
 
 - `OrderStatusCharacterizationTest`：3 passed；
-- `RabbitMQServiceCharacterizationTest`：2 passed；
-- `OrderTimeoutConsumerCharacterizationTest`：3 passed；
+- 已删除的旧 Rabbit 发布特征测试：历史 2 passed；
+- 已删除的旧超时消费者特征测试：历史 3 passed；
 - 合计：8 tests，0 failures，0 errors，0 skipped。
 
 成功执行使用了 `hotshop-task00-m2` 临时 Maven 缓存卷。Java/Maven 的 TLS 下载连续两次无法取得
@@ -137,18 +139,19 @@ docker run --rm `
 - `common`：3 tests passed；
 - `domain`：现有 4 个 `OrderServiceTest` 与新增 2 个 RabbitMQ 特征测试全部通过；
 - `task`：新增 3 个消费者特征测试通过；
-- `task` 现有 `RabbitMQConnectionTest.testSendMessage`：ERROR，
+- `task` 当时的旧 Rabbit 联通测试（现已删除）：ERROR，
   `AmqpConnectException: java.net.ConnectException: Connection refused`，目标是
   `localhost:5672`；
 - 总计实际进入 13 个测试：12 passed，1 error，0 skipped。
 
-测试上下文还启动了 `OrderTimeoutJob`，它连接 `localhost:3306` 失败并在调度线程记录
+测试上下文当时还启动了现已删除的定时扫描器，它连接 `localhost:3306` 失败并在调度线程记录
 `CannotCreateTransactionException`。这再次证明旧 `@SpringBootTest` 不是可独立执行的单元测试；
 失败没有被隐藏或改成 skip。
 
 ## 4. 统一的本地验证命令
 
-当前仓库没有 Maven Wrapper。在 TASK-01 补齐 Wrapper 前，统一使用下列命令。
+TASK-00 当时仓库没有 Maven Wrapper；以下命令只保留为历史记录。当前仓库已提供 Wrapper，
+TASK-09 的 Java 21 验证命令见第 6 节。
 
 ### 4.1 首选：已安装可用 JDK 17 与 Maven 3.9.x
 
@@ -175,7 +178,7 @@ docker run --rm `
   maven:3.9.9-eclipse-temurin-17 `
   mvn -B -ntp -pl common,domain,task -am `
   "-Dsurefire.failIfNoSpecifiedTests=false" `
-  "-Dtest=OrderStatusCharacterizationTest,RabbitMQServiceCharacterizationTest,OrderTimeoutConsumerCharacterizationTest" `
+  "-Dtest=OrderStatusCharacterizationTest,ReliableRabbitTopologyTest,OutboxPublisherTest" `
   test
 ```
 
@@ -188,9 +191,29 @@ Linux/macOS 使用相同 Docker 参数，将 PowerShell 续行符反引号改为
 
 ## 5. 外部依赖验证边界
 
-- `task/.../RabbitMQConnectionTest` 是 `@SpringBootTest`，会加载 MySQL、Redis 和 RabbitMQ
+- 已删除的旧 Rabbit 联通测试曾加载本机 MySQL、Redis 和 RabbitMQ
   相关上下文，并向未声明的 `testQueue` 发送消息；它既不是隔离单测，也没有结果断言。
-- 本次没有成功启动 Compose 基础设施，因此没有 API、数据库集成、Redis 或 RabbitMQ 端到端
+- TASK-00 当次没有成功启动 Compose 基础设施，因此当时没有 API、数据库集成、Redis 或 RabbitMQ 端到端
   通过证据。
 - `docker compose config --quiet` 只属于静态配置验证。
-- 全量测试需在依赖下载恢复后重跑；TASK-01 应把外部依赖测试明确分层。
+- TASK-00 当时尚待全量重跑；后续任务已经完成测试分层与独立容器化验证。
+
+## 6. TASK-09-RECONCILE-01 当前验证基线
+
+执行日期：2026-08-01。Java 门禁在 Java 21 Maven 容器中从干净的 `target` 目录执行，命令为：
+
+```powershell
+./mvnw -B clean verify
+```
+
+结果：`BUILD SUCCESS`，9 个 Reactor 模块全部成功，总耗时 5 分 05 秒。Surefire 汇总为
+181 tests、0 failures、0 errors、0 skipped；模块测试数量为 common 5、domain 7、database 29、
+security 30、portal 40、admin 21、task 49。
+
+正式可靠性套件 `ReliableMessagingContainerTest` 使用全新 MySQL 8.0.46 与
+`rabbitmq:4.0.7-management-alpine` Testcontainers，18 tests 全部通过。它替代了旧的本机 Rabbit
+联通测试和旧超时特征测试，并对 broker confirm/return、有限重试、FAILED 人工重放、租约接管与
+fencing、TTL/DLX、崩溃重复投递、Inbox 幂等、毒消息 DLQ、库存回滚及秒杀隔离作业务断言。
+
+同次门禁还实际通过 `docker compose config --quiet`、三套 OpenAPI 客户端漂移检查、Web 的格式、
+lint、类型、14 个单元测试与生产构建，以及 Chromium 桌面/移动端 Playwright 6 tests。

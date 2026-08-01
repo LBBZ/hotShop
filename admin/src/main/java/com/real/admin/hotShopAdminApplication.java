@@ -11,7 +11,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
         "com.real.domain",
         "com.real.admin",
 })
-@MapperScan("com.real.domain.mapper")
+@MapperScan({"com.real.domain.mapper", "com.real.domain.messaging"})
 public class hotShopAdminApplication {
 
     public static void main(String[] args) {

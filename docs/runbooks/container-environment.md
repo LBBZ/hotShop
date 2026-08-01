@@ -49,9 +49,9 @@ docker compose --env-file .env.example wait database-migrator
 docker compose --env-file .env.example --profile app up -d --build
 ```
 
-当前 Java RabbitMQ 配置仍声明 `x-delayed-message` exchange，而 TASK-03 按总纲移除了对应第三方
-插件；因此 portal/task 在 TASK-09 改成 TTL 队列 + DLX 前可能无法完成启动。这里的 `app` profile
-用于清晰隔离构建与启动范围，不把当前已知的不兼容伪装成通过。TASK-07 起 Java 应用使用两个启动期
+TASK-09 使用官方 RabbitMQ management 镜像支持的 TTL 队列 + DLX，不安装第三方插件。portal
+不加载 RabbitMQ 自动配置，也不依赖 RabbitMQ 健康状态；task 独占消息发布与消费职责。这里的
+`app` profile 用于清晰隔离构建与启动范围。TASK-07 起 Java 应用使用两个启动期
 固定、仅 DB 0 的具名连接：认证/缓存/限流只注入 `redis-cache`，秒杀装载与 Reservation 只注入
 `redis-seckill`；请求期间不创建连接工厂，也不按 dbIndex 选择逻辑库。
 
@@ -84,7 +84,7 @@ MySQL 不再挂载 `/docker-entrypoint-initdb.d` 结构脚本。`database-migrat
 - MySQL `--default-time-zone=+00:00`，新连接的 global/session time zone 均为 `+00:00`；
 - Flyway、portal、admin、task 的 JDBC URL 都使用 `serverTimezone=UTC`，Hikari 同时要求
   Connector/J 把 connection/session time zone 固定为 UTC；
-- 三个 Java 进程运行在 UTC，`OrderTimeoutJob` 另外使用显式 UTC `Clock`，不依赖宿主默认时区。
+- 三个 Java 进程运行在 UTC；普通订单到期判断最终使用 MySQL `UTC_TIMESTAMP(6)`，不依赖宿主默认时区。
 
 `DATETIME(6)` 本身不保存时区。把 Compose 配置从旧的 `Asia/Shanghai`/`+08:00` 改成 UTC，
 **不会自动换算已有 `mysql_data` 卷中的历史值**。旧卷若曾以 `+08:00` 写入，继续使用前必须先备份，
@@ -180,7 +180,7 @@ docker compose --env-file .env.example exec -T rabbitmq rabbitmq-diagnostics -q 
 docker compose --env-file .env.example exec -T rabbitmq rabbitmq-plugins list --enabled --minimal
 ```
 
-启用列表应包含官方 management 相关插件，不应包含 `rabbitmq_delayed_message_exchange`。
+启用列表应只包含官方 management 相关插件，不应出现第三方延迟交换机插件。
 
 ## 5. 停止、重启与持久性验证
 
@@ -228,3 +228,31 @@ docker compose --env-file .env.example exec -T rabbitmq rabbitmqctl delete_vhost
   不能改成淘汰业务状态；cache 则会按 LFU 淘汰。
 - 旧 `redis` 容器/`redis_data` 卷：TASK-03 将服务拆分为两个新名称，不会自动删除旧容器或旧卷；
   确认不再需要后再由环境所有者手工处理。
+
+## 7. TASK-09 可靠消息运行手册
+
+RabbitMQ wrapper 只继承官方 `rabbitmq:4.0.7-management-alpine`，不下载或启用第三方延迟插件。
+固定订单超时由 durable TTL 队列和 DLX 完成。Portal 不配置 RabbitMQ，也不依赖其健康状态；只要
+MySQL 可用，普通订单与两条 Outbox 可以提交。Task 才持有 RabbitMQ 连接，并使用 correlated
+publisher confirm、mandatory publish 和 publisher returns。
+
+常用诊断：
+
+```powershell
+docker compose --env-file .env.example ps
+docker compose --env-file .env.example logs task-service rabbitmq
+docker compose --env-file .env.example exec -T rabbitmq rabbitmqctl list_queues name messages_ready messages_unacknowledged
+```
+
+Outbox 自动重试最多 8 次，退避从 1 秒指数增长到最多 5 分钟。租约默认 30 秒；实例退出后不要手工
+篡改 `PUBLISHING`，等待租约过期即可由其他实例接管。`FAILED` 排障步骤：先查看 task/RabbitMQ 与
+脱敏 failure category，再由 Administrator 调用 `GET /admin/api/v1/outbox/failed`；确认根因消除后，
+以明确原因调用 `POST /admin/api/v1/outbox/{eventId}/replay`。接口只把 MySQL 状态改回可领取状态，
+不在 HTTP 线程发送消息；重放把本轮连续尝试归零、保留生命周期发布次数、累计人工重放次数并追加
+`audit_log`。`FAILED` 不会自动领取；不得重放 `PUBLISHED`，也不得向 User、
+匿名或任何 Agent 暴露该能力。
+
+超时链路的队列级期限为 15 分钟，即 900000 ms；发布器同时按 `expiresAtMs - now` 设置剩余消息
+expiration，已到期事件直接进入 ready exchange。最终判断始终使用 MySQL `expires_at` 和
+`UTC_TIMESTAMP(6)`。TASK-09 消费者只取消 `reservation_id IS NULL` 的普通订单；秒杀支付、关闭、
+Redis 资格释放及支付终态竞争留给 TASK-10。

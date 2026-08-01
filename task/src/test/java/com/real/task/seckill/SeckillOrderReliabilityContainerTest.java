@@ -9,11 +9,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.domain.Range;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.connection.stream.Consumer;
 import org.springframework.data.redis.connection.stream.MapRecord;
+import org.springframework.data.redis.connection.stream.PendingMessages;
 import org.springframework.data.redis.connection.stream.PendingMessagesSummary;
 import org.springframework.data.redis.connection.stream.ReadOffset;
 import org.springframework.data.redis.connection.stream.StreamOffset;
@@ -44,6 +46,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 @SpringJUnitConfig(SeckillOrderReliabilityContainerTest.TestConfiguration.class)
 class SeckillOrderReliabilityContainerTest {
@@ -290,7 +293,7 @@ class SeckillOrderReliabilityContainerTest {
         assertThat(delivered).hasSize(1);
         assertThat(pending(event.stream())).isEqualTo(1);
 
-        sleepPastClaimIdle();
+        awaitClaimablePending(event.stream());
         ReservationStreamConsumer replacement = new ReservationStreamConsumer(
                 redis,
                 properties,
@@ -612,7 +615,7 @@ class SeckillOrderReliabilityContainerTest {
                 return;
             }
             if (attempt == 0) {
-                sleepPastClaimIdle();
+                awaitClaimablePending(stream);
             }
         }
         assertThat(pending(stream)).isZero();
@@ -627,23 +630,25 @@ class SeckillOrderReliabilityContainerTest {
     }
 
     private void awaitRetryAndClaim(String stream) {
-        sleepPastClaimIdle();
-        for (int attempt = 0; attempt < 10 && pending(stream) > 0; attempt++) {
+        awaitClaimablePending(stream);
+        await().atMost(Duration.ofSeconds(5)).pollInterval(Duration.ofMillis(25)).untilAsserted(() -> {
             consumer.poll();
-            if (pending(stream) > 0) {
-                sleepPastClaimIdle();
-            }
-        }
-        assertThat(pending(stream)).isZero();
+            assertThat(pending(stream)).isZero();
+        });
     }
 
-    private void sleepPastClaimIdle() {
-        try {
-            Thread.sleep(properties.getClaimIdle().toMillis() + 25);
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            throw new AssertionError("Interrupted while awaiting a claimable Pending entry", exception);
-        }
+    private void awaitClaimablePending(String stream) {
+        await().atMost(Duration.ofSeconds(5)).pollInterval(Duration.ofMillis(25)).untilAsserted(() -> {
+            PendingMessages messages = redis.opsForStream().pending(
+                    stream,
+                    properties.getGroupName(),
+                    Range.unbounded(),
+                    1
+            );
+            assertThat(messages).isNotEmpty();
+            assertThat(messages.get(0).getElapsedTimeSinceLastDelivery())
+                    .isGreaterThanOrEqualTo(properties.getClaimIdle());
+        });
     }
 
     private long pending(String stream) {

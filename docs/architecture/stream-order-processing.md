@@ -13,7 +13,7 @@ RabbitMQ Outbox、不处理支付，也不解决订单超时与支付终态竞�
 - MySQL 通过处理账本、唯一约束和确定性业务 ID 实现幂等业务效果；
 - Redis 与 MySQL 通过 Pending 恢复和定时对账达到最终一致。
 
-这不是 exactly-once。MySQL commit、Redis Lua 和 `XACK` 不在同一个原子事务中，进程可能在任意
+这不构成跨 MySQL、Redis 与消息确认的单次原子保证。MySQL commit、Redis Lua 和 `XACK` 不在同一个原子事务中，进程可能在任意
 两个边界之间退出，因此同一事件可以再次交付。系统保证重复交付不重复扣 MySQL 库存、不创建第二个
 订单/订单项/Outbox，并补做尚未完成的 Redis 后处理。
 
@@ -256,10 +256,10 @@ Reservation、Order 或 MySQL 活动/Catalog 库存。问题以稳定 `issue_key
 队列。人工处置前应同时核对 Stream 原文、Redis Hash/User 占位、处理账本、Reservation/Order/Outbox
 及审计记录；不得只看一侧状态。
 
-既有 `OrderTimeoutJob` 只扫描 `sales_order.reservation_id IS NULL` 的普通订单；旧 Rabbit 超时消息
-的消费端也只能调用带 `status='PENDING' AND reservation_id IS NULL` 条件更新的 legacy 取消方法。
-因此延迟或误投的旧超时消息不能取消 TASK-08 秒杀订单；支付与订单超时终态竞争留给
-TASK-09/TASK-10。
+TASK-09 已删除普通订单的定时全表扫描、Redis 锁和旧 Rabbit 消费路径。唯一普通订单超时消费者在
+MySQL 事务中核验 `status='PENDING' AND reservation_id IS NULL`、数据库到期时间和完整消息事实；
+秒杀订单只记录幂等 no-op，绝不取消或回库。秒杀订单支付、超时关闭、Redis 资格释放和支付终态
+竞争仍留给 TASK-10。
 
 ## 11. 配置与指标
 

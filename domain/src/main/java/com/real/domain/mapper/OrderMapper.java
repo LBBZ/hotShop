@@ -33,11 +33,6 @@ public interface OrderMapper {
             @Param("startTime") LocalDateTime startTime,
             @Param("endTime") LocalDateTime endTime
     );
-    List<Order> selectLegacyPendingOrdersBefore(
-            @Param("endTime") LocalDateTime endTime
-    );
-    Order selectLegacyPendingOrderById(@Param("orderId") String orderId);
-    int cancelLegacyPendingOrder(@Param("orderId") String orderId);
     List<Order> selectOrdersByCursor(
             @Param("userId") Long userId,
             @Param("status") OrderStatus status,

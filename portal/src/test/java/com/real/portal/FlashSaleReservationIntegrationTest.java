@@ -130,9 +130,6 @@ class FlashSaleReservationIntegrationTest {
     @Qualifier("seckillStringRedisTemplate")
     StringRedisTemplate seckillRedis;
 
-    @MockitoBean
-    com.real.domain.infra.RabbitMQService rabbitMQService;
-
     @BeforeAll
     void migrate() {
         Flyway.configure()

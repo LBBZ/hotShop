@@ -140,6 +140,9 @@ class AdminApiContractTest {
                 .andExpect(jsonPath("$.paths['/admin/api/v1/audit-logs'].get").exists())
                 .andExpect(jsonPath("$.paths['/admin/api/v1/audit-logs'].put").doesNotExist())
                 .andExpect(jsonPath("$.paths['/admin/api/v1/audit-logs'].delete").doesNotExist())
+                .andExpect(jsonPath("$.paths['/admin/api/v1/outbox/failed'].get").exists())
+                .andExpect(jsonPath("$.paths['/admin/api/v1/outbox/{eventId}/replay'].post").exists())
+                .andExpect(jsonPath("$.paths['/agent/api/v1/outbox/failed']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/admin/products/{id}']").doesNotExist())
                 .andExpect(jsonPath(
                         "$.paths['/admin/api/v1/products/{productId}'].get.parameters"
@@ -162,7 +165,13 @@ class AdminApiContractTest {
                 .andExpect(jsonPath("$.components.schemas.Product").doesNotExist())
                 .andExpect(jsonPath("$.components.schemas.User").doesNotExist())
                 .andExpect(jsonPath("$.components.schemas.Order").doesNotExist())
-                .andExpect(jsonPath("$.components.schemas.AuditLogResponse").exists());
+                .andExpect(jsonPath("$.components.schemas.AuditLogResponse").exists())
+                .andExpect(jsonPath("$.components.schemas.OutboxFailedEventResponse.properties.payload")
+                        .doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.OutboxFailedEventResponse.properties.lastError")
+                        .doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.OutboxReplayRequest.required")
+                        .value(org.hamcrest.Matchers.hasItem("reason")));
     }
 
     @Test

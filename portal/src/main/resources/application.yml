@@ -1,6 +1,8 @@
 spring:
   application:
     name: portal
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:}
   config:
@@ -8,36 +10,21 @@ spring:
       - classpath:config/common-db.yml
       - classpath:config/common-redis.yml
       - classpath:config/common-jwt.yml
-      - classpath:config/orderTimeoutConfig.yml
-
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/hotShop?useSSL=false&serverTimezone=UTC}
     username: ${SPRING_DATASOURCE_USERNAME:root}
     password: ${SPRING_DATASOURCE_PASSWORD:}
-
-  data:
-    redis:
-      host: ${SPRING_REDIS_HOST:localhost}
-      port: ${SPRING_REDIS_PORT:6379}
-
-  rabbitmq:
-    host: ${SPRING_RABBITMQ_HOST:localhost}
-    port: ${SPRING_RABBITMQ_PORT:5672}
-    username: ${SPRING_RABBITMQ_USERNAME:guest}
-    password: ${SPRING_RABBITMQ_PASSWORD:guest}
-    publisher-confirm-type: correlated
-    listener:
-      simple:
-        retry:
-          enabled: true   # 开启消费重试
-          max-attempts: 3 # 最大重试次数
   jackson:
     default-property-inclusion: non_null
     serialization:
       write-dates-as-timestamps: false
 
 rabbitmq:
-  enabled: true
+  enabled: false
+
+hotshop:
+  order:
+    legacy-payment-timeout: ${HOTSHOP_LEGACY_ORDER_TIMEOUT:15m}
 
 server:
   port: 8080

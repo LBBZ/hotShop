@@ -56,8 +56,8 @@ export interface AdminAuditLogsApiInterface {
      * @param {Date} [occurredTo]
      * @param {'USER' | 'ADMIN' | 'AGENT' | 'SERVICE' | 'SYSTEM'} [actorType]
      * @param {string} [actorId]
-     * @param {'AUTHENTICATION_LOGIN' | 'REFRESH_TOKEN_REUSE_DETECTED' | 'AGENT_DELEGATION_ISSUED' | 'CATALOG_PRODUCT_CREATED' | 'CATALOG_PRODUCT_UPDATED' | 'CATALOG_PRODUCT_DELETED' | 'FLASH_SALE_ACTIVITY_LOADED'} [action]
-     * @param {'AUTHENTICATION_SESSION' | 'REFRESH_TOKEN_FAMILY' | 'USER' | 'CATALOG_PRODUCT' | 'FLASH_SALE_ACTIVITY'} [resourceType]
+     * @param {'AUTHENTICATION_LOGIN' | 'REFRESH_TOKEN_REUSE_DETECTED' | 'AGENT_DELEGATION_ISSUED' | 'CATALOG_PRODUCT_CREATED' | 'CATALOG_PRODUCT_UPDATED' | 'CATALOG_PRODUCT_DELETED' | 'FLASH_SALE_ACTIVITY_LOADED' | 'OUTBOX_REPLAY'} [action]
+     * @param {'AUTHENTICATION_SESSION' | 'REFRESH_TOKEN_FAMILY' | 'USER' | 'CATALOG_PRODUCT' | 'FLASH_SALE_ACTIVITY' | 'OUTBOX_EVENT'} [resourceType]
      * @param {string} [resourceId]
      * @param {'SUCCESS' | 'FAILURE' | 'DENIED'} [result]
      * @param {string} [xRequestId] Caller-supplied correlation ID. Invalid values are replaced by the server.
@@ -191,7 +191,8 @@ export const GetAuditLogsActionEnum = {
     CatalogProductCreated: 'CATALOG_PRODUCT_CREATED',
     CatalogProductUpdated: 'CATALOG_PRODUCT_UPDATED',
     CatalogProductDeleted: 'CATALOG_PRODUCT_DELETED',
-    FlashSaleActivityLoaded: 'FLASH_SALE_ACTIVITY_LOADED'
+    FlashSaleActivityLoaded: 'FLASH_SALE_ACTIVITY_LOADED',
+    OutboxReplay: 'OUTBOX_REPLAY'
 } as const;
 export type GetAuditLogsActionEnum = typeof GetAuditLogsActionEnum[keyof typeof GetAuditLogsActionEnum];
 /**
@@ -202,7 +203,8 @@ export const GetAuditLogsResourceTypeEnum = {
     RefreshTokenFamily: 'REFRESH_TOKEN_FAMILY',
     User: 'USER',
     CatalogProduct: 'CATALOG_PRODUCT',
-    FlashSaleActivity: 'FLASH_SALE_ACTIVITY'
+    FlashSaleActivity: 'FLASH_SALE_ACTIVITY',
+    OutboxEvent: 'OUTBOX_EVENT'
 } as const;
 export type GetAuditLogsResourceTypeEnum = typeof GetAuditLogsResourceTypeEnum[keyof typeof GetAuditLogsResourceTypeEnum];
 /**

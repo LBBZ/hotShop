@@ -122,7 +122,7 @@ class AdminIdentitySecurityTest {
                 .validateMigrationNaming(true)
                 .cleanDisabled(true)
                 .load();
-        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(4);
+        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(5);
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
         String hash = new BCryptPasswordEncoder().encode(PASSWORD);
         jdbcTemplate.update(

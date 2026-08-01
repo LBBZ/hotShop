@@ -68,6 +68,30 @@ class OrderServiceTest {
     }
 
     @Test
+    void cancelLegacyPendingOrderRejectsOrdersExcludedByTheReservationFilter() {
+        when(orderMapper.selectLegacyPendingOrderById("seckill-order")).thenReturn(null);
+
+        assertFalse(orderStateService.cancelLegacyPendingOrder("seckill-order"));
+
+        verify(orderMapper, never()).cancelLegacyPendingOrder(anyString());
+        verify(productMapper, never()).increaseStock(anyLong(), anyInt());
+    }
+
+    @Test
+    void cancelLegacyPendingOrderReleasesStockOnlyAfterConditionalUpdateWins() {
+        Order order = buildTestOrder();
+        order.setOrderId("legacy-order");
+        when(orderMapper.selectLegacyPendingOrderById("legacy-order")).thenReturn(order);
+        when(orderMapper.cancelLegacyPendingOrder("legacy-order")).thenReturn(1);
+
+        assertTrue(orderStateService.cancelLegacyPendingOrder("legacy-order"));
+
+        verify(orderMapper).cancelLegacyPendingOrder("legacy-order");
+        verify(productMapper).increaseStock(1001L, 2);
+        verify(productMapper).increaseStock(1002L, 1);
+    }
+
+    @Test
     void testCreateOrder_Success() {
         // 1. 准备测试数据
         Order order = buildTestOrder();

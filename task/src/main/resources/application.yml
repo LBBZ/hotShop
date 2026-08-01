@@ -41,3 +41,26 @@ server:
 logging:
   level:
     com.real: TRACE
+
+hotshop:
+  seckill:
+    order-consumer:
+      enabled: ${HOTSHOP_SECKILL_ORDER_CONSUMER_ENABLED:true}
+      group-name: ${HOTSHOP_SECKILL_ORDER_GROUP:hotshop-order-v1}
+      consumer-prefix: ${HOTSHOP_SECKILL_ORDER_CONSUMER_PREFIX:order}
+      read-batch: ${HOTSHOP_SECKILL_ORDER_READ_BATCH:20}
+      read-block: ${HOTSHOP_SECKILL_ORDER_READ_BLOCK:2s}
+      poll-delay: ${HOTSHOP_SECKILL_ORDER_POLL_DELAY:250ms}
+      discovery-interval: ${HOTSHOP_SECKILL_ORDER_DISCOVERY_INTERVAL:10s}
+      claim-idle: ${HOTSHOP_SECKILL_ORDER_CLAIM_IDLE:30s}
+      claim-batch: ${HOTSHOP_SECKILL_ORDER_CLAIM_BATCH:20}
+      retry-initial-backoff: ${HOTSHOP_SECKILL_ORDER_RETRY_INITIAL_BACKOFF:1s}
+      retry-max-backoff: ${HOTSHOP_SECKILL_ORDER_RETRY_MAX_BACKOFF:5m}
+      retry-multiplier: ${HOTSHOP_SECKILL_ORDER_RETRY_MULTIPLIER:2.0}
+      deterministic-failure-attempts: ${HOTSHOP_SECKILL_ORDER_DETERMINISTIC_FAILURE_ATTEMPTS:3}
+      order-timeout: ${HOTSHOP_SECKILL_ORDER_TIMEOUT:15m}
+      payment-timeout: ${HOTSHOP_SECKILL_PAYMENT_TIMEOUT:15m}
+      reconciliation-interval: ${HOTSHOP_SECKILL_RECONCILIATION_INTERVAL:5m}
+      reconciliation-batch: ${HOTSHOP_SECKILL_RECONCILIATION_BATCH:100}
+      reconciliation-dry-run: ${HOTSHOP_SECKILL_RECONCILIATION_DRY_RUN:true}
+      auto-repair: ${HOTSHOP_SECKILL_RECONCILIATION_AUTO_REPAIR:false}

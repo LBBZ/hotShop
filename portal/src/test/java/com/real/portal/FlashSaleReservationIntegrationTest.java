@@ -6,6 +6,7 @@ import com.real.domain.service.seckill.FlashSaleLoadResult;
 import com.real.domain.service.seckill.FlashSaleReservationCode;
 import com.real.domain.service.seckill.FlashSaleReservationResult;
 import com.real.domain.service.seckill.FlashSaleReservationService;
+import com.real.domain.service.seckill.FlashSaleReservationStatusService;
 import com.real.infrastructure.redis.SeckillRedisKeys;
 import com.real.security.entity.CustomUserDetails;
 import org.flywaydb.core.Flyway;
@@ -35,6 +36,7 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
+import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.Duration;
@@ -42,6 +44,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
@@ -115,6 +118,8 @@ class FlashSaleReservationIntegrationTest {
     @Autowired
     FlashSaleReservationService reservationService;
     @Autowired
+    FlashSaleReservationStatusService reservationStatusService;
+    @Autowired
     JdbcTemplate jdbcTemplate;
     @Autowired
     MockMvc mockMvc;
@@ -164,7 +169,8 @@ class FlashSaleReservationIntegrationTest {
                 SeckillRedisKeys.userReservation(ACTIVITY_ID, 91),
                 SeckillRedisKeys.idempotency(91, hash),
                 SeckillRedisKeys.reservation(ACTIVITY_ID, "rsv_0123456789abcdef0123456789abcdef"),
-                SeckillRedisKeys.reservationStream(ACTIVITY_ID)
+                SeckillRedisKeys.reservationStream(ACTIVITY_ID),
+                SeckillRedisKeys.reservationStreamRegistry()
         );
         Set<Integer> slots = new HashSet<>();
         keys.forEach(key -> slots.add(SeckillRedisKeys.clusterSlot(key)));
@@ -199,6 +205,10 @@ class FlashSaleReservationIntegrationTest {
         assertThat(replay.code()).isEqualTo(FlashSaleLoadCode.IDEMPOTENT);
         assertThat(replay.redisVersion()).isEqualTo(3);
         assertThat(replay.redisAvailableStock()).isEqualTo(5);
+        assertThat(seckillRedis.opsForSet().isMember(
+                SeckillRedisKeys.reservationStreamRegistry(),
+                SeckillRedisKeys.reservationStream(ACTIVITY_ID)
+        )).isTrue();
 
         jdbcTemplate.update(
                 "UPDATE flash_sale_activity SET version = 2 WHERE activity_id = ?",
@@ -463,6 +473,74 @@ class FlashSaleReservationIntegrationTest {
         assertThat(count("sale_reservation")).isZero();
         assertThat(count("sales_order")).isZero();
         assertThat(count("outbox_event")).isZero();
+    }
+
+    @Test
+    @Order(9)
+    void ownedStatusFallsBackToRedisThenPrefersMysqlAndHidesOtherUsers() {
+        insertActivity(ACTIVITY_ID, 2, 2, 1, "ACTIVE", -60, 600, 1);
+        assertThat(loader.load(ACTIVITY_ID).code()).isEqualTo(FlashSaleLoadCode.LOADED);
+        FlashSaleReservationResult accepted = reservationService.reserve(
+                ACTIVITY_ID,
+                701,
+                1,
+                "status-query-key-000000000000000000000001",
+                "status-query"
+        );
+        assertThat(accepted.code()).isEqualTo(FlashSaleReservationCode.ACCEPTED);
+
+        assertThat(reservationStatusService.findOwned(
+                ACTIVITY_ID,
+                accepted.reservationNo(),
+                701
+        )).satisfies(response -> {
+            assertThat(response.status()).isEqualTo("RESERVED");
+            assertThat(response.orderId()).isNull();
+        });
+        assertThat(reservationStatusService.findOwned(
+                ACTIVITY_ID,
+                accepted.reservationNo(),
+                702
+        )).isNull();
+
+        Map<Object, Object> facts = seckillRedis.opsForHash().entries(
+                SeckillRedisKeys.reservation(ACTIVITY_ID, accepted.reservationNo())
+        );
+        jdbcTemplate.update("""
+                INSERT INTO sale_reservation (
+                    reservation_no, activity_id, user_id, product_id,
+                    quantity, unit_price, reserved_amount, currency,
+                    activity_version, idempotency_key_hash, request_fingerprint,
+                    reserved_at, status, order_id, expires_at
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, 'CNY', ?, ?, ?,
+                    FROM_UNIXTIME(? / 1000.0),
+                    'ORDER_CREATED', 'ord_0123456789abcdef0123456789abcdef',
+                    DATE_ADD(CURRENT_TIMESTAMP(6), INTERVAL 15 MINUTE)
+                )
+                """,
+                facts.get("reservationNo"),
+                facts.get("activityId"),
+                facts.get("userId"),
+                facts.get("productId"),
+                facts.get("quantity"),
+                facts.get("unitPrice"),
+                new BigDecimal(String.valueOf(facts.get("unitPrice"))),
+                facts.get("activityVersion"),
+                facts.get("idempotencyKeyHash"),
+                facts.get("requestFingerprint"),
+                facts.get("reservedAtMs")
+        );
+
+        assertThat(reservationStatusService.findOwned(
+                ACTIVITY_ID,
+                accepted.reservationNo(),
+                701
+        )).satisfies(response -> {
+            assertThat(response.status()).isEqualTo("ORDER_CREATED");
+            assertThat(response.orderId())
+                    .isEqualTo("ord_0123456789abcdef0123456789abcdef");
+        });
     }
 
     private List<FlashSaleReservationResult> invoke(

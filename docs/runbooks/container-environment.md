@@ -55,6 +55,10 @@ docker compose --env-file .env.example --profile app up -d --build
 固定、仅 DB 0 的具名连接：认证/缓存/限流只注入 `redis-cache`，秒杀装载与 Reservation 只注入
 `redis-seckill`；请求期间不创建连接工厂，也不按 dbIndex 选择逻辑库。
 
+TASK-08 的 Redis Stream 消费者位于 `task` 容器。它依赖 MySQL 迁移到 V1.4 和
+`redis-seckill` 健康；不依赖 RabbitMQ 完成 Outbox 发布。消费开关默认开启，对账默认 dry-run 且
+自动修复关闭。
+
 可观测与测试服务将分别由后续任务加入独立 profile；TASK-03 不提前添加占位容器。
 
 ## 3. 服务用途与端口
@@ -97,6 +101,37 @@ MySQL 不再挂载 `/docker-entrypoint-initdb.d` 结构脚本。`database-migrat
 
 预期输出包含 `global=+00:00 session=+00:00 deltaSeconds=0`。
 
+### 3.2 TASK-08 Stream 消费配置
+
+Compose 将以下配置传入 `task`；生产部署应按吞吐和故障恢复目标显式设置，不要通过扩大批量掩盖
+长期 Pending：
+
+```text
+HOTSHOP_SECKILL_ORDER_CONSUMER_ENABLED=true
+HOTSHOP_SECKILL_ORDER_GROUP=hotshop-order-v1
+HOTSHOP_SECKILL_ORDER_CONSUMER_PREFIX=order
+HOTSHOP_SECKILL_ORDER_READ_BATCH=20
+HOTSHOP_SECKILL_ORDER_READ_BLOCK=2s
+HOTSHOP_SECKILL_ORDER_POLL_DELAY=250ms
+HOTSHOP_SECKILL_ORDER_DISCOVERY_INTERVAL=10s
+HOTSHOP_SECKILL_ORDER_CLAIM_IDLE=30s
+HOTSHOP_SECKILL_ORDER_CLAIM_BATCH=20
+HOTSHOP_SECKILL_ORDER_RETRY_INITIAL_BACKOFF=1s
+HOTSHOP_SECKILL_ORDER_RETRY_MAX_BACKOFF=5m
+HOTSHOP_SECKILL_ORDER_RETRY_MULTIPLIER=2.0
+HOTSHOP_SECKILL_ORDER_DETERMINISTIC_FAILURE_ATTEMPTS=3
+HOTSHOP_SECKILL_ORDER_TIMEOUT=15m
+HOTSHOP_SECKILL_PAYMENT_TIMEOUT=15m
+HOTSHOP_SECKILL_RECONCILIATION_INTERVAL=5m
+HOTSHOP_SECKILL_RECONCILIATION_BATCH=100
+HOTSHOP_SECKILL_RECONCILIATION_DRY_RUN=true
+HOTSHOP_SECKILL_RECONCILIATION_AUTO_REPAIR=false
+```
+
+Consumer name 会在前缀后追加 hostname、PID 和随机后缀，不能把多个副本配置成固定的同名
+consumer。只有同时把 dry-run 设为 `false` 且 auto-repair 设为 `true` 才会执行修复白名单；改动这
+两个开关前必须先评审 OPEN 对账问题和 dry-run 证据。
+
 ## 4. 健康与配置检查
 
 静态解析和运行状态：
@@ -117,10 +152,26 @@ docker compose --env-file .env.example exec -T redis-seckill redis-cli CONFIG GE
 容器已设置 `REDISCLI_AUTH`，所以以上命令不需要把密码放在命令行。预期两者 `databases` 都是
 `1`；cache 为 `allkeys-lfu`/RDB，seckill 为 `noeviction`/AOF + RDB。
 
-TASK-07 活动装载、预约、Key 查询和 Redis/MySQL/Stream 对账命令见
-`docs/architecture/flash-sale-reservation.md`。`redis-seckill` OOM 时预约返回脱敏 503，不会同步
+TASK-07 活动装载与预约命令见 `docs/architecture/flash-sale-reservation.md`；TASK-08 的
+`XINFO GROUPS`、`XPENDING`、处理账本和 dry-run 调查命令见
+`docs/architecture/stream-order-processing.md`。`redis-seckill` OOM 时预约返回脱敏 503，不会同步
 写 MySQL；不要把 policy 改为淘汰。`redis-cache` 故障不会改变 seckill 已有库存、Reservation 或
 Stream，反之亦然。
+
+快速检查 Registry、消费者组和积压（活动 7001）：
+
+```powershell
+$stream = 'hotshop:seckill:v1:{hotshop-seckill-v1}:activity:7001:reservations'
+docker compose --env-file .env.example exec -T redis-seckill redis-cli `
+  SMEMBERS 'hotshop:seckill:v1:{hotshop-seckill-v1}:registry:reservation-streams'
+docker compose --env-file .env.example exec -T redis-seckill redis-cli XINFO GROUPS $stream
+docker compose --env-file .env.example exec -T redis-seckill redis-cli `
+  XPENDING $stream hotshop-order-v1 - + 100
+```
+
+不能用 `XDEL` 清 Pending，也不能仅因 delivery count 高就恢复库存。先核对
+`seckill_event_processing` 和 `seckill_reconciliation_issue`；瞬时依赖故障应保留 Pending 等待
+恢复。
 
 确认 RabbitMQ 运行且没有 delayed-message 插件：
 

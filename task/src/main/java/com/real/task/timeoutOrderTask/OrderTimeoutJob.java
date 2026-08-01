@@ -1,6 +1,5 @@
 package com.real.task.timeoutOrderTask;
 
-import com.real.common.enums.OrderStatus;
 import com.real.domain.entity.Order;
 import com.real.domain.service.OrderService;
 import com.real.domain.service.advance.OrderStateService;
@@ -39,10 +38,10 @@ public class OrderTimeoutJob {
     @Scheduled(fixedRate = 60_000)
     public void checkTimeoutOrders() {
         LocalDateTime threshold = LocalDateTime.now(clock).minusMinutes(timeoutThreshold);
-        List<Order> timeoutOrders = orderService.getOrdersByConditions(null, OrderStatus.PENDING, null, threshold);
+        List<Order> timeoutOrders = orderService.getLegacyPendingOrdersBefore(threshold);
 
         timeoutOrders.parallelStream().forEach(order ->
-                orderStateService.cancelOrder(order.getOrderId())
+                orderStateService.cancelLegacyPendingOrder(order.getOrderId())
         );
     }
 

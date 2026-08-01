@@ -1,6 +1,5 @@
 package com.real.task.timeoutOrderTask;
 
-import com.real.common.enums.OrderStatus;
 import com.real.domain.service.OrderService;
 import com.real.domain.service.advance.OrderStateService;
 import org.junit.jupiter.api.Test;
@@ -31,20 +30,10 @@ class OrderTimeoutJobUtcTest {
         OrderTimeoutJob job = new OrderTimeoutJob(orderService, orderStateService, clock);
         ReflectionTestUtils.setField(job, "timeoutThreshold", 30L);
         LocalDateTime expectedThreshold = LocalDateTime.of(2026, 7, 28, 8, 0);
-        when(orderService.getOrdersByConditions(
-                null,
-                OrderStatus.PENDING,
-                null,
-                expectedThreshold
-        )).thenReturn(List.of());
+        when(orderService.getLegacyPendingOrdersBefore(expectedThreshold)).thenReturn(List.of());
 
         job.checkTimeoutOrders();
 
-        verify(orderService).getOrdersByConditions(
-                null,
-                OrderStatus.PENDING,
-                null,
-                expectedThreshold
-        );
+        verify(orderService).getLegacyPendingOrdersBefore(expectedThreshold);
     }
 }

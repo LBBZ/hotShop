@@ -70,7 +70,8 @@ public class FlashSaleActivityLoader {
                 SeckillRedisKeys.availableStock(activityId),
                 SeckillRedisKeys.reservationStream(activityId),
                 SeckillRedisKeys.loadStagingMetadata(activityId, loadId),
-                SeckillRedisKeys.loadStagingStock(activityId, loadId)
+                SeckillRedisKeys.loadStagingStock(activityId, loadId),
+                SeckillRedisKeys.reservationStreamRegistry()
         );
         long expireAt = fact.endsAt()
                 .toInstant(ZoneOffset.UTC)
@@ -91,7 +92,8 @@ public class FlashSaleActivityLoader {
                     Long.toString(fact.startsAt().toInstant(ZoneOffset.UTC).toEpochMilli()),
                     Long.toString(fact.endsAt().toInstant(ZoneOffset.UTC).toEpochMilli()),
                     Integer.toString(fact.version()),
-                    Long.toString(expireAt)
+                    Long.toString(expireAt),
+                    Integer.toString(fact.catalogStock())
             );
         } catch (DataAccessException exception) {
             throw new SeckillServiceUnavailableException(exception);
@@ -238,7 +240,7 @@ public class FlashSaleActivityLoader {
 
     private static DefaultRedisScript<List> script() {
         DefaultRedisScript<List> script = new DefaultRedisScript<>();
-        script.setLocation(new ClassPathResource("redis/load-flash-sale-activity-v1.lua"));
+        script.setLocation(new ClassPathResource("redis/load-flash-sale-activity-v2.lua"));
         script.setResultType(List.class);
         return script;
     }

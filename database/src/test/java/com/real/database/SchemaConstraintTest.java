@@ -58,8 +58,8 @@ class SchemaConstraintTest {
 
     @Test
     void emptyDatabaseMigratesToLatestAndValidates() {
-        assertThat(initialMigrationCount).isEqualTo(4);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1.3");
+        assertThat(initialMigrationCount).isEqualTo(5);
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1.4");
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
     }
 
@@ -162,6 +162,40 @@ class SchemaConstraintTest {
             insertProcessedEvent(connection, "order-projector", eventId);
             assertConstraintViolation(() -> insertProcessedEvent(connection, "order-projector", eventId));
             insertProcessedEvent(connection, "audit-projector", eventId);
+        }
+    }
+
+    @Test
+    void seckillProcessingLedgerEnforcesBothEventAndStreamEntryIdentity() throws SQLException {
+        try (Connection connection = connection()) {
+            insertSeckillProcessing(
+                    connection,
+                    "evt_" + "a".repeat(32),
+                    "hotshop:seckill:v1:{hotshop-seckill-v1}:activity:1:reservations",
+                    "1-0",
+                    "RETRYING"
+            );
+            assertConstraintViolation(() -> insertSeckillProcessing(
+                    connection,
+                    "evt_" + "a".repeat(32),
+                    "hotshop:seckill:v1:{hotshop-seckill-v1}:activity:1:reservations",
+                    "2-0",
+                    "ORDER_CREATED"
+            ));
+            assertConstraintViolation(() -> insertSeckillProcessing(
+                    connection,
+                    "evt_" + "b".repeat(32),
+                    "hotshop:seckill:v1:{hotshop-seckill-v1}:activity:1:reservations",
+                    "1-0",
+                    "ORDER_CREATED"
+            ));
+            assertConstraintViolation(() -> insertSeckillProcessing(
+                    connection,
+                    "evt_" + "c".repeat(32),
+                    "hotshop:seckill:v1:{hotshop-seckill-v1}:activity:1:reservations",
+                    "3-0",
+                    "ACKED"
+            ));
         }
     }
 
@@ -331,6 +365,27 @@ class SchemaConstraintTest {
                 """)) {
             statement.setString(1, consumer);
             statement.setString(2, eventId);
+            statement.executeUpdate();
+        }
+    }
+
+    private static void insertSeckillProcessing(
+            Connection connection,
+            String eventId,
+            String streamKey,
+            String streamEntryId,
+            String status
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO seckill_event_processing (
+                    event_id, stream_key, stream_entry_id, payload_hash, status
+                ) VALUES (?, ?, ?, ?, ?)
+                """)) {
+            statement.setString(1, eventId);
+            statement.setString(2, streamKey);
+            statement.setString(3, streamEntryId);
+            statement.setString(4, "d".repeat(64));
+            statement.setString(5, status);
             statement.executeUpdate();
         }
     }

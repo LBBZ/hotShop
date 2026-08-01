@@ -260,6 +260,40 @@ activityId 或 quantity 返回 409 `IDEMPOTENCY_KEY_CONFLICT`。服务端只信�
 User ID，请求 body 不接受 userId。详细 Redis/Lua/Stream 契约见
 `docs/architecture/flash-sale-reservation.md`。
 
+TASK-08 增加本人 Reservation 状态查询：
+
+```text
+GET /api/v1/flash-sales/{activityId}/reservations/{reservationNo}
+credential: User Access
+authority: ROLE_USER
+```
+
+`activityId` 是正 BIGINT path 字符串，`reservationNo` 必须匹配
+`^rsv_[0-9a-f]{32}$`。服务端 User ID 只来自已验证 Principal，并先按
+`activityId + reservationNo + userId` 查询 MySQL；尚未落库时才读取经过 schema 和所有权验证的
+Redis Reservation。未知资源与属于其他 User 的资源统一返回 404，不泄露 Reservation 是否存在。
+Administrator Access、Agent Delegation 和匿名请求都不能调用。
+
+200 响应示例：
+
+```json
+{
+  "reservationNo": "rsv_0123456789abcdef0123456789abcdef",
+  "activityId": "7001",
+  "status": "ORDER_CREATED",
+  "orderId": "ord_0123456789abcdef0123456789abcdef",
+  "quantity": 1,
+  "reservedAmount": "19.90",
+  "currency": "CNY"
+}
+```
+
+`status` 可为 `RESERVED`、`ORDER_CREATED`、`COMPENSATING`、`COMPENSATED`、`EXPIRED` 或
+`CANCELED`；不适用时省略 `orderId`。金额继续遵循两位小数字符串契约。该接口只暴露用户自己的
+业务状态，不提供 Pending、处理账本、补偿、重放、修复或对账操作；这些高风险能力也不进入 Agent
+scope。消费、ACK 和最终一致性设计见
+`docs/architecture/stream-order-processing.md`。
+
 ## 7. OpenAPI、客户端与兼容门禁
 
 运行时分组 URL：

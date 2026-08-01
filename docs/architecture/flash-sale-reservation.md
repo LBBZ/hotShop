@@ -43,6 +43,7 @@ SHA-256；User 使用稳定数值 ID。
 | 幂等结果 | `...:idempotency:user:{userId}:{sha256(key)}` | Hash | 24h |
 | Reservation | `...:activity:{activityId}:reservation:{reservationNo}` | Hash | 接受时计算 `endsAt + 7d` |
 | 活动 Stream | `...:activity:{activityId}:reservations` | Stream | 无 TTL、无 `MAXLEN`；TASK-08 消费/归档策略落地前不截断 |
+| Stream Registry | `...:registry:reservation-streams` | Set | 无 TTL；由装载 Lua v2 原子登记，消费者不使用 `KEYS` |
 | 装载 staging | `...:activity:{activityId}:load:{loadId}:{meta\|stock}` | 临时 Hash/String | 同一 Lua 内 rename 或删除，不跨请求保留 |
 
 请求热路径只按计算好的 Key 做 O(1) 访问，不使用 `KEYS` 或 `SCAN`。对账的 `XRANGE` 只出现在显式
@@ -65,7 +66,9 @@ authority: PERM_ADMIN_FLASH_SALE_LOAD
 - per-User limit 大于 0且不超过总库存；
 - `endsAt > startsAt`，status 属于数据库允许集合，version 非负。
 
-装载 Lua 比较 `databaseVersion`：
+TASK-08 起装载改用 `load-flash-sale-activity-v2.lua`，保留已发布的 v1 文件不覆写。v2 延续原装载
+语义，并在 `LOADED` 或同版本 `IDEMPOTENT` 返回前原子 `SADD` 当前活动 Stream 到版本化 Registry
+Set。Registry、Stream 和其余 Lua Key 使用相同 hash tag。装载 Lua 比较 `databaseVersion`：
 
 - Redis 无事实或数据库版本更新且 Stream 为空：用 staging Key 写全量事实后替换；
 - 同版本且所有事实字段一致：返回 `IDEMPOTENT`，绝不重置已扣库存；
@@ -192,3 +195,7 @@ TASK-07 热路径没有创建数据库事实：
 docker compose --env-file .env.example exec -T mysql sh -c `
   'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -N --user=root --database="$MYSQL_DATABASE" -e "SELECT (SELECT COUNT(*) FROM sale_reservation),(SELECT COUNT(*) FROM sales_order),(SELECT COUNT(*) FROM outbox_event)"'
 ```
+
+TASK-08 启用后，上述三张表会由异步消费者写入，不再适合作为“始终为零”的断言。Registry、
+消费者组、Pending、处理账本、补偿和对账命令见
+`docs/architecture/stream-order-processing.md`。

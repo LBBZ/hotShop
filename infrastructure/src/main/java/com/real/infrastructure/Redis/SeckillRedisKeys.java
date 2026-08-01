@@ -34,6 +34,10 @@ public final class SeckillRedisKeys {
         return activity(activityId) + ":reservations";
     }
 
+    public static String reservationStreamRegistry() {
+        return PREFIX + ":registry:reservation-streams";
+    }
+
     public static String loadStagingMetadata(long activityId, String loadId) {
         return activity(activityId) + ":load:" + loadId + ":meta";
     }
@@ -61,6 +65,24 @@ public final class SeckillRedisKeys {
             throw new IllegalArgumentException("Activity ID must be positive");
         }
         return PREFIX + ":activity:" + activityId;
+    }
+
+    public static Long activityIdFromReservationStream(String streamKey) {
+        String prefix = PREFIX + ":activity:";
+        String suffix = ":reservations";
+        if (streamKey == null || !streamKey.startsWith(prefix) || !streamKey.endsWith(suffix)) {
+            return null;
+        }
+        String raw = streamKey.substring(prefix.length(), streamKey.length() - suffix.length());
+        if (!raw.matches("[1-9][0-9]*")) {
+            return null;
+        }
+        try {
+            long activityId = Long.parseLong(raw);
+            return activityId > 0 ? activityId : null;
+        } catch (NumberFormatException exception) {
+            return null;
+        }
     }
 
     private static String hashTagValue(String key) {

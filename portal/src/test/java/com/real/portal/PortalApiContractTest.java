@@ -2,6 +2,7 @@ package com.real.portal;
 
 import com.real.common.api.ApiException;
 import com.real.common.api.CursorSlice;
+import com.real.common.api.dto.FlashSaleReservationStatusResponse;
 import com.real.common.enums.OrderStatus;
 import com.real.common.enums.Role;
 import com.real.domain.entity.Order;
@@ -14,6 +15,7 @@ import com.real.domain.service.advance.OrderStateService;
 import com.real.domain.service.seckill.FlashSaleReservationCode;
 import com.real.domain.service.seckill.FlashSaleReservationResult;
 import com.real.domain.service.seckill.FlashSaleReservationService;
+import com.real.domain.service.seckill.FlashSaleReservationStatusService;
 import com.real.security.entity.CustomUserDetails;
 import com.real.security.service.TokenBlacklistService;
 import org.junit.jupiter.api.Test;
@@ -71,6 +73,8 @@ class PortalApiContractTest {
     private TokenBlacklistService tokenBlacklistService;
     @MockitoBean
     private FlashSaleReservationService flashSaleReservationService;
+    @MockitoBean
+    private FlashSaleReservationStatusService flashSaleReservationStatusService;
 
     @Test
     void anonymousProductListReturnsDtoFormatsAndCorrelatedIds() throws Exception {
@@ -206,6 +210,79 @@ class PortalApiContractTest {
                 .andExpect(status().isConflict())
                 .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_CONFLICT"));
+    }
+
+    @Test
+    void flashSaleReservationStatusReturnsOnlyTheAuthenticatedUsersFinalFacts() throws Exception {
+        String reservationNo = "rsv_0123456789abcdef0123456789abcdef";
+        when(flashSaleReservationStatusService.findOwned(901L, reservationNo, 100L))
+                .thenReturn(new FlashSaleReservationStatusResponse(
+                        reservationNo,
+                        901L,
+                        "ORDER_CREATED",
+                        "ord_0123456789abcdef0123456789abcdef",
+                        2,
+                        new BigDecimal("39.80"),
+                        "CNY"
+                ));
+
+        mockMvc.perform(get(
+                                "/api/v1/flash-sales/{activityId}/reservations/{reservationNo}",
+                                901,
+                                reservationNo
+                        )
+                        .with(user(userPrincipal())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reservationNo").value(reservationNo))
+                .andExpect(jsonPath("$.activityId").value("901"))
+                .andExpect(jsonPath("$.status").value("ORDER_CREATED"))
+                .andExpect(jsonPath("$.orderId")
+                        .value("ord_0123456789abcdef0123456789abcdef"))
+                .andExpect(jsonPath("$.quantity").value(2))
+                .andExpect(jsonPath("$.reservedAmount").value("39.80"))
+                .andExpect(jsonPath("$.currency").value("CNY"));
+
+        verify(flashSaleReservationStatusService).findOwned(901L, reservationNo, 100L);
+    }
+
+    @Test
+    void flashSaleReservationStatusHidesUnknownAndOtherUsersReservations() throws Exception {
+        String reservationNo = "rsv_fedcba9876543210fedcba9876543210";
+        when(flashSaleReservationStatusService.findOwned(902L, reservationNo, 100L))
+                .thenReturn(null);
+
+        mockMvc.perform(get(
+                                "/api/v1/flash-sales/{activityId}/reservations/{reservationNo}",
+                                902,
+                                reservationNo
+                        )
+                        .with(user(userPrincipal())))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"))
+                .andExpect(jsonPath("$.detail").value("Flash Sale Reservation was not found"));
+
+        verify(flashSaleReservationStatusService).findOwned(902L, reservationNo, 100L);
+    }
+
+    @Test
+    void flashSaleReservationStatusRequiresRoleUser() throws Exception {
+        CustomUserDetails admin = CustomUserDetails.builder()
+                .userId(1L)
+                .username("reservation-admin")
+                .password("")
+                .authorities(List.of(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                .build();
+
+        mockMvc.perform(get(
+                                "/api/v1/flash-sales/{activityId}/reservations/{reservationNo}",
+                                901,
+                                "rsv_0123456789abcdef0123456789abcdef"
+                        )
+                        .with(user(admin)))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
     }
 
     @Test
@@ -393,6 +470,14 @@ class PortalApiContractTest {
                         "$.paths['/api/v1/flash-sales/{activityId}/reservations']"
                                 + ".post.responses['200']"
                 ).doesNotExist())
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/flash-sales/{activityId}/reservations/{reservationNo}']"
+                                + ".get.responses['200']"
+                ).exists())
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/flash-sales/{activityId}/reservations/{reservationNo}']"
+                                + ".get.responses['404']"
+                ).exists())
                 .andExpect(jsonPath("$.paths['/admin/api/v1/orders']").doesNotExist())
                 .andExpect(jsonPath("$.components.schemas.Order").doesNotExist());
 

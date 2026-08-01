@@ -18,6 +18,7 @@ import type {
   ApiProblem,
   FlashSaleReservationRequest,
   FlashSaleReservationResponse,
+  FlashSaleReservationStatusResponse,
 } from '../models/index';
 import {
     ApiProblemFromJSON,
@@ -26,12 +27,21 @@ import {
     FlashSaleReservationRequestToJSON,
     FlashSaleReservationResponseFromJSON,
     FlashSaleReservationResponseToJSON,
+    FlashSaleReservationStatusResponseFromJSON,
+    FlashSaleReservationStatusResponseToJSON,
 } from '../models/index';
 
 export interface ReserveRequest {
     activityId: string;
     idempotencyKey: string;
     flashSaleReservationRequest: FlashSaleReservationRequest;
+    xRequestId?: string;
+    traceparent?: string;
+}
+
+export interface StatusRequest {
+    activityId: string;
+    reservationNo: string;
     xRequestId?: string;
     traceparent?: string;
 }
@@ -62,6 +72,25 @@ export interface UserFlashSaleReservationsApiInterface {
      * Reserve flash-sale inventory
      */
     reserve(requestParameters: ReserveRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<FlashSaleReservationResponse>;
+
+    /**
+     * Returns MySQL final facts when available and otherwise the accepted Redis Reservation. A Reservation owned by another User is indistinguishable from an unknown Reservation.
+     * @summary Get my flash-sale Reservation
+     * @param {string} activityId
+     * @param {string} reservationNo
+     * @param {string} [xRequestId] Caller-supplied correlation ID. Invalid values are replaced by the server.
+     * @param {string} [traceparent] W3C trace context. Its trace ID is distinct from X-Request-Id.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof UserFlashSaleReservationsApiInterface
+     */
+    statusRaw(requestParameters: StatusRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<FlashSaleReservationStatusResponse>>;
+
+    /**
+     * Returns MySQL final facts when available and otherwise the accepted Redis Reservation. A Reservation owned by another User is indistinguishable from an unknown Reservation.
+     * Get my flash-sale Reservation
+     */
+    status(requestParameters: StatusRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<FlashSaleReservationStatusResponse>;
 
 }
 
@@ -143,6 +172,69 @@ export class UserFlashSaleReservationsApi extends runtime.BaseAPI implements Use
      */
     async reserve(requestParameters: ReserveRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<FlashSaleReservationResponse> {
         const response = await this.reserveRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Returns MySQL final facts when available and otherwise the accepted Redis Reservation. A Reservation owned by another User is indistinguishable from an unknown Reservation.
+     * Get my flash-sale Reservation
+     */
+    async statusRaw(requestParameters: StatusRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<FlashSaleReservationStatusResponse>> {
+        if (requestParameters['activityId'] == null) {
+            throw new runtime.RequiredError(
+                'activityId',
+                'Required parameter "activityId" was null or undefined when calling status().'
+            );
+        }
+
+        if (requestParameters['reservationNo'] == null) {
+            throw new runtime.RequiredError(
+                'reservationNo',
+                'Required parameter "reservationNo" was null or undefined when calling status().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (requestParameters['xRequestId'] != null) {
+            headerParameters['X-Request-Id'] = String(requestParameters['xRequestId']);
+        }
+
+        if (requestParameters['traceparent'] != null) {
+            headerParameters['traceparent'] = String(requestParameters['traceparent']);
+        }
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("bearerAuth", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/api/v1/flash-sales/{activityId}/reservations/{reservationNo}`;
+        urlPath = urlPath.replace(`{${"activityId"}}`, encodeURIComponent(String(requestParameters['activityId'])));
+        urlPath = urlPath.replace(`{${"reservationNo"}}`, encodeURIComponent(String(requestParameters['reservationNo'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => FlashSaleReservationStatusResponseFromJSON(jsonValue));
+    }
+
+    /**
+     * Returns MySQL final facts when available and otherwise the accepted Redis Reservation. A Reservation owned by another User is indistinguishable from an unknown Reservation.
+     * Get my flash-sale Reservation
+     */
+    async status(requestParameters: StatusRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<FlashSaleReservationStatusResponse> {
+        const response = await this.statusRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

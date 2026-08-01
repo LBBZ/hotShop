@@ -1,10 +1,11 @@
 # HotShop 数据库迁移与约束设计
 
-> TASK-02 基线与 TASK-06 审计增量；适用于 MySQL 8.0。
+> TASK-02 基线、TASK-06 审计增量与 TASK-08 可靠订单处理增量；适用于 MySQL 8.0。
 
-TASK-07 没有新增或修改数据库结构，也未编辑已发布的 V1.0～V1.3。秒杀 HTTP 热路径只写
-`redis-seckill`；`sale_reservation`、`sales_order` 和 `outbox_event` 仍由后续 TASK-08/TASK-09
-负责落库。Redis Reservation 不是最终 Order 事实来源。
+TASK-08 只追加 `V1_4__reliable_seckill_order_processing.sql`，没有编辑已发布的 V1.0～V1.3。
+秒杀 HTTP 热路径仍只写 `redis-seckill`；`task` 消费 Redis Stream 后才在 MySQL 事务中创建
+`sale_reservation`、Order、处理账本和 Outbox。MySQL 是最终 Order 事实来源，Redis Reservation 是
+已接受的库存承诺。
 
 ## 1. 唯一结构来源与迁移责任
 
@@ -35,6 +36,7 @@ Compose 中只有一次性 `database-migrator` 可以执行迁移；portal、adm
 | `1.1` | `V1_1__take_over_legacy_tables.sql` | 条件导入旧四表，清理旧裸表及旧维护过程 |
 | `1.2` | `V1_2__secure_refresh_sessions.sql` | 为分域 Refresh Session 增加 session type、CSRF hash、family 索引和 SERVICE 审计 actor |
 | `1.3` | `V1_3__unified_append_only_audit_log.sql` | 增加 delegated actor、source、调查索引与 UPDATE/DELETE 阻断触发器 |
+| `1.4` | `V1_4__reliable_seckill_order_processing.sql` | 扩展 Reservation immutable facts；新增 Stream 处理账本、对账问题与断点表 |
 
 ## 2. 表、业务键与状态
 
@@ -46,14 +48,34 @@ Compose 中只有一次性 `database-migrator` 可以执行迁移；portal、adm
 | `app_user` | User；Username 与非空 Email 均为全生命周期唯一业务键，软删除后也不释放 | role=`ROLE_USER/ROLE_ADMIN`；status=`ACTIVE/LOCKED/DISABLED`；逻辑删除、version |
 | `catalog_product` | Catalog Product；`sku` 唯一 | price≥0、stock≥0；`DRAFT/ACTIVE/INACTIVE`；逻辑删除、version |
 | `flash_sale_activity` | Flash Sale Activity；`activity_code` 唯一 | 售价/库存非负，可售库存不超过总库存，每人限购>0，结束晚于开始；受限状态、version |
-| `sale_reservation` | Reservation；`reservation_no` 唯一 | quantity>0、金额≥0；受限状态、version |
+| `sale_reservation` | Reservation；`reservation_no` 唯一；TASK-08 保存单价、币种、Activity Version、幂等 hash、fingerprint 和 Redis 接受时间 | quantity>0、金额/单价≥0；币种为 CNY；hash 为 64 位小写十六进制；受限状态、version |
 | `sales_order` | Order；`order_id` 业务订单号主键；每个非空 Reservation 最多一个 Order | 金额≥0、三字母币种；`PENDING/PAID/SHIPPED/COMPLETED/CANCELED`；version |
 | `sales_order_item` | Order Item；同一 Order 的 Catalog Product 唯一 | quantity>0、单价/行金额≥0、行金额=单价×数量 |
 | `payment_order` | Payment Order；`payment_no` 唯一；order+provider 唯一；provider transaction 非空时唯一 | 金额≥0；`PENDING/SUCCEEDED/FAILED/CLOSED`；version |
 | `refresh_token` | Refresh Session；应用生成 BIGINT 主键；只保存 Refresh/CSRF 的 SHA-256 hash；token hash 唯一，family 用于轮换/泄露处理 | `session_type=USER/ADMIN`；每个非空 `parent_token_id` 最多一个后继且不能指向自身；状态 `ACTIVE/ROTATED/REVOKED/EXPIRED/REUSED`；无外键；过期晚于创建 |
 | `outbox_event` | 事务事件；`event_id` 唯一 | JSON payload；`NEW/PUBLISHING/PUBLISHED/FAILED`；attempts≥0 |
 | `processed_event` | 消费去重 | `(consumer_name,event_id)` 主键，同一事件可被不同消费者各处理一次 |
+| `seckill_event_processing` | Stream 持久处理账本；`event_id` 与 `(stream_key,stream_entry_id)` 分别唯一 | `RETRYING/ORDER_CREATED/COMPENSATING/COMPENSATED/QUARANTINED/MANUAL_REVIEW`；attempts/version≥0；保存 payload hash、下次重试、订单/补偿 ID 和脱敏错误 |
+| `seckill_reconciliation_issue` | 版本化人工问题队列；稳定 `issue_key` 合并同一问题 | `OPEN/RESOLVED/IGNORED`；`INFO/WARNING/CRITICAL`；脱敏 JSON 证据、出现次数和乐观版本 |
+| `seckill_reconciliation_checkpoint` | 每个 Reservation Stream 的断点 | 保存 entry ID cursor 和非负 version |
 | `audit_log` | 只追加统一审计；`audit_id` 为稳定游标 | actor/delegated actor、action、resource、result、request/trace、source、微秒发生时间和脱敏 JSON 摘要；触发器拒绝 UPDATE/DELETE |
+
+### 2.1 V1.4 可靠处理账本
+
+V1.4 为兼容迁移前可能存在的普通 Reservation，把新 immutable fact 列声明为 nullable；TASK-08 新写入
+的秒杀 Reservation 必须全部填充，并在应用层将 NULL 或不一致视为冲突。数据库 CHECK 约束保证非空
+单价非负、币种仅为 CNY、Activity Version 非负，两个 hash 仅接受 64 位小写十六进制。
+
+`seckill_event_processing` 同时唯一约束 `event_id` 和 `(stream_key,stream_entry_id)`，使 event 身份
+冲突不能覆盖已有记录。账本保存 Reservation/User/Activity、payload hash、attempts、
+`next_attempt_at`、order/compensation ID、reason code、限长 `last_error` 和乐观 version。
+`last_error` 最大 512 字符，只允许保存分类后的脱敏摘要。
+V1.4 同时把 `audit_log.source` 的允许值扩展为 `TASK`，用于标识补偿最终提交时由后台任务写入的系统审计；
+V1.3 的历史迁移文件保持不变。
+
+`seckill_reconciliation_issue` 的 `issue_key` 是稳定 SHA-256；重复发现更新 occurrences 和
+`last_seen_at`，而不是制造无界重复工单。`evidence_summary` 只保存版本化、脱敏 JSON。三张新表均为
+InnoDB，不声明外键或级联动作。
 
 预约的 `effective_slot` 是生成列：`RESERVED`、`ORDER_CREATED`、`COMPENSATING` 映射为 1，
 其他状态映射为 NULL；唯一键 `(activity_id,user_id,effective_slot)` 保证活动内同一用户最多一个有效
@@ -106,6 +128,13 @@ ROTATED token 会将其置为 REUSED、撤销同 family 的所有 ACTIVE token�
 | `outbox_event(status,available_at,outbox_id)` | 发布器领取可投递事件，稳定批量翻页 |
 | `outbox_event(aggregate_type,aggregate_id,outbox_id)` | 聚合事件追溯 |
 | `processed_event(event_id)` | 跨消费者调查同一事件 |
+| `seckill_event_processing(status,next_attempt_at,processing_id)` | Pending 恢复和到期退避重试 |
+| `seckill_event_processing(reservation_no,status,processing_id)` | Reservation 聚合与补偿/订单调查 |
+| `seckill_event_processing(status,updated_at,processing_id)` | 隔离、人工处理和终态账本扫描 |
+| `seckill_event_processing(stream_key,status,updated_at,stream_entry_id)` | 将 PEL entry 与持久状态对照 |
+| `seckill_reconciliation_issue(status,severity,last_seen_at,issue_id)` | OPEN 人工问题按严重度和时间调查 |
+| `seckill_reconciliation_issue(reservation_no,status,issue_id)` | Reservation 问题聚合 |
+| `seckill_reconciliation_issue(activity_id,status,issue_id)` | Activity 对账问题聚合 |
 | `audit_log` 的 occurred/actor/resource/request 索引 | 按时间、操作者、资源或 request ID 调查 |
 
 V1.3 将 actor、delegated actor、action、resource、result 和 source 的调查索引统一扩展为

@@ -4,8 +4,10 @@ import com.real.common.api.ApiException;
 import com.real.common.api.RequestContext;
 import com.real.common.api.dto.FlashSaleReservationRequest;
 import com.real.common.api.dto.FlashSaleReservationResponse;
+import com.real.common.api.dto.FlashSaleReservationStatusResponse;
 import com.real.domain.service.seckill.FlashSaleReservationResult;
 import com.real.domain.service.seckill.FlashSaleReservationService;
+import com.real.domain.service.seckill.FlashSaleReservationStatusService;
 import com.real.security.entity.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -26,6 +28,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -40,9 +43,48 @@ import org.springframework.web.bind.annotation.RestController;
 @SecurityRequirement(name = "bearerAuth")
 public class FlashSaleReservationController {
     private final FlashSaleReservationService reservationService;
+    private final FlashSaleReservationStatusService statusService;
 
-    public FlashSaleReservationController(FlashSaleReservationService reservationService) {
+    public FlashSaleReservationController(
+            FlashSaleReservationService reservationService,
+            FlashSaleReservationStatusService statusService
+    ) {
         this.reservationService = reservationService;
+        this.statusService = statusService;
+    }
+
+    @Operation(
+            summary = "Get my flash-sale Reservation",
+            description = "Returns MySQL final facts when available and otherwise the accepted "
+                    + "Redis Reservation. A Reservation owned by another User is indistinguishable "
+                    + "from an unknown Reservation."
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "Reservation state",
+            content = @Content(
+                    mediaType = MediaType.APPLICATION_JSON_VALUE,
+                    schema = @Schema(implementation = FlashSaleReservationStatusResponse.class)
+            )
+    )
+    @ApiResponse(responseCode = "404", description = "Reservation not found")
+    @GetMapping("/{activityId}/reservations/{reservationNo}")
+    public FlashSaleReservationStatusResponse status(
+            @PathVariable @Min(1) Long activityId,
+            @PathVariable
+            @Pattern(regexp = "^rsv_[0-9a-f]{32}$")
+            String reservationNo,
+            @AuthenticationPrincipal CustomUserDetails principal
+    ) {
+        FlashSaleReservationStatusResponse response = statusService.findOwned(
+                activityId,
+                reservationNo,
+                principal.getUserId()
+        );
+        if (response == null) {
+            throw ApiException.notFound("Flash Sale Reservation");
+        }
+        return response;
     }
 
     @Operation(

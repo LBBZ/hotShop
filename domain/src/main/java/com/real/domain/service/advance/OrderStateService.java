@@ -121,6 +121,20 @@ public class OrderStateService {
     }
 
     /**
+     * Cancels only legacy orders. Seckill orders always carry a reservation_id and are
+     * deliberately excluded from the TASK-08/TASK-09 timeout boundary.
+     */
+    @Transactional
+    public boolean cancelLegacyPendingOrder(String orderId) {
+        Order order = orderMapper.selectLegacyPendingOrderById(orderId);
+        if (order == null || orderMapper.cancelLegacyPendingOrder(orderId) != 1) {
+            return false;
+        }
+        releaseStock(order);
+        return true;
+    }
+
+    /**
      * 完成订单
      */
     @Transactional

@@ -7,5 +7,7 @@ public sealed interface AuditStateSummary permits
         ProductMutationAuditState,
         FlashSaleActivityLoadAuditState,
         OutboxReplayAuditState,
-        OperationFailureAuditState {
+        OperationFailureAuditState,
+        InventoryCompensationAuditState,
+        PaymentCallbackAuditState {
 }

@@ -117,7 +117,10 @@ export const AuditLogResponseActionEnum = {
     CatalogProductUpdated: 'CATALOG_PRODUCT_UPDATED',
     CatalogProductDeleted: 'CATALOG_PRODUCT_DELETED',
     FlashSaleActivityLoaded: 'FLASH_SALE_ACTIVITY_LOADED',
-    OutboxReplay: 'OUTBOX_REPLAY'
+    OutboxReplay: 'OUTBOX_REPLAY',
+    InventoryCompensated: 'INVENTORY_COMPENSATED',
+    MockPaymentCallbackAccepted: 'MOCK_PAYMENT_CALLBACK_ACCEPTED',
+    MockPaymentCallbackRejected: 'MOCK_PAYMENT_CALLBACK_REJECTED'
 } as const;
 export type AuditLogResponseActionEnum = typeof AuditLogResponseActionEnum[keyof typeof AuditLogResponseActionEnum];
 
@@ -154,7 +157,11 @@ export const AuditLogResponseResourceTypeEnum = {
     User: 'USER',
     CatalogProduct: 'CATALOG_PRODUCT',
     FlashSaleActivity: 'FLASH_SALE_ACTIVITY',
-    OutboxEvent: 'OUTBOX_EVENT'
+    OutboxEvent: 'OUTBOX_EVENT',
+    SalesOrder: 'SALES_ORDER',
+    SaleReservation: 'SALE_RESERVATION',
+    PaymentOrder: 'PAYMENT_ORDER',
+    PaymentCallback: 'PAYMENT_CALLBACK'
 } as const;
 export type AuditLogResponseResourceTypeEnum = typeof AuditLogResponseResourceTypeEnum[keyof typeof AuditLogResponseResourceTypeEnum];
 
@@ -174,7 +181,9 @@ export type AuditLogResponseResultEnum = typeof AuditLogResponseResultEnum[keyof
 export const AuditLogResponseSourceEnum = {
     PortalApi: 'PORTAL_API',
     AdminApi: 'ADMIN_API',
-    AgentApi: 'AGENT_API'
+    AgentApi: 'AGENT_API',
+    Task: 'TASK',
+    MockProvider: 'MOCK_PROVIDER'
 } as const;
 export type AuditLogResponseSourceEnum = typeof AuditLogResponseSourceEnum[keyof typeof AuditLogResponseSourceEnum];
 

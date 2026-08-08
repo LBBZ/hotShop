@@ -314,3 +314,6 @@ flowchart LR
      ```bash
         docker-compose down -v
      ```
+# Local Mock Payment (not real payment)
+
+HotShop includes an opt-in Mock Payment flow solely for local demonstrations. It does not connect to any public payment service and transfers no funds. Set `HOTSHOP_MOCK_PAYMENT_ENABLED=true` and inject the same external `HOTSHOP_MOCK_PAYMENT_SECRET` (at least 32 UTF-8 bytes) into Portal and Task. See [docs/architecture/mock-payment.md](docs/architecture/mock-payment.md) for HMAC, replay protection, persistent delay, terminal races, and late-success handling.

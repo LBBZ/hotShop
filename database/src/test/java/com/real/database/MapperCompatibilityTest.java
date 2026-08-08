@@ -33,7 +33,6 @@ import java.math.BigDecimal;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
-import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -274,8 +273,10 @@ class MapperCompatibilityTest {
         )) {
             for (String orderId : orderIds) {
                 statement.setString(1, orderId);
-                statement.setTimestamp(2, Timestamp.valueOf(createdAt));
-                statement.setTimestamp(3, Timestamp.valueOf(createdAt));
+                // Bind the UTC database fact as LocalDateTime, matching MyBatis'
+                // LocalDateTimeTypeHandler instead of applying the host JVM zone.
+                statement.setObject(2, createdAt);
+                statement.setObject(3, createdAt);
                 statement.addBatch();
             }
             statement.executeBatch();

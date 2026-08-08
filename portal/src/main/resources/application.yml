@@ -25,6 +25,17 @@ rabbitmq:
 hotshop:
   order:
     legacy-payment-timeout: ${HOTSHOP_LEGACY_ORDER_TIMEOUT:15m}
+  mock-payment:
+    enabled: ${HOTSHOP_MOCK_PAYMENT_ENABLED:false}
+    secret: ${HOTSHOP_MOCK_PAYMENT_SECRET:}
+    allowed-clock-skew: ${HOTSHOP_MOCK_PAYMENT_ALLOWED_CLOCK_SKEW:5m}
+    callback-url: ${HOTSHOP_MOCK_PAYMENT_CALLBACK_URL:http://portal-service:8080/provider-callbacks/v1/mock-payment}
+    http-timeout: ${HOTSHOP_MOCK_PAYMENT_HTTP_TIMEOUT:3s}
+    retry-delay: ${HOTSHOP_MOCK_PAYMENT_RETRY_DELAY:2s}
+    max-delivery-attempts: ${HOTSHOP_MOCK_PAYMENT_MAX_DELIVERY_ATTEMPTS:5}
+    max-simulation-delay: ${HOTSHOP_MOCK_PAYMENT_MAX_SIMULATION_DELAY:1h}
+    max-duplicate-count: ${HOTSHOP_MOCK_PAYMENT_MAX_DUPLICATE_COUNT:10}
+    max-callback-body-bytes: ${HOTSHOP_MOCK_PAYMENT_MAX_CALLBACK_BODY_BYTES:4096}
 
 server:
   port: 8080

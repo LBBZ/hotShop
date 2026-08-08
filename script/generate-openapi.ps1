@@ -39,7 +39,7 @@ try {
         @{
             Name = 'portal'
             Jar = Join-Path $repositoryRoot 'portal\target\portal-0.0.1-SNAPSHOT.jar'
-            Documents = @('public', 'user')
+            Documents = @('public', 'user', 'mock-provider-callback')
         },
         @{
             Name = 'admin'

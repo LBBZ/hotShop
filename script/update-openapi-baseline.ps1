@@ -16,7 +16,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 New-Item -ItemType Directory -Force -Path $baselineDirectory | Out-Null
-foreach ($name in @('public', 'user', 'admin')) {
+foreach ($name in @('public', 'user', 'admin', 'mock-provider-callback')) {
     Copy-Item `
         -LiteralPath (Join-Path $generatedDirectory "$name.json") `
         -Destination (Join-Path $baselineDirectory "$name.json") `

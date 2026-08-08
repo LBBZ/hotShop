@@ -38,7 +38,6 @@ import java.nio.file.Path;
 import java.math.BigDecimal;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
-import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.List;
@@ -123,7 +122,7 @@ class AdminIdentitySecurityTest {
                 .validateMigrationNaming(true)
                 .cleanDisabled(true)
                 .load();
-        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(6);
+        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(7);
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
         String hash = new BCryptPasswordEncoder().encode(PASSWORD);
         jdbcTemplate.update(
@@ -611,7 +610,7 @@ class AdminIdentitySecurityTest {
                     '44444444444444444444444444444444', 'ADMIN_API',
                     JSON_OBJECT('changedFields', JSON_ARRAY('stock')))
                 """,
-                Timestamp.valueOf(occurredAt),
+                occurredAt,
                 resourceId,
                 requestId
         );

@@ -58,8 +58,8 @@ class SchemaConstraintTest {
 
     @Test
     void emptyDatabaseMigratesToLatestAndValidates() {
-        assertThat(initialMigrationCount).isEqualTo(6);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1.5");
+        assertThat(initialMigrationCount).isEqualTo(7);
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1.6");
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
     }
 
@@ -224,6 +224,43 @@ class SchemaConstraintTest {
                     .isEqualTo("status,outbox_id");
             assertThat(indexColumns(connection, "outbox_event", "uk_outbox_event_id"))
                     .isEqualTo("event_id");
+        }
+    }
+
+    @Test
+    void mockPaymentLedgerEnforcesCallbackNonceAndClaimIndexes() throws SQLException {
+        try (Connection connection = connection()) {
+            String callbackId = UUID.randomUUID().toString();
+            insertCallback(connection, callbackId, "a".repeat(64), "MOCK_" + "1".repeat(32));
+            assertConstraintViolation(() -> insertCallback(
+                    connection, callbackId, "b".repeat(64), "MOCK_" + "2".repeat(32)));
+            insertNonce(connection, "c".repeat(64), callbackId);
+            assertConstraintViolation(() -> insertNonce(connection, "c".repeat(64), UUID.randomUUID().toString()));
+            assertThat(indexColumns(connection, "payment_callback_ledger", "uk_payment_callback_id"))
+                    .isEqualTo("callback_id");
+            assertThat(indexColumns(connection, "payment_callback_nonce", "uk_payment_callback_nonce_hash"))
+                    .isEqualTo("nonce_hash");
+            assertThat(indexColumns(connection, "payment_order", "idx_payment_order_order_status"))
+                    .isEqualTo("order_id,status,payment_id");
+        }
+    }
+
+    @Test
+    void mockPaymentChecksRejectInvalidProviderOutcomeHashAndStatus() throws SQLException {
+        try (Connection connection = connection()) {
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                INSERT INTO payment_callback_ledger(callback_id,payload_hash,provider,payment_no,
+                  provider_transaction_no,outcome,amount,currency,occurred_at,receive_result,business_result)
+                VALUES(UUID(),'not-a-hash','PUBLIC','bad','bad','UNKNOWN',-1,'USD',UTC_TIMESTAMP(6),'ACCEPTED','IDEMPOTENT')
+                """));
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                INSERT INTO payment_order(payment_no,order_id,amount,status)
+                VALUES('invalid-late','order-invalid-late',1.00,'REFUNDED')
+                """));
+            executeUpdate(connection, """
+                INSERT INTO payment_order(payment_no,order_id,amount,status)
+                VALUES('valid-late','order-valid-late',1.00,'LATE_SUCCEEDED')
+                """);
         }
     }
 
@@ -427,6 +464,31 @@ class SchemaConstraintTest {
                 """)) {
             statement.setString(1, consumer);
             statement.setString(2, eventId);
+            statement.executeUpdate();
+        }
+    }
+
+    private static void insertCallback(Connection connection, String callbackId, String payloadHash,
+            String paymentNo) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+            INSERT INTO payment_callback_ledger(callback_id,payload_hash,provider,payment_no,
+              provider_transaction_no,outcome,amount,currency,occurred_at,receive_result,business_result)
+            VALUES(?,?,'MOCK',?,'MOCK-TXN-0123456789abcdef0123456789abcdef',
+              'SUCCEEDED',1.00,'CNY',UTC_TIMESTAMP(6),'ACCEPTED','IDEMPOTENT')
+            """)) {
+            statement.setString(1, callbackId);
+            statement.setString(2, payloadHash);
+            statement.setString(3, paymentNo);
+            statement.executeUpdate();
+        }
+    }
+
+    private static void insertNonce(Connection connection, String nonceHash, String callbackId)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "INSERT INTO payment_callback_nonce(nonce_hash,callback_id) VALUES(?,?)")) {
+            statement.setString(1, nonceHash);
+            statement.setString(2, callbackId);
             statement.executeUpdate();
         }
     }

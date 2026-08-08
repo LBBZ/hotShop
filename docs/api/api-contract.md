@@ -352,3 +352,8 @@ Agent OpenAPI 和工具面不提供等价能力：
 failure category 与时间，不返回 payload、`last_error`、凭据、SQL 或堆栈。重放成功返回 202，只修改
 MySQL 状态并追加 append-only `audit_log`；RabbitMQ 发布由 task 异步完成。`NEW`、`PUBLISHING` 和
 `PUBLISHED` 均返回 409 `OUTBOX_NOT_FAILED`，不能借此重复发布已经完成的事件。
+# TASK-10 Mock Payment contract
+
+Mock Payment 仅供本地演示，不是真实支付。User 契约新增 `POST /api/v1/orders/{orderId}/payments`、`GET /api/v1/payments/{paymentNo}` 和返回 202 的 `POST /api/v1/payments/{paymentNo}/mock-actions`；三者只接受 `ROLE_USER` 且服务端校验 Order ownership。mock action 的 `delay` 是有上限的 ISO-8601 Duration，`duplicateCount` 为 1..10。
+
+Provider 使用独立 runtime contract `docs/api/openapi-baseline/mock-provider-callback.json`。只有精确路径 `POST /provider-callbacks/v1/mock-payment` 匿名，且必须携带 `X-Mock-Timestamp`、`X-Mock-Nonce`、`X-Mock-Signature`。此路径不生成 TypeScript 客户端，也不属于 Agent boundary。

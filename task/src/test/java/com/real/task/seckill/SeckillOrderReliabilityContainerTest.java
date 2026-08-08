@@ -164,7 +164,9 @@ class SeckillOrderReliabilityContainerTest {
 
         assertThat(count("sales_order")).isEqualTo(100);
         assertThat(count("sales_order_item")).isEqualTo(100);
-        assertThat(count("outbox_event")).isEqualTo(100);
+        assertThat(count("outbox_event")).isEqualTo(200);
+        assertThat(countWhere("outbox_event", "event_type = 'ORDER_CREATED'")).isEqualTo(100);
+        assertThat(countWhere("outbox_event", "event_type = 'LEGACY_ORDER_TIMEOUT_REQUESTED'")).isEqualTo(100);
         assertThat(countWhere("seckill_event_processing", "status = 'ORDER_CREATED'"))
                 .isEqualTo(100);
         assertThat(integer("SELECT available_stock FROM flash_sale_activity WHERE activity_id = 21"))
@@ -193,7 +195,7 @@ class SeckillOrderReliabilityContainerTest {
 
         assertThat(count("sales_order")).isEqualTo(1);
         assertThat(count("sales_order_item")).isEqualTo(1);
-        assertThat(count("outbox_event")).isEqualTo(1);
+        assertThat(count("outbox_event")).isEqualTo(2);
         assertThat(count("seckill_event_processing")).isEqualTo(2);
         assertThat(integer("SELECT available_stock FROM flash_sale_activity WHERE activity_id = 31"))
                 .isEqualTo(4);
@@ -223,7 +225,7 @@ class SeckillOrderReliabilityContainerTest {
         awaitRetryAndClaim(event.stream());
 
         assertThat(count("sales_order")).isEqualTo(1);
-        assertThat(count("outbox_event")).isEqualTo(1);
+        assertThat(count("outbox_event")).isEqualTo(2);
         assertThat(pending(event.stream())).isZero();
     }
 
@@ -238,7 +240,7 @@ class SeckillOrderReliabilityContainerTest {
         consumer.poll();
 
         assertThat(count("sales_order")).isEqualTo(1);
-        assertThat(count("outbox_event")).isEqualTo(1);
+        assertThat(count("outbox_event")).isEqualTo(2);
         assertThat(redis.opsForHash().get(event.reservationKey(), "status")).isEqualTo("RESERVED");
         assertThat(pending(event.stream())).isEqualTo(1);
 
@@ -246,7 +248,7 @@ class SeckillOrderReliabilityContainerTest {
 
         assertThat(count("sales_order")).isEqualTo(1);
         assertThat(count("sales_order_item")).isEqualTo(1);
-        assertThat(count("outbox_event")).isEqualTo(1);
+        assertThat(count("outbox_event")).isEqualTo(2);
         assertThat(integer("SELECT available_stock FROM flash_sale_activity WHERE activity_id = 51"))
                 .isEqualTo(1);
         assertThat(redis.opsForHash().get(event.reservationKey(), "status"))
@@ -272,7 +274,7 @@ class SeckillOrderReliabilityContainerTest {
         awaitRetryAndClaim(event.stream());
 
         assertThat(count("sales_order")).isEqualTo(1);
-        assertThat(count("outbox_event")).isEqualTo(1);
+        assertThat(count("outbox_event")).isEqualTo(2);
         assertThat(integer("SELECT stock FROM catalog_product WHERE product_id = 161"))
                 .isEqualTo(1);
         assertThat(pending(event.stream())).isZero();
@@ -513,7 +515,7 @@ class SeckillOrderReliabilityContainerTest {
         assertThat(pending(event.stream())).isZero();
         assertThat(redis.opsForValue().get(SeckillRedisKeys.availableStock(111))).isEqualTo("77");
         assertThat(count("sales_order")).isEqualTo(1);
-        assertThat(count("outbox_event")).isEqualTo(1);
+        assertThat(count("outbox_event")).isEqualTo(2);
     }
 
     private void seedActivity(

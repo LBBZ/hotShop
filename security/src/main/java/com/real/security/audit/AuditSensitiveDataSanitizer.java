@@ -17,7 +17,7 @@ public class AuditSensitiveDataSanitizer {
     static final String REDACTED = "[REDACTED]";
 
     private static final Pattern SENSITIVE_KEY = Pattern.compile(
-            "(?i).*(password|passphrase|access.?token|refresh.?token|api.?key|"
+            "(?i).*(password|passphrase|access.?token|refresh.?token|api.?key|secret|signature|nonce|"
                     + "cookie|authorization|client.?assertion|full.?prompt|"
                     + "chain.?of.?thought|thought.?chain|reasoning|完整?提示词|思维链|推理).*"
     );

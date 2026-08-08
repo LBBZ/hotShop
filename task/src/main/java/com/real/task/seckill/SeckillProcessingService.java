@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 
 @Service
 public class SeckillProcessingService {
@@ -140,6 +141,7 @@ public class SeckillProcessingService {
 
         String orderId = event.deterministicOrderId();
         BigDecimal amount = event.totalAmount();
+        Instant paymentExpiresAt = clock.instant().plus(properties.getPaymentTimeout());
         try {
             jdbc.update("""
                     INSERT INTO sales_order (
@@ -151,7 +153,7 @@ public class SeckillProcessingService {
                     event.userId(),
                     reservation.reservationId(),
                     amount,
-                    Timestamp.from(clock.instant().plus(properties.getPaymentTimeout()))
+                    Timestamp.from(paymentExpiresAt)
             );
         } catch (DuplicateKeyException exception) {
             throw new ManualFactFailure("ORDER_ID_OR_RESERVATION_CONFLICT");
@@ -198,6 +200,22 @@ public class SeckillProcessingService {
                         Map.entry("totalAmount", amount),
                         Map.entry("currency", event.currency()),
                         Map.entry("occurredAtMs", clock.millis())
+                )
+        );
+        insertOutbox(
+                UUID.nameUUIDFromBytes(("hotshop/outbox/v1/SECKILL_ORDER_TIMEOUT/" + orderId)
+                        .getBytes(StandardCharsets.UTF_8)).toString(),
+                "ORDER",
+                orderId,
+                "LEGACY_ORDER_TIMEOUT_REQUESTED",
+                Map.of(
+                        "schemaVersion", 1,
+                        "orderId", orderId,
+                        "userId", event.userId(),
+                        "amount", amount.setScale(2).toPlainString(),
+                        "currency", event.currency(),
+                        "expiresAtMs", paymentExpiresAt.toEpochMilli(),
+                        "timeoutAttempt", 0
                 )
         );
         markOrderCreated(processing.processingId(), event, orderId);

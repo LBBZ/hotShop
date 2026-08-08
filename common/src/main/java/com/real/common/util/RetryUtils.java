@@ -1,6 +1,8 @@
 package com.real.common.util;
 
 import com.real.common.exception.InventoryShortageException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.LockSupport;
 
 public class RetryUtils {
 
@@ -30,11 +32,10 @@ public class RetryUtils {
                 }
             }
             attempts++;
-            try {
-                Thread.sleep(delayMillis);
-            } catch (InterruptedException e) {
+            LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(delayMillis));
+            if (Thread.interrupted()) {
                 Thread.currentThread().interrupt();
-                throw new RuntimeException("重试中断", e);
+                throw new RuntimeException("重试中断");
             }
         }
         throw new InventoryShortageException("操作失败，已达最大重试次数: " + maxAttempts);

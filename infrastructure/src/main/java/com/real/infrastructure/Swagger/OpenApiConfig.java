@@ -103,6 +103,7 @@ public class OpenApiConfig {
                 .pathsToMatch(
                         "/api/v1/users/**",
                         "/api/v1/orders/**",
+                        "/api/v1/payments/**",
                         "/api/v1/flash-sales/**",
                         "/api/v1/auth/logout",
                         "/api/v1/auth/refresh"
@@ -127,6 +128,16 @@ public class OpenApiConfig {
                 .group("agent-boundary")
                 .displayName("Reserved Agent API v1 boundary")
                 .pathsToMatch("/agent/api/v1/**")
+                .addOpenApiCustomizer(contractCustomizer)
+                .build();
+    }
+
+    @Bean
+    public GroupedOpenApi mockProviderCallbackApi(OpenApiCustomizer contractCustomizer) {
+        return GroupedOpenApi.builder()
+                .group("mock-provider-callback")
+                .displayName("Local Mock Provider callback v1")
+                .pathsToMatch("/provider-callbacks/v1/mock-payment")
                 .addOpenApiCustomizer(contractCustomizer)
                 .build();
     }

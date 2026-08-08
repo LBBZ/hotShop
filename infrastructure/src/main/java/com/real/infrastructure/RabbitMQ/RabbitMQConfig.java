@@ -26,6 +26,22 @@ public class RabbitMQConfig {
     public static final String TIMEOUT_DEAD_EXCHANGE = "hotshop.order.timeout.dead.v1";
     public static final String TIMEOUT_DEAD_QUEUE = "hotshop.order.timeout.dead.v1";
     public static final String TIMEOUT_ROUTING_KEY = "order.timeout";
+    public static final String MOCK_CALLBACK_EXCHANGE = "hotshop.mock-payment.callback.v1";
+    public static final String MOCK_CALLBACK_QUEUE = "hotshop.mock-payment.callback.delivery.v1";
+    public static final String MOCK_CALLBACK_RETRY_EXCHANGE = "hotshop.mock-payment.callback.retry.v1";
+    public static final String MOCK_CALLBACK_RETRY_QUEUE = "hotshop.mock-payment.callback.retry.v1";
+    public static final String MOCK_CALLBACK_DEAD_EXCHANGE = "hotshop.mock-payment.callback.dead.v1";
+    public static final String MOCK_CALLBACK_DEAD_QUEUE = "hotshop.mock-payment.callback.dead.v1";
+    public static final String MOCK_CALLBACK_ROUTING_KEY = "mock-payment.callback";
+    public static final String PAYMENT_SUCCEEDED_QUEUE = "hotshop.payment.succeeded.v1";
+    public static final String PAYMENT_FAILED_QUEUE = "hotshop.payment.failed.v1";
+    public static final String PAYMENT_LATE_SUCCEEDED_QUEUE = "hotshop.payment.late-succeeded.v1";
+    public static final String SECKILL_PAYMENT_EXPIRED_QUEUE = "hotshop.seckill.payment-expired.v1";
+    public static final String SECKILL_PAYMENT_EXPIRED_RETRY_EXCHANGE = "hotshop.seckill.payment-expired.retry.v1";
+    public static final String SECKILL_PAYMENT_EXPIRED_RETRY_QUEUE = "hotshop.seckill.payment-expired.retry.v1";
+    public static final String SECKILL_PAYMENT_EXPIRED_DEAD_EXCHANGE = "hotshop.seckill.payment-expired.dead.v1";
+    public static final String SECKILL_PAYMENT_EXPIRED_DEAD_QUEUE = "hotshop.seckill.payment-expired.dead.v1";
+    public static final String SECKILL_PAYMENT_EXPIRED_ROUTING_KEY = "seckill.payment-expired";
     private final int legacyTimeoutMs;
 
     public RabbitMQConfig(@Value("${hotshop.order.legacy-payment-timeout:15m}") Duration timeout) {
@@ -71,4 +87,58 @@ public class RabbitMQConfig {
     @Bean public Binding timeoutScheduleBinding() { return BindingBuilder.bind(timeoutDelayQueue()).to(timeoutScheduleExchange()).with(TIMEOUT_ROUTING_KEY); }
     @Bean public Binding timeoutReadyBinding() { return BindingBuilder.bind(timeoutReadyQueue()).to(timeoutReadyExchange()).with(TIMEOUT_ROUTING_KEY); }
     @Bean public Binding timeoutDeadBinding() { return BindingBuilder.bind(timeoutDeadQueue()).to(timeoutDeadExchange()).with(TIMEOUT_ROUTING_KEY); }
+
+    @Bean public Queue paymentSucceededQueue() { return QueueBuilder.durable(PAYMENT_SUCCEEDED_QUEUE).build(); }
+    @Bean public Queue paymentFailedQueue() { return QueueBuilder.durable(PAYMENT_FAILED_QUEUE).build(); }
+    @Bean public Queue paymentLateSucceededQueue() { return QueueBuilder.durable(PAYMENT_LATE_SUCCEEDED_QUEUE).build(); }
+    @Bean public Queue seckillPaymentExpiredQueue() {
+        return QueueBuilder.durable(SECKILL_PAYMENT_EXPIRED_QUEUE)
+                .deadLetterExchange(SECKILL_PAYMENT_EXPIRED_DEAD_EXCHANGE)
+                .deadLetterRoutingKey(SECKILL_PAYMENT_EXPIRED_ROUTING_KEY).build();
+    }
+    @Bean public Binding paymentSucceededBinding() { return BindingBuilder.bind(paymentSucceededQueue()).to(businessExchange()).with("PAYMENT_SUCCEEDED"); }
+    @Bean public Binding paymentFailedBinding() { return BindingBuilder.bind(paymentFailedQueue()).to(businessExchange()).with("PAYMENT_FAILED"); }
+    @Bean public Binding paymentLateSucceededBinding() { return BindingBuilder.bind(paymentLateSucceededQueue()).to(businessExchange()).with("PAYMENT_LATE_SUCCEEDED"); }
+    @Bean public Binding seckillPaymentExpiredBinding() { return BindingBuilder.bind(seckillPaymentExpiredQueue()).to(businessExchange()).with("SECKILL_PAYMENT_EXPIRED"); }
+
+    @Bean public DirectExchange seckillPaymentExpiredRetryExchange() {
+        return new DirectExchange(SECKILL_PAYMENT_EXPIRED_RETRY_EXCHANGE, true, false);
+    }
+    @Bean public DirectExchange seckillPaymentExpiredDeadExchange() {
+        return new DirectExchange(SECKILL_PAYMENT_EXPIRED_DEAD_EXCHANGE, true, false);
+    }
+    @Bean public Queue seckillPaymentExpiredRetryQueue() {
+        return QueueBuilder.durable(SECKILL_PAYMENT_EXPIRED_RETRY_QUEUE)
+                .deadLetterExchange(BUSINESS_EXCHANGE)
+                .deadLetterRoutingKey("SECKILL_PAYMENT_EXPIRED").build();
+    }
+    @Bean public Queue seckillPaymentExpiredDeadQueue() {
+        return QueueBuilder.durable(SECKILL_PAYMENT_EXPIRED_DEAD_QUEUE).build();
+    }
+    @Bean public Binding seckillPaymentExpiredRetryBinding() {
+        return BindingBuilder.bind(seckillPaymentExpiredRetryQueue())
+                .to(seckillPaymentExpiredRetryExchange()).with(SECKILL_PAYMENT_EXPIRED_ROUTING_KEY);
+    }
+    @Bean public Binding seckillPaymentExpiredDeadBinding() {
+        return BindingBuilder.bind(seckillPaymentExpiredDeadQueue())
+                .to(seckillPaymentExpiredDeadExchange()).with(SECKILL_PAYMENT_EXPIRED_ROUTING_KEY);
+    }
+
+    @Bean public DirectExchange mockCallbackExchange() { return new DirectExchange(MOCK_CALLBACK_EXCHANGE, true, false); }
+    @Bean public DirectExchange mockCallbackRetryExchange() { return new DirectExchange(MOCK_CALLBACK_RETRY_EXCHANGE, true, false); }
+    @Bean public DirectExchange mockCallbackDeadExchange() { return new DirectExchange(MOCK_CALLBACK_DEAD_EXCHANGE, true, false); }
+    @Bean public Queue mockCallbackQueue() {
+        return QueueBuilder.durable(MOCK_CALLBACK_QUEUE)
+                .deadLetterExchange(MOCK_CALLBACK_DEAD_EXCHANGE)
+                .deadLetterRoutingKey(MOCK_CALLBACK_ROUTING_KEY).build();
+    }
+    @Bean public Queue mockCallbackRetryQueue() {
+        return QueueBuilder.durable(MOCK_CALLBACK_RETRY_QUEUE)
+                .deadLetterExchange(MOCK_CALLBACK_EXCHANGE)
+                .deadLetterRoutingKey(MOCK_CALLBACK_ROUTING_KEY).build();
+    }
+    @Bean public Queue mockCallbackDeadQueue() { return QueueBuilder.durable(MOCK_CALLBACK_DEAD_QUEUE).build(); }
+    @Bean public Binding mockCallbackBinding() { return BindingBuilder.bind(mockCallbackQueue()).to(mockCallbackExchange()).with(MOCK_CALLBACK_ROUTING_KEY); }
+    @Bean public Binding mockCallbackRetryBinding() { return BindingBuilder.bind(mockCallbackRetryQueue()).to(mockCallbackRetryExchange()).with(MOCK_CALLBACK_ROUTING_KEY); }
+    @Bean public Binding mockCallbackDeadBinding() { return BindingBuilder.bind(mockCallbackDeadQueue()).to(mockCallbackDeadExchange()).with(MOCK_CALLBACK_ROUTING_KEY); }
 }

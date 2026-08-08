@@ -275,3 +275,6 @@ V1.5 接管时，旧版本遗留且无法证明所有权的 `PUBLISHING` 行会�
 `failure_category` 只写稳定、有限的脱敏类别，不写 payload、凭据、SQL、异常堆栈或原始错误。
 消费者 Inbox 继续使用 `processed_event` 的 `(consumer_name, event_id)` 主键，并与业务效果在同一
 MySQL 事务提交。
+# V1.6 Mock Payment additions
+
+V1.6 扩展 `payment_order.status` 为 `PENDING/SUCCEEDED/FAILED/CLOSED/LATE_SUCCEEDED`，增加 `(order_id,status,payment_id)` 终态查找索引。`payment_callback_ledger` 以 callbackId 唯一并保存 payload hash、Provider 事实及处理结果；`payment_callback_nonce` 以 nonce SHA-256 hash 唯一。两表均无外键，不保存原始 nonce 或签名。延迟继续使用 `outbox_event.available_at` 和已有 `(status,available_at,lease_expires_at,outbox_id)` 领取索引。

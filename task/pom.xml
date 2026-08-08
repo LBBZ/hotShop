@@ -69,6 +69,8 @@
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
                     <mainClass>com.real.task.hotShopTaskApplication</mainClass>
+                    <!-- Keep the ordinary jar usable by downstream integration tests. -->
+                    <classifier>exec</classifier>
                 </configuration>
             </plugin>
         </plugins>

@@ -56,8 +56,8 @@ export interface AdminAuditLogsApiInterface {
      * @param {Date} [occurredTo]
      * @param {'USER' | 'ADMIN' | 'AGENT' | 'SERVICE' | 'SYSTEM'} [actorType]
      * @param {string} [actorId]
-     * @param {'AUTHENTICATION_LOGIN' | 'REFRESH_TOKEN_REUSE_DETECTED' | 'AGENT_DELEGATION_ISSUED' | 'CATALOG_PRODUCT_CREATED' | 'CATALOG_PRODUCT_UPDATED' | 'CATALOG_PRODUCT_DELETED' | 'FLASH_SALE_ACTIVITY_LOADED' | 'OUTBOX_REPLAY'} [action]
-     * @param {'AUTHENTICATION_SESSION' | 'REFRESH_TOKEN_FAMILY' | 'USER' | 'CATALOG_PRODUCT' | 'FLASH_SALE_ACTIVITY' | 'OUTBOX_EVENT'} [resourceType]
+     * @param {'AUTHENTICATION_LOGIN' | 'REFRESH_TOKEN_REUSE_DETECTED' | 'AGENT_DELEGATION_ISSUED' | 'CATALOG_PRODUCT_CREATED' | 'CATALOG_PRODUCT_UPDATED' | 'CATALOG_PRODUCT_DELETED' | 'FLASH_SALE_ACTIVITY_LOADED' | 'OUTBOX_REPLAY' | 'INVENTORY_COMPENSATED' | 'MOCK_PAYMENT_CALLBACK_ACCEPTED' | 'MOCK_PAYMENT_CALLBACK_REJECTED'} [action]
+     * @param {'AUTHENTICATION_SESSION' | 'REFRESH_TOKEN_FAMILY' | 'USER' | 'CATALOG_PRODUCT' | 'FLASH_SALE_ACTIVITY' | 'OUTBOX_EVENT' | 'SALES_ORDER' | 'SALE_RESERVATION' | 'PAYMENT_ORDER' | 'PAYMENT_CALLBACK'} [resourceType]
      * @param {string} [resourceId]
      * @param {'SUCCESS' | 'FAILURE' | 'DENIED'} [result]
      * @param {string} [xRequestId] Caller-supplied correlation ID. Invalid values are replaced by the server.
@@ -192,7 +192,10 @@ export const GetAuditLogsActionEnum = {
     CatalogProductUpdated: 'CATALOG_PRODUCT_UPDATED',
     CatalogProductDeleted: 'CATALOG_PRODUCT_DELETED',
     FlashSaleActivityLoaded: 'FLASH_SALE_ACTIVITY_LOADED',
-    OutboxReplay: 'OUTBOX_REPLAY'
+    OutboxReplay: 'OUTBOX_REPLAY',
+    InventoryCompensated: 'INVENTORY_COMPENSATED',
+    MockPaymentCallbackAccepted: 'MOCK_PAYMENT_CALLBACK_ACCEPTED',
+    MockPaymentCallbackRejected: 'MOCK_PAYMENT_CALLBACK_REJECTED'
 } as const;
 export type GetAuditLogsActionEnum = typeof GetAuditLogsActionEnum[keyof typeof GetAuditLogsActionEnum];
 /**
@@ -204,7 +207,11 @@ export const GetAuditLogsResourceTypeEnum = {
     User: 'USER',
     CatalogProduct: 'CATALOG_PRODUCT',
     FlashSaleActivity: 'FLASH_SALE_ACTIVITY',
-    OutboxEvent: 'OUTBOX_EVENT'
+    OutboxEvent: 'OUTBOX_EVENT',
+    SalesOrder: 'SALES_ORDER',
+    SaleReservation: 'SALE_RESERVATION',
+    PaymentOrder: 'PAYMENT_ORDER',
+    PaymentCallback: 'PAYMENT_CALLBACK'
 } as const;
 export type GetAuditLogsResourceTypeEnum = typeof GetAuditLogsResourceTypeEnum[keyof typeof GetAuditLogsResourceTypeEnum];
 /**

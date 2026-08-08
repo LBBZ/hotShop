@@ -52,6 +52,13 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.*;
+import java.net.InetSocketAddress;
+import java.net.URI;
+import java.util.concurrent.atomic.AtomicInteger;
+import com.sun.net.httpserver.HttpServer;
+import com.real.domain.payment.MockPaymentProperties;
+import com.real.domain.payment.MockPaymentProvider;
+import com.real.task.payment.MockPaymentCallbackDeliveryConsumer;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.await;
@@ -110,18 +117,41 @@ class ReliableMessagingContainerTest {
         admin.declareExchange(topology.timeoutScheduleExchange());
         admin.declareExchange(topology.timeoutReadyExchange());
         admin.declareExchange(topology.timeoutDeadExchange());
+        admin.declareExchange(topology.mockCallbackExchange());
+        admin.declareExchange(topology.mockCallbackRetryExchange());
+        admin.declareExchange(topology.mockCallbackDeadExchange());
+        admin.declareExchange(topology.seckillPaymentExpiredRetryExchange());
+        admin.declareExchange(topology.seckillPaymentExpiredDeadExchange());
         admin.declareQueue(topology.orderCreatedQueue());
         admin.declareQueue(topology.reservationCompensatedQueue());
         admin.declareQueue(topology.orderCanceledQueue());
         admin.declareQueue(topology.timeoutDelayQueue());
         admin.declareQueue(topology.timeoutReadyQueue());
         admin.declareQueue(topology.timeoutDeadQueue());
+        admin.declareQueue(topology.paymentSucceededQueue());
+        admin.declareQueue(topology.paymentFailedQueue());
+        admin.declareQueue(topology.paymentLateSucceededQueue());
+        admin.declareQueue(topology.seckillPaymentExpiredQueue());
+        admin.declareQueue(topology.seckillPaymentExpiredRetryQueue());
+        admin.declareQueue(topology.seckillPaymentExpiredDeadQueue());
+        admin.declareQueue(topology.mockCallbackQueue());
+        admin.declareQueue(topology.mockCallbackRetryQueue());
+        admin.declareQueue(topology.mockCallbackDeadQueue());
         admin.declareBinding(topology.orderCreatedBinding());
         admin.declareBinding(topology.reservationCompensatedBinding());
         admin.declareBinding(topology.orderCanceledBinding());
         admin.declareBinding(topology.timeoutScheduleBinding());
         admin.declareBinding(topology.timeoutReadyBinding());
         admin.declareBinding(topology.timeoutDeadBinding());
+        admin.declareBinding(topology.paymentSucceededBinding());
+        admin.declareBinding(topology.paymentFailedBinding());
+        admin.declareBinding(topology.paymentLateSucceededBinding());
+        admin.declareBinding(topology.seckillPaymentExpiredBinding());
+        admin.declareBinding(topology.seckillPaymentExpiredRetryBinding());
+        admin.declareBinding(topology.seckillPaymentExpiredDeadBinding());
+        admin.declareBinding(topology.mockCallbackBinding());
+        admin.declareBinding(topology.mockCallbackRetryBinding());
+        admin.declareBinding(topology.mockCallbackDeadBinding());
         json = new ObjectMapper();
     }
 
@@ -134,9 +164,13 @@ class ReliableMessagingContainerTest {
     void reset() {
         jdbc.update("DELETE FROM processed_event");
         jdbc.update("DELETE FROM outbox_event");
+        jdbc.update("DELETE FROM payment_callback_nonce");
+        jdbc.update("DELETE FROM payment_callback_ledger");
+        jdbc.update("DELETE FROM payment_order");
         jdbc.update("DELETE FROM sales_order_item");
         jdbc.update("DELETE FROM sales_order");
         jdbc.update("DELETE FROM sale_reservation");
+        jdbc.update("DELETE FROM flash_sale_activity");
         jdbc.update("DELETE FROM catalog_product");
         jdbc.update("DELETE FROM app_user");
         while (rabbit.receive(RabbitMQConfig.ORDER_CREATED_QUEUE) != null) { }
@@ -145,6 +179,15 @@ class ReliableMessagingContainerTest {
         while (rabbit.receive(RabbitMQConfig.TIMEOUT_DELAY_QUEUE) != null) { }
         while (rabbit.receive(RabbitMQConfig.TIMEOUT_READY_QUEUE) != null) { }
         while (rabbit.receive(RabbitMQConfig.TIMEOUT_DEAD_QUEUE) != null) { }
+        while (rabbit.receive(RabbitMQConfig.PAYMENT_SUCCEEDED_QUEUE) != null) { }
+        while (rabbit.receive(RabbitMQConfig.PAYMENT_FAILED_QUEUE) != null) { }
+        while (rabbit.receive(RabbitMQConfig.PAYMENT_LATE_SUCCEEDED_QUEUE) != null) { }
+        while (rabbit.receive(RabbitMQConfig.SECKILL_PAYMENT_EXPIRED_QUEUE) != null) { }
+        while (rabbit.receive(RabbitMQConfig.SECKILL_PAYMENT_EXPIRED_RETRY_QUEUE) != null) { }
+        while (rabbit.receive(RabbitMQConfig.SECKILL_PAYMENT_EXPIRED_DEAD_QUEUE) != null) { }
+        while (rabbit.receive(RabbitMQConfig.MOCK_CALLBACK_QUEUE) != null) { }
+        while (rabbit.receive(RabbitMQConfig.MOCK_CALLBACK_RETRY_QUEUE) != null) { }
+        while (rabbit.receive(RabbitMQConfig.MOCK_CALLBACK_DEAD_QUEUE) != null) { }
     }
 
     @Test
@@ -260,28 +303,54 @@ class ReliableMessagingContainerTest {
         assertThat(singleInt("SELECT stock FROM catalog_product WHERE product_id=?", productId)).isEqualTo(6);
         assertThat(singleInt("SELECT COUNT(*) FROM processed_event WHERE event_id=?", event.eventId())).isOne();
         assertThat(singleInt("SELECT COUNT(*) FROM outbox_event WHERE aggregate_id=? AND event_type='ORDER_CANCELED'", orderId)).isOne();
+        Map<String, Object> audit = jdbc.queryForMap("""
+            SELECT actor_type,action,resource_type,resource_id,result,source,CAST(state_summary AS CHAR) state_summary
+              FROM audit_log WHERE action='INVENTORY_COMPENSATED' AND resource_id=?
+            """, orderId);
+        assertThat(audit).containsEntry("actor_type", "SYSTEM")
+                .containsEntry("action", "INVENTORY_COMPENSATED")
+                .containsEntry("resource_type", "SALES_ORDER")
+                .containsEntry("resource_id", orderId)
+                .containsEntry("result", "SUCCESS")
+                .containsEntry("source", "TASK");
+        assertThat(audit.get("state_summary").toString())
+                .contains("ORDINARY").contains("PAYMENT_TIMEOUT")
+                .doesNotContain("secret").doesNotContain("nonce").doesNotContain("signature");
+        assertThat(singleInt("SELECT COUNT(*) FROM audit_log WHERE action='INVENTORY_COMPENSATED' AND resource_id=?",
+                orderId)).isOne();
     }
 
     @Test
     @org.junit.jupiter.api.Order(7)
-    void timeoutTransactionRollbackCanRetryAndSeckillOrderIsNeverCanceled() {
+    void timeoutTransactionRollbackCanRetry() {
         long productId = product("ROLLBACK-CONSUMER", 5);
         String legacy = legacyOrder(productId, null, "PENDING", true);
+        String paymentNo = "MOCK_" + UUID.randomUUID().toString().replace("-", "");
+        jdbc.update("""
+            INSERT INTO payment_order(payment_no,order_id,provider,amount,currency,status,expires_at)
+            SELECT ?,order_id,'MOCK',total_amount,currency,'PENDING',expires_at FROM sales_order WHERE order_id=?
+            """, paymentNo, legacy);
         OrderTimeoutService service = new OrderTimeoutService(jdbc, json);
         var event = timeoutEvent(legacy);
         assertThatThrownBy(() -> transactions.executeWithoutResult(ignored -> {
             service.process(event); throw new IllegalStateException("fail after business work");
         })).isInstanceOf(IllegalStateException.class);
         assertThat(jdbc.queryForObject("SELECT status FROM sales_order WHERE order_id=?", String.class, legacy)).isEqualTo("PENDING");
+        assertThat(jdbc.queryForObject("SELECT status FROM payment_order WHERE payment_no=?", String.class, paymentNo)).isEqualTo("PENDING");
+        assertThat(singleInt("SELECT stock FROM catalog_product WHERE product_id=?", productId)).isEqualTo(5);
         assertThat(singleInt("SELECT COUNT(*) FROM processed_event WHERE event_id=?", event.eventId())).isZero();
+        assertThat(singleInt("SELECT COUNT(*) FROM outbox_event WHERE aggregate_id=?", legacy)).isZero();
+        assertThat(singleInt("SELECT COUNT(*) FROM audit_log WHERE action='INVENTORY_COMPENSATED' AND resource_id=?",
+                legacy)).isZero();
         transactions.executeWithoutResult(ignored -> service.process(event));
         assertThat(jdbc.queryForObject("SELECT status FROM sales_order WHERE order_id=?", String.class, legacy)).isEqualTo("CANCELED");
-
-        String seckill = legacyOrder(productId, 999L, "PENDING", true);
-        var seckillEvent = timeoutEvent(seckill);
-        transactions.executeWithoutResult(ignored -> service.process(seckillEvent));
-        assertThat(jdbc.queryForObject("SELECT status FROM sales_order WHERE order_id=?", String.class, seckill)).isEqualTo("PENDING");
-        assertThat(singleInt("SELECT COUNT(*) FROM processed_event WHERE event_id=?", seckillEvent.eventId())).isOne();
+        assertThat(jdbc.queryForObject("SELECT status FROM payment_order WHERE payment_no=?", String.class, paymentNo)).isEqualTo("CLOSED");
+        assertThat(singleInt("SELECT stock FROM catalog_product WHERE product_id=?", productId)).isEqualTo(6);
+        assertThat(singleInt("SELECT COUNT(*) FROM processed_event WHERE event_id=?", event.eventId())).isOne();
+        assertThat(singleInt("SELECT COUNT(*) FROM outbox_event WHERE aggregate_id=? AND event_type='ORDER_CANCELED'",
+                legacy)).isOne();
+        assertThat(singleInt("SELECT COUNT(*) FROM audit_log WHERE action='INVENTORY_COMPENSATED' AND resource_id=?",
+                legacy)).isOne();
     }
 
     @Test
@@ -435,6 +504,8 @@ class ReliableMessagingContainerTest {
         assertThat(singleInt("SELECT stock FROM catalog_product WHERE product_id=?", productId)).isEqualTo(5);
         assertThat(singleInt("SELECT COUNT(*) FROM processed_event WHERE event_id=?", event.eventId())).isZero();
         assertThat(singleInt("SELECT COUNT(*) FROM outbox_event WHERE aggregate_id=?", orderId)).isZero();
+        assertThat(singleInt("SELECT COUNT(*) FROM audit_log WHERE action='INVENTORY_COMPENSATED' AND resource_id=?",
+                orderId)).isZero();
     }
 
     @Test
@@ -569,6 +640,292 @@ class ReliableMessagingContainerTest {
         });
         assertThat(await().atMost(Duration.ofSeconds(10)).until(
                 () -> rabbit.receive(RabbitMQConfig.ORDER_CREATED_QUEUE), Objects::nonNull)).isNotNull();
+    }
+
+    @Test
+    @org.junit.jupiter.api.Order(19)
+    void seckillTimeoutRollbackAndRetryAtomicallyCompensatesMysqlOutboxInboxAndAuditOnce() {
+        String suffix = UUID.randomUUID().toString().replace("-", "");
+        long productId = product("SKAUD", 9);
+        jdbc.update("""
+            INSERT INTO flash_sale_activity(activity_code,product_id,sale_price,total_stock,available_stock,
+              per_user_limit,status,starts_at,ends_at)
+            VALUES(?,?,10.00,10,9,1,'ACTIVE',DATE_SUB(UTC_TIMESTAMP(6),INTERVAL 1 HOUR),
+              DATE_ADD(UTC_TIMESTAMP(6),INTERVAL 1 HOUR))
+            """, "ACT-" + suffix, productId);
+        long activityId = jdbc.queryForObject(
+                "SELECT activity_id FROM flash_sale_activity WHERE activity_code=?", Long.class, "ACT-" + suffix);
+        String reservationNo = "rsv_" + suffix;
+        String orderId = "ord_" + suffix;
+        jdbc.update("""
+            INSERT INTO sale_reservation(reservation_no,activity_id,user_id,product_id,quantity,reserved_amount,
+              unit_price,currency,status,order_id,expires_at)
+            VALUES(?,?,42,?,1,10.00,10.00,'CNY','ORDER_CREATED',?,DATE_ADD(UTC_TIMESTAMP(6),INTERVAL 1 HOUR))
+            """, reservationNo, activityId, productId, orderId);
+        long reservationId = jdbc.queryForObject(
+                "SELECT reservation_id FROM sale_reservation WHERE reservation_no=?", Long.class, reservationNo);
+        jdbc.update("""
+            INSERT INTO sales_order(order_id,user_id,reservation_id,total_amount,currency,status,expires_at)
+            VALUES(?,42,?,10.00,'CNY','PENDING',DATE_SUB(UTC_TIMESTAMP(6),INTERVAL 1 SECOND))
+            """, orderId, reservationId);
+        jdbc.update("INSERT INTO sales_order_item(order_id,product_id,quantity,price,line_amount) VALUES(?,?,1,10.00,10.00)",
+                orderId, productId);
+        String paymentNo = "MOCK_" + suffix;
+        jdbc.update("""
+            INSERT INTO payment_order(payment_no,order_id,provider,amount,currency,status,expires_at)
+            SELECT ?,order_id,'MOCK',total_amount,currency,'PENDING',expires_at FROM sales_order WHERE order_id=?
+            """, paymentNo, orderId);
+        OrderTimeoutService.TimeoutEvent event = timeoutEvent(orderId);
+        OrderTimeoutService service = new OrderTimeoutService(jdbc, json);
+
+        assertThatThrownBy(() -> transactions.executeWithoutResult(ignored -> {
+            service.process(event);
+            throw new IllegalStateException("fail after compensation audit and outbox");
+        })).isInstanceOf(IllegalStateException.class).hasMessageContaining("after compensation audit");
+        assertThat(jdbc.queryForObject("SELECT status FROM sales_order WHERE order_id=?", String.class, orderId)).isEqualTo("PENDING");
+        assertThat(jdbc.queryForObject("SELECT status FROM payment_order WHERE payment_no=?", String.class, paymentNo)).isEqualTo("PENDING");
+        assertThat(jdbc.queryForObject("SELECT status FROM sale_reservation WHERE reservation_no=?", String.class, reservationNo)).isEqualTo("ORDER_CREATED");
+        assertThat(singleInt("SELECT stock FROM catalog_product WHERE product_id=?", productId)).isEqualTo(9);
+        assertThat(singleInt("SELECT available_stock FROM flash_sale_activity WHERE activity_id=?", activityId)).isEqualTo(9);
+        assertThat(singleInt("SELECT COUNT(*) FROM processed_event WHERE event_id=?", event.eventId())).isZero();
+        assertThat(singleInt("SELECT COUNT(*) FROM outbox_event WHERE aggregate_id=?", orderId)).isZero();
+        assertThat(singleInt("SELECT COUNT(*) FROM audit_log WHERE action='INVENTORY_COMPENSATED' AND resource_id=?",
+                reservationNo)).isZero();
+
+        transactions.executeWithoutResult(ignored -> service.process(event));
+        transactions.executeWithoutResult(ignored -> service.process(event));
+        assertThat(jdbc.queryForObject("SELECT status FROM sales_order WHERE order_id=?", String.class, orderId)).isEqualTo("CANCELED");
+        assertThat(jdbc.queryForObject("SELECT status FROM payment_order WHERE payment_no=?", String.class, paymentNo)).isEqualTo("CLOSED");
+        assertThat(jdbc.queryForObject("SELECT status FROM sale_reservation WHERE reservation_no=?", String.class, reservationNo)).isEqualTo("CANCELED");
+        assertThat(singleInt("SELECT stock FROM catalog_product WHERE product_id=?", productId)).isEqualTo(10);
+        assertThat(singleInt("SELECT available_stock FROM flash_sale_activity WHERE activity_id=?", activityId)).isEqualTo(10);
+        assertThat(singleInt("SELECT COUNT(*) FROM processed_event WHERE event_id=?", event.eventId())).isOne();
+        assertThat(singleInt("SELECT COUNT(*) FROM outbox_event WHERE aggregate_id=? AND event_type='ORDER_CANCELED'",
+                orderId)).isOne();
+        assertThat(singleInt("SELECT COUNT(*) FROM outbox_event WHERE aggregate_id=? AND event_type='SECKILL_PAYMENT_EXPIRED'",
+                orderId)).isOne();
+        Map<String, Object> audit = jdbc.queryForMap("""
+            SELECT actor_type,action,resource_type,result,source,CAST(state_summary AS CHAR) state_summary
+              FROM audit_log WHERE action='INVENTORY_COMPENSATED' AND resource_id=?
+            """, reservationNo);
+        assertThat(audit).containsEntry("actor_type", "SYSTEM")
+                .containsEntry("action", "INVENTORY_COMPENSATED")
+                .containsEntry("resource_type", "SALE_RESERVATION")
+                .containsEntry("result", "SUCCESS")
+                .containsEntry("source", "TASK");
+        assertThat(audit.get("state_summary").toString())
+                .contains("SECKILL").contains("PAYMENT_TIMEOUT").contains(reservationNo);
+        assertThat(singleInt("SELECT COUNT(*) FROM audit_log WHERE action='INVENTORY_COMPENSATED' AND resource_id=?",
+                reservationNo)).isOne();
+    }
+
+    @Test
+    @org.junit.jupiter.api.Order(20)
+    void paymentEventsAndMockDeliveryAreDurablyRoutable() throws Exception {
+        Map<String, String> queues = Map.of(
+                "PAYMENT_SUCCEEDED", RabbitMQConfig.PAYMENT_SUCCEEDED_QUEUE,
+                "PAYMENT_FAILED", RabbitMQConfig.PAYMENT_FAILED_QUEUE,
+                "PAYMENT_LATE_SUCCEEDED", RabbitMQConfig.PAYMENT_LATE_SUCCEEDED_QUEUE,
+                "SECKILL_PAYMENT_EXPIRED", RabbitMQConfig.SECKILL_PAYMENT_EXPIRED_QUEUE);
+        for (Map.Entry<String, String> route : queues.entrySet()) {
+            String aggregate = "payment-route-" + route.getKey();
+            insertEvent(route.getKey(), aggregate,
+                    json.writeValueAsString(Map.of("schemaVersion", 1, "paymentNo", aggregate)));
+            publisher(Duration.ofSeconds(30)).claimBatch().forEach(publisher(Duration.ofSeconds(30))::publish);
+            Message received = await().atMost(Duration.ofSeconds(10))
+                    .until(() -> rabbit.receive(route.getValue()), Objects::nonNull);
+            assertThat(received.getMessageProperties().getReceivedDeliveryMode().name()).isEqualTo("PERSISTENT");
+        }
+
+        String paymentNo = "MOCK_" + "1".repeat(32);
+        String callbackId = UUID.randomUUID().toString();
+        String payload = json.writeValueAsString(Map.of("schemaVersion", 1, "duplicateCount", 2,
+                "callback", Map.of("callbackId", callbackId, "paymentNo", paymentNo,
+                        "providerTransactionNo", "MOCK-TXN-" + "2".repeat(32), "outcome", "SUCCEEDED",
+                        "amount", "10.00", "currency", "CNY", "occurredAt", Instant.now().toString())));
+        String eventId = UUID.randomUUID().toString();
+        jdbc.update("""
+            INSERT INTO outbox_event(event_id,aggregate_type,aggregate_id,event_type,payload)
+            VALUES(?,'PAYMENT',?,'MOCK_PAYMENT_CALLBACK_REQUESTED',CAST(? AS JSON))
+            """, eventId, paymentNo, payload);
+        OutboxPublisher publisher = publisher(Duration.ofSeconds(30));
+        publisher.claimBatch().forEach(publisher::publish);
+        Message callback = await().atMost(Duration.ofSeconds(10))
+                .until(() -> rabbit.receive(RabbitMQConfig.MOCK_CALLBACK_QUEUE), Objects::nonNull);
+        assertThat(callback.getMessageProperties().getReceivedDeliveryMode().name()).isEqualTo("PERSISTENT");
+        assertThat(json.readTree(callback.getBody()).path("payload").path("callback").path("callbackId").asText())
+                .isEqualTo(callbackId);
+    }
+
+    @Test
+    @org.junit.jupiter.api.Order(21)
+    void temporaryPortal503RecoversAndDeterministic400DeadLetters()
+            throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/provider-callbacks/v1/mock-payment", exchange -> {
+            int status = calls.incrementAndGet() == 1 ? 503 : 200;
+            exchange.sendResponseHeaders(status, -1); exchange.close();
+        });
+        server.start();
+        try {
+            MockPaymentProperties properties = callbackProperties(server.getAddress().getPort(), 3);
+            MockPaymentCallbackDeliveryConsumer consumer = new MockPaymentCallbackDeliveryConsumer(
+                    json, new MockPaymentProvider(properties), properties, rabbit);
+            byte[] envelope = callbackEnvelope();
+            rabbit.send(RabbitMQConfig.MOCK_CALLBACK_EXCHANGE, RabbitMQConfig.MOCK_CALLBACK_ROUTING_KEY,
+                    new Message(envelope));
+            var connection = rabbitConnection.createConnection();
+            var channel = connection.createChannel(false);
+            try {
+                consumer.consume(springMessage(awaitGet(channel, RabbitMQConfig.MOCK_CALLBACK_QUEUE)), channel);
+                consumer.consume(springMessage(awaitGet(channel, RabbitMQConfig.MOCK_CALLBACK_QUEUE)), channel);
+            } finally { channel.close(); connection.close(); }
+            assertThat(calls).hasValue(2);
+
+            server.removeContext("/provider-callbacks/v1/mock-payment");
+            server.createContext("/provider-callbacks/v1/mock-payment", exchange -> {
+                exchange.sendResponseHeaders(400, -1); exchange.close();
+            });
+            rabbit.send(RabbitMQConfig.MOCK_CALLBACK_EXCHANGE, RabbitMQConfig.MOCK_CALLBACK_ROUTING_KEY,
+                    new Message(callbackEnvelope()));
+            var secondConnection = rabbitConnection.createConnection();
+            var secondChannel = secondConnection.createChannel(false);
+            try {
+                consumer.consume(springMessage(awaitGet(secondChannel, RabbitMQConfig.MOCK_CALLBACK_QUEUE)), secondChannel);
+            } finally { secondChannel.close(); secondConnection.close(); }
+            Message dead = await().atMost(Duration.ofSeconds(10))
+                    .until(() -> rabbit.receive(RabbitMQConfig.MOCK_CALLBACK_DEAD_QUEUE), Objects::nonNull);
+            assertThat(dead).isNotNull();
+        } finally { server.stop(0); }
+    }
+
+    @Test
+    @org.junit.jupiter.api.Order(22)
+    void persistentPortal503StopsExactlyAtConfiguredAttemptsAndLeavesOnlyOneDeadLetter()
+            throws Exception {
+        int maxAttempts = 3;
+        AtomicInteger calls = new AtomicInteger();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/provider-callbacks/v1/mock-payment", exchange -> {
+            calls.incrementAndGet();
+            exchange.sendResponseHeaders(503, -1);
+            exchange.close();
+        });
+        server.start();
+        try {
+            MockPaymentProperties properties = callbackProperties(server.getAddress().getPort(), maxAttempts);
+            MockPaymentCallbackDeliveryConsumer consumer = new MockPaymentCallbackDeliveryConsumer(
+                    json, new MockPaymentProvider(properties), properties, rabbit);
+            rabbit.send(RabbitMQConfig.MOCK_CALLBACK_EXCHANGE, RabbitMQConfig.MOCK_CALLBACK_ROUTING_KEY,
+                    new Message(callbackEnvelope()));
+            var connection = rabbitConnection.createConnection();
+            var channel = connection.createChannel(false);
+            try {
+                for (int deliveryAttempt = 1; deliveryAttempt <= maxAttempts; deliveryAttempt++) {
+                    GetResponse response = awaitGet(channel, RabbitMQConfig.MOCK_CALLBACK_QUEUE);
+                    Object retryHeader = response.getProps().getHeaders() == null ? null
+                            : response.getProps().getHeaders().get("x-hotshop-delivery-attempt");
+                    if (deliveryAttempt == 1) assertThat(retryHeader).isNull();
+                    else assertThat(((Number) retryHeader).intValue()).isEqualTo(deliveryAttempt - 1);
+                    consumer.consume(springMessage(response), channel);
+                }
+            } finally {
+                channel.close();
+                connection.close();
+            }
+
+            assertThat(calls).hasValue(maxAttempts);
+            Message dead = await().atMost(Duration.ofSeconds(10))
+                    .until(() -> rabbit.receive(RabbitMQConfig.MOCK_CALLBACK_DEAD_QUEUE), Objects::nonNull);
+            assertThat(dead).isNotNull();
+            await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+                Long mainCount = rabbit.execute(brokerChannel -> brokerChannel.messageCount(
+                        RabbitMQConfig.MOCK_CALLBACK_QUEUE));
+                Long retryCount = rabbit.execute(brokerChannel -> brokerChannel.messageCount(
+                        RabbitMQConfig.MOCK_CALLBACK_RETRY_QUEUE));
+                Long deadQueueCount = rabbit.execute(brokerChannel -> brokerChannel.messageCount(
+                        RabbitMQConfig.MOCK_CALLBACK_DEAD_QUEUE));
+                assertThat(mainCount).isZero();
+                assertThat(retryCount).isZero();
+                assertThat(deadQueueCount).isZero();
+            });
+            assertThat(calls).hasValue(maxAttempts);
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    @org.junit.jupiter.api.Order(23)
+    void retryPublishBrokerNackLeavesOriginalUnackedForRedelivery() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/provider-callbacks/v1/mock-payment", exchange -> {
+            int status = calls.incrementAndGet() == 1 ? 503 : 200;
+            exchange.sendResponseHeaders(status, -1);
+            exchange.close();
+        });
+        server.start();
+        RabbitMQConfig topology = new RabbitMQConfig(Duration.ofMinutes(15));
+        RabbitAdmin admin = new RabbitAdmin(rabbitConnection);
+        try {
+            MockPaymentProperties properties = callbackProperties(server.getAddress().getPort(), 3);
+            MockPaymentCallbackDeliveryConsumer consumer = new MockPaymentCallbackDeliveryConsumer(
+                    json, new MockPaymentProvider(properties), properties, rabbit);
+            rabbit.send(RabbitMQConfig.MOCK_CALLBACK_EXCHANGE, RabbitMQConfig.MOCK_CALLBACK_ROUTING_KEY,
+                    new Message(callbackEnvelope()));
+            var connection = rabbitConnection.createConnection();
+            var channel = connection.createChannel(false);
+            GetResponse original = awaitGet(channel, RabbitMQConfig.MOCK_CALLBACK_QUEUE);
+            admin.deleteExchange(RabbitMQConfig.MOCK_CALLBACK_RETRY_EXCHANGE);
+            assertThatThrownBy(() -> consumer.consume(springMessage(original), channel))
+                    .isInstanceOf(RuntimeException.class);
+            ((ChannelProxy) channel).getTargetChannel().abort();
+            connection.close();
+
+            admin.declareExchange(topology.mockCallbackRetryExchange());
+            admin.declareBinding(topology.mockCallbackRetryBinding());
+            var recoveredConnection = rabbitConnection.createConnection();
+            var recoveredChannel = recoveredConnection.createChannel(false);
+            try {
+                GetResponse redelivered = awaitGet(recoveredChannel, RabbitMQConfig.MOCK_CALLBACK_QUEUE);
+                assertThat(redelivered.getEnvelope().isRedeliver()).isTrue();
+                consumer.consume(springMessage(redelivered), recoveredChannel);
+            } finally {
+                recoveredChannel.close();
+                recoveredConnection.close();
+            }
+            assertThat(calls).hasValue(2);
+            Long deadCount = rabbit.execute(channelValue -> channelValue.messageCount(
+                    RabbitMQConfig.MOCK_CALLBACK_DEAD_QUEUE));
+            assertThat(deadCount).isZero();
+        } finally {
+            admin.declareExchange(topology.mockCallbackRetryExchange());
+            admin.declareBinding(topology.mockCallbackRetryBinding());
+            server.stop(0);
+        }
+    }
+
+    private MockPaymentProperties callbackProperties(int port, int maxAttempts) {
+        MockPaymentProperties properties = new MockPaymentProperties();
+        properties.setEnabled(true); properties.setSecret(UUID.randomUUID().toString());
+        properties.setCallbackUrl(URI.create("http://127.0.0.1:" + port + "/provider-callbacks/v1/mock-payment"));
+        properties.setRetryDelay(Duration.ofMillis(100));
+        properties.setHttpTimeout(Duration.ofSeconds(2));
+        properties.setMaxDeliveryAttempts(maxAttempts);
+        return properties;
+    }
+
+    private byte[] callbackEnvelope() throws Exception {
+        String paymentNo = "MOCK_" + UUID.randomUUID().toString().replace("-", "");
+        Map<String, Object> callback = Map.of("callbackId", UUID.randomUUID().toString(),
+                "paymentNo", paymentNo, "providerTransactionNo", "MOCK-TXN-" + UUID.randomUUID().toString().replace("-", ""),
+                "outcome", "SUCCEEDED", "amount", "10.00", "currency", "CNY", "occurredAt", Instant.now().toString());
+        return json.writeValueAsBytes(Map.of("schemaVersion", 1, "eventId", UUID.randomUUID().toString(),
+                "eventType", "MOCK_PAYMENT_CALLBACK_REQUESTED", "aggregateType", "PAYMENT",
+                "aggregateId", paymentNo, "occurredAt", Instant.now().toString(),
+                "payload", Map.of("schemaVersion", 1, "callback", callback, "duplicateCount", 1)));
     }
 
     private static DataSource dataSource() {

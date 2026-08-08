@@ -25,8 +25,11 @@ import java.util.function.Supplier;
 @Component
 public class OutboxPublisher {
     private static final Set<String> BUSINESS_EVENTS = Set.of(
-            "ORDER_CREATED", "RESERVATION_COMPENSATED", "ORDER_CANCELED");
+            "ORDER_CREATED", "RESERVATION_COMPENSATED", "ORDER_CANCELED",
+            "PAYMENT_SUCCEEDED", "PAYMENT_FAILED", "PAYMENT_LATE_SUCCEEDED",
+            "SECKILL_PAYMENT_EXPIRED");
     private static final String TIMEOUT_EVENT = "LEGACY_ORDER_TIMEOUT_REQUESTED";
+    private static final String MOCK_CALLBACK_EVENT = "MOCK_PAYMENT_CALLBACK_REQUESTED";
     private final OutboxMapper mapper;
     private final RabbitTemplate rabbit;
     private final ObjectMapper json;
@@ -146,7 +149,8 @@ public class OutboxPublisher {
     }
 
     private Route route(OutboxEvent event) {
-        if (!BUSINESS_EVENTS.contains(event.eventType()) && !TIMEOUT_EVENT.equals(event.eventType())) {
+        if (!BUSINESS_EVENTS.contains(event.eventType()) && !TIMEOUT_EVENT.equals(event.eventType())
+                && !MOCK_CALLBACK_EVENT.equals(event.eventType())) {
             throw new UnknownEventType();
         }
         if (!validUuid(event.eventId()) || event.aggregateType() == null
@@ -163,6 +167,15 @@ public class OutboxPublisher {
         if (payload == null || !payload.isObject()) throw new InvalidPayload();
         if (BUSINESS_EVENTS.contains(event.eventType())) {
             return new Route(RabbitMQConfig.BUSINESS_EXCHANGE, event.eventType(), 0, payload);
+        }
+        if (MOCK_CALLBACK_EVENT.equals(event.eventType())) {
+            if (!"PAYMENT".equals(event.aggregateType())
+                    || !event.aggregateId().equals(payload.path("callback").path("paymentNo").asText())
+                    || payload.path("duplicateCount").asInt(0) < 1) {
+                throw new InvalidPayload();
+            }
+            return new Route(RabbitMQConfig.MOCK_CALLBACK_EXCHANGE,
+                    RabbitMQConfig.MOCK_CALLBACK_ROUTING_KEY, 0, payload);
         }
         if (!"ORDER".equals(event.aggregateType())) {
             throw new InvalidRoute();

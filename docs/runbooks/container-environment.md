@@ -254,5 +254,21 @@ Outbox 自动重试最多 8 次，退避从 1 秒指数增长到最多 5 分钟�
 
 超时链路的队列级期限为 15 分钟，即 900000 ms；发布器同时按 `expiresAtMs - now` 设置剩余消息
 expiration，已到期事件直接进入 ready exchange。最终判断始终使用 MySQL `expires_at` 和
-`UTC_TIMESTAMP(6)`。TASK-09 消费者只取消 `reservation_id IS NULL` 的普通订单；秒杀支付、关闭、
-Redis 资格释放及支付终态竞争留给 TASK-10。
+`UTC_TIMESTAMP(6)`。普通与秒杀订单都由同一 timeout 状态机处理。秒杀订单额外恢复 Activity stock、
+结束 Reservation，并通过 `SECKILL_PAYMENT_EXPIRED` 可靠事件异步释放 Redis User slot 和修复库存投影。
+补偿成功会追加 SYSTEM/TASK 的 `INVENTORY_COMPENSATED` 审计；重复事件不会重复补偿或审计。
+# Local Mock Payment
+
+该功能不是真实支付。保持默认 `HOTSHOP_MOCK_PAYMENT_ENABLED=false` 时无需 Secret。启用前在仓库外生成至少 32 UTF-8 字节的随机值并设置 `HOTSHOP_MOCK_PAYMENT_SECRET`，同时令 Portal 与 Task 使用同一值。可配置时钟偏差、callback URL、HTTP timeout、retry delay/attempts、最大模拟 delay/duplicate count 和 body bytes；变量名见 `.env.example`。容器内默认回调地址是 `http://portal-service:8080/provider-callbacks/v1/mock-payment`。
+
+检查 `hotshop.mock-payment.callback.dead.v1` 可发现确定性 4xx 或重试耗尽。不得把队列 body、HMAC、nonce 或 Secret 复制到工单和日志。Portal/Broker 恢复后，MySQL NEW/过期 PUBLISHING Outbox 会自动恢复投递。
+
+秒杀 Redis 补偿投递配置：
+
+```text
+HOTSHOP_SECKILL_PAYMENT_EXPIRED_RETRY_DELAY=2s
+HOTSHOP_SECKILL_PAYMENT_EXPIRED_CONFIRM_TIMEOUT=3s
+HOTSHOP_SECKILL_PAYMENT_EXPIRED_MAX_DELIVERY_ATTEMPTS=5
+```
+
+正常或 Lua `IDEMPOTENT` 会 ACK；Schema/事实冲突进入 `hotshop.seckill.payment-expired.dead.v1`；Redis 暂时不可用进入 `hotshop.seckill.payment-expired.retry.v1`。只有 retry publish 获得 confirm 后原消息才 ACK。达到上限后进入 DLQ，主队列和 retry queue 应为空。排障时核对 Redis stock、Reservation `PAYMENT_EXPIRED` 与 User slot 已删除三项事实，不要直接修改 MySQL 与 Redis 形成双写。

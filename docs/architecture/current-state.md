@@ -201,3 +201,6 @@ Spring Security 当前允许匿名访问认证入口、portal 商品接口和 Op
 编码扫描结果是：当前受检文本文件都能严格按 UTF-8 解码、没有 UTF-8 BOM，也没有检测到已落盘
 的常见 mojibake 文本。已观察到的乱码来自 Windows PowerShell 默认读取编码与 UTF-8 文件不一致，
 不能伪称为源文件已经损坏。
+# TASK-10 current state
+
+Portal 现包含本地 Mock Payment User API 与独立 HMAC Provider callback；Task 复用 TASK-09 Outbox 租约发布器投递持久化延迟 callback，并消费普通/秒杀支付超时。支付成功、失败、迟到成功和秒杀过期均通过 durable RabbitMQ routing 暴露，业务效果由 MySQL ledger、条件状态更新和幂等 Redis Lua 收敛。详见 [mock-payment.md](mock-payment.md)。

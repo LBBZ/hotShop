@@ -17,12 +17,18 @@ import com.real.domain.service.seckill.FlashSaleReservationService;
 import com.real.domain.service.seckill.FlashSaleReservationStatusService;
 import com.real.security.entity.CustomUserDetails;
 import com.real.security.service.TokenBlacklistService;
+import com.real.portal.payment.PaymentService;
+import com.real.portal.payment.MockPaymentCallbackService;
+import com.real.portal.payment.CallbackRejectedException;
+import com.real.common.api.dto.MockPaymentCallbackResponse;
+import com.real.common.api.dto.MockPaymentActionResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.context.ApplicationContext;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -31,6 +37,7 @@ import org.slf4j.MDC;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 
 import static org.hamcrest.Matchers.containsString;
@@ -81,6 +88,10 @@ class PortalApiContractTest {
     private FlashSaleReservationService flashSaleReservationService;
     @MockitoBean
     private FlashSaleReservationStatusService flashSaleReservationStatusService;
+    @MockitoBean
+    private PaymentService paymentService;
+    @MockitoBean
+    private MockPaymentCallbackService mockPaymentCallbackService;
 
     @Test
     void anonymousProductListReturnsDtoFormatsAndCorrelatedIds() throws Exception {
@@ -484,12 +495,82 @@ class PortalApiContractTest {
                         "$.paths['/api/v1/flash-sales/{activityId}/reservations/{reservationNo}']"
                                 + ".get.responses['404']"
                 ).exists())
+                .andExpect(jsonPath("$.paths['/api/v1/orders/{orderId}/payments'].post").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/payments/{paymentNo}'].get").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/payments/{paymentNo}/mock-actions'].post").exists())
+                .andExpect(jsonPath("$.paths['/provider-callbacks/v1/mock-payment']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/admin/api/v1/orders']").doesNotExist())
                 .andExpect(jsonPath("$.components.schemas.Order").doesNotExist());
 
         mockMvc.perform(get("/v3/api-docs/agent-boundary"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.paths['/agent/api/v1/fake']").doesNotExist());
+                .andExpect(jsonPath("$.paths['/agent/api/v1/fake']").doesNotExist())
+                .andExpect(jsonPath("$.paths['/api/v1/payments/{paymentNo}/mock-actions']").doesNotExist())
+                .andExpect(jsonPath("$.paths['/provider-callbacks/v1/mock-payment']").doesNotExist());
+
+        mockMvc.perform(get("/v3/api-docs/mock-provider-callback"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paths['/provider-callbacks/v1/mock-payment'].post").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/payments/{paymentNo}']").doesNotExist());
+    }
+
+    @Test
+    void paymentWritesRequireUserAndProviderCallbackRequiresItsOwnHeaders() throws Exception {
+        CustomUserDetails admin = CustomUserDetails.builder().userId(1L).username("admin").password("")
+                .authorities(List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))).build();
+        CustomUserDetails agent = CustomUserDetails.builder().userId(2L).username("agent").password("")
+                .authorities(List.of(new SimpleGrantedAuthority("AGENT_DELEGATION"))).build();
+        CustomUserDetails regularUser = CustomUserDetails.builder().userId(3L).username("user").password("")
+                .authorities(List.of(new SimpleGrantedAuthority("ROLE_USER"))).build();
+        mockMvc.perform(post("/api/v1/orders/order-auth/payments")).andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/v1/orders/order-auth/payments").with(user(admin))).andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/orders/order-auth/payments").with(user(agent))).andExpect(status().isForbidden());
+
+        for (String path : List.of(
+                "/api/v1/payments/MOCK_00000000000000000000000000000001",
+                "/api/v1/payments/MOCK_00000000000000000000000000000001/mock-actions")) {
+            var anonymous = path.endsWith("mock-actions") ? post(path) : get(path);
+            var asAdmin = path.endsWith("mock-actions") ? post(path).with(user(admin)) : get(path).with(user(admin));
+            var asAgent = path.endsWith("mock-actions") ? post(path).with(user(agent)) : get(path).with(user(agent));
+            mockMvc.perform(anonymous).andExpect(status().isUnauthorized());
+            mockMvc.perform(asAdmin).andExpect(status().isForbidden());
+            mockMvc.perform(asAgent).andExpect(status().isForbidden());
+        }
+
+        when(mockPaymentCallbackService.accept(isNull(), isNull(), isNull(), any(byte[].class), any()))
+                .thenThrow(new CallbackRejectedException("SIGNATURE_INVALID", HttpStatus.UNAUTHORIZED));
+        mockMvc.perform(post("/provider-callbacks/v1/mock-payment")
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/provider-callbacks/v1/mock-payment")
+                        .with(user(regularUser))
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/provider-callbacks/v1/mock-payment/extra")
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isUnauthorized());
+        when(mockPaymentCallbackService.accept(any(), any(), any(), any(), any()))
+                .thenReturn(new MockPaymentCallbackResponse(
+                        "00000000-0000-0000-0000-000000000001", "IDEMPOTENT", true));
+        mockMvc.perform(post("/provider-callbacks/v1/mock-payment")
+                        .header("X-Mock-Timestamp", "1785542400")
+                        .header("X-Mock-Nonce", "abcdefghijklmnop")
+                        .header("X-Mock-Signature", "0".repeat(64))
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.acknowledged").value(true));
+
+        String paymentNo = "MOCK_00000000000000000000000000000001";
+        when(paymentService.action(anyLong(), any(), any())).thenReturn(new MockPaymentActionResponse(
+                "00000000-0000-0000-0000-000000000002", "MOCK", paymentNo, "SUCCEEDED",
+                Instant.parse("2026-08-01T13:00:00Z"), 1, true,
+                "Mock Payment only; no real funds are transferred"));
+        mockMvc.perform(post("/api/v1/payments/{paymentNo}/mock-actions", paymentNo)
+                        .with(user(regularUser)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"outcome\":\"SUCCEEDED\",\"delay\":\"PT0S\",\"duplicateCount\":1}"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.provider").value("MOCK"))
+                .andExpect(jsonPath("$.localDemoOnly").value(true));
     }
 
     private Product product(long id) {

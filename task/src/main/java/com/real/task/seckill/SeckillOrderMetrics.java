@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 @Component
 public class SeckillOrderMetrics {
+    private final MeterRegistry registry;
     private final Counter consumed;
     private final Counter processed;
     private final Counter duplicate;
@@ -22,8 +23,10 @@ public class SeckillOrderMetrics {
     private final Timer conversionLatency;
     private final AtomicLong pending = new AtomicLong();
     private final AtomicLong oldestPendingIdleMs = new AtomicLong();
+    private final AtomicLong streamLag = new AtomicLong();
 
     public SeckillOrderMetrics(MeterRegistry registry) {
+        this.registry = registry;
         consumed = registry.counter("hotshop.seckill.order.consumed");
         processed = registry.counter("hotshop.seckill.order.processed");
         duplicate = registry.counter("hotshop.seckill.order.duplicate");
@@ -37,6 +40,7 @@ public class SeckillOrderMetrics {
         conversionLatency = registry.timer("hotshop.seckill.order.conversion_latency");
         registry.gauge("hotshop.seckill.order.pending", pending);
         registry.gauge("hotshop.seckill.order.pending_oldest_idle_ms", oldestPendingIdleMs);
+        registry.gauge("hotshop.seckill.stream.lag", streamLag);
     }
 
     public Counter consumed() {
@@ -86,5 +90,14 @@ public class SeckillOrderMetrics {
     public void pending(long count, long oldestIdleMs) {
         pending.set(Math.max(0, count));
         oldestPendingIdleMs.set(Math.max(0, oldestIdleMs));
+    }
+
+    public void streamLag(long lag) {
+        streamLag.set(Math.max(0, lag));
+    }
+
+    public void inventory(String operation, String outcome) {
+        registry.counter("hotshop.inventory.operations", "operation", operation,
+                "outcome", outcome).increment();
     }
 }

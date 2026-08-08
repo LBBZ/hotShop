@@ -7,6 +7,8 @@ import com.real.common.api.dto.MockPaymentActionRequest;
 import com.real.common.api.dto.MockPaymentActionResponse;
 import com.real.common.api.dto.PaymentResponse;
 import com.real.domain.payment.MockPaymentProperties;
+import com.real.common.observability.AsyncTraceContext;
+import org.slf4j.MDC;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -95,6 +97,8 @@ public class PaymentService {
         payload.put("schemaVersion", 1);
         payload.put("callback", callback);
         payload.put("duplicateCount", request.duplicateCount());
+        payload.put("requestId", safeRequestId());
+        payload.put("traceparent", AsyncTraceContext.currentTraceParent());
         try {
             jdbc.update("""
                 INSERT INTO outbox_event(event_id,aggregate_type,aggregate_id,event_type,payload,available_at)
@@ -148,6 +152,10 @@ public class PaymentService {
         }
     }
     private Instant instant(Timestamp value) { return value == null ? null : value.toInstant(); }
+    private String safeRequestId() {
+        String value = MDC.get("requestId");
+        return value != null && value.matches("^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$") ? value : "unknown";
+    }
     private record OrderFact(String orderId, long userId, BigDecimal amount, String currency,
                              String status, Timestamp expiresAt) { }
     private record PaymentFact(String paymentNo, String orderId, BigDecimal amount, String currency,

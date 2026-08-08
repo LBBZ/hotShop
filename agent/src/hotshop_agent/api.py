@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Annotated, cast
@@ -17,6 +17,13 @@ from hotshop_agent.config import Settings
 from hotshop_agent.container import Container, build_container
 from hotshop_agent.domain import AgentMessage, AgentRun, AgentSession, Credential, IdentityKind
 from hotshop_agent.exchange import TokenExchangeError
+from hotshop_agent.observability import (
+    configure_logging,
+    parse_remote_parent,
+    request_id,
+    reset_request_id,
+    set_request_id,
+)
 from hotshop_agent.security import (
     ALLOWED_DELEGATION_SCOPES,
     AuthenticationError,
@@ -322,6 +329,7 @@ def create_app(
 ) -> FastAPI:
     actual_settings = settings or Settings()
     actual_container = container or build_container(actual_settings)
+    configure_logging(actual_settings)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -338,6 +346,28 @@ def create_app(
         lifespan=lifespan,
     )
     app.state.container = actual_container
+
+    @app.middleware("http")
+    async def observation_middleware(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        correlation_id = request_id(request.headers.get("X-Request-ID"))
+        token = set_request_id(correlation_id)
+        parent = parse_remote_parent(request.headers.get("traceparent"))
+        try:
+            async with actual_container.telemetry.span(
+                f"{request.method} {request.url.path}",
+                kind="SERVER",
+                remote_parent=parent,
+                tags={"http.method": request.method, "http.route": request.url.path},
+            ) as active:
+                response = await call_next(request)
+                response.headers["X-Request-ID"] = correlation_id
+                response.headers["X-Trace-ID"] = active.trace_id
+                return response
+        finally:
+            reset_request_id(token)
+
     register_error_handlers(app)
     app.include_router(build_user_router())
     app.include_router(build_administrator_router())

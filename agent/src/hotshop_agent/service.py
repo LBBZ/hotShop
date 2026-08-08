@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import time
 import uuid
 from contextlib import aclosing
 from dataclasses import dataclass
@@ -22,6 +24,7 @@ from hotshop_agent.domain import (
 from hotshop_agent.events import StreamEvent, StreamingSanitizer
 from hotshop_agent.graph import ADMIN_POLICY, USER_POLICY
 from hotshop_agent.metrics import AgentMetrics
+from hotshop_agent.observability import Telemetry
 from hotshop_agent.providers.base import (
     ModelDelta,
     ModelPermanentError,
@@ -67,12 +70,14 @@ class AgentService:
         model: ReliableModel,
         metrics: AgentMetrics,
         graph: Any,
+        telemetry: Telemetry,
     ) -> None:
         self._settings = settings
         self.store = store
         self.model = model
         self.metrics = metrics
         self._graph = graph
+        self._telemetry = telemetry
         self._handles: dict[str, RunHandle] = {}
         self._handles_lock = asyncio.Lock()
 
@@ -189,6 +194,7 @@ class AgentService:
         done: asyncio.Event,
     ) -> None:
         sequence = 0
+        started = time.perf_counter()
         sanitizer = StreamingSanitizer()
 
         def build_event(event_type: str, data: dict[str, Any]) -> StreamEvent:
@@ -239,34 +245,41 @@ class AgentService:
             )
             await emit("message.started", {"state": run.state})
             policy = USER_POLICY if session.identity_kind is IdentityKind.USER else ADMIN_POLICY
-            graph_state = await self._graph.ainvoke(
-                {"prompt": message.content, "policy": policy, "model_input": ""}
-            )
-            async with aclosing(
-                self.model.stream(run.owner_id, graph_state["model_input"])
-            ) as model_stream:
-                async for chunk in model_stream:
-                    if isinstance(chunk, ModelDelta):
-                        for safe_delta in sanitizer.feed(chunk.text):
-                            await emit("message.delta", {"delta": safe_delta})
-                    elif isinstance(chunk, ModelUsage):
-                        run.input_tokens = chunk.input_tokens
-                        run.output_tokens = chunk.output_tokens
-                        run.estimated_cost_usd = chunk.estimated_cost_usd
-                        provider = self.model.provider.name
-                        self.metrics.model_tokens.labels(provider, "input").inc(chunk.input_tokens)
-                        self.metrics.model_tokens.labels(provider, "output").inc(
-                            chunk.output_tokens
-                        )
-                        self.metrics.model_cost.labels(provider).inc(chunk.estimated_cost_usd)
-                        await emit(
-                            "usage",
-                            {
-                                "inputTokens": chunk.input_tokens,
-                                "outputTokens": chunk.output_tokens,
-                                "estimatedCostUsd": chunk.estimated_cost_usd,
-                            },
-                        )
+            provider = self.model.provider.name
+            async with self._telemetry.span(
+                "agent.model",
+                kind="CLIENT",
+                tags={"agent.provider": provider},
+            ):
+                graph_state = await self._graph.ainvoke(
+                    {"prompt": message.content, "policy": policy, "model_input": ""}
+                )
+                async with aclosing(
+                    self.model.stream(run.owner_id, graph_state["model_input"])
+                ) as model_stream:
+                    async for chunk in model_stream:
+                        if isinstance(chunk, ModelDelta):
+                            for safe_delta in sanitizer.feed(chunk.text):
+                                await emit("message.delta", {"delta": safe_delta})
+                        elif isinstance(chunk, ModelUsage):
+                            run.input_tokens = chunk.input_tokens
+                            run.output_tokens = chunk.output_tokens
+                            run.estimated_cost_usd = chunk.estimated_cost_usd
+                            self.metrics.model_tokens.labels(provider, "input").inc(
+                                chunk.input_tokens
+                            )
+                            self.metrics.model_tokens.labels(provider, "output").inc(
+                                chunk.output_tokens
+                            )
+                            self.metrics.model_cost.labels(provider).inc(chunk.estimated_cost_usd)
+                            await emit(
+                                "usage",
+                                {
+                                    "inputTokens": chunk.input_tokens,
+                                    "outputTokens": chunk.output_tokens,
+                                    "estimatedCostUsd": chunk.estimated_cost_usd,
+                                },
+                            )
             for safe_delta in sanitizer.flush():
                 await emit("message.delta", {"delta": safe_delta})
             run.state = RunState.COMPLETED
@@ -295,6 +308,7 @@ class AgentService:
                 )
             )
         except ModelTimeoutError:
+            self.metrics.errors.labels("timeout").inc()
             sanitizer.discard()
             run.state = RunState.TIMED_OUT
             emit_terminal(
@@ -311,6 +325,7 @@ class AgentService:
                 )
             )
         except ConcurrencyLimitError:
+            self.metrics.errors.labels("rate_limit").inc()
             sanitizer.discard()
             run.state = RunState.FAILED
             emit_terminal(
@@ -327,6 +342,7 @@ class AgentService:
                 )
             )
         except CircuitOpenError:
+            self.metrics.errors.labels("circuit_open").inc()
             sanitizer.discard()
             run.state = RunState.FAILED
             emit_terminal(
@@ -343,6 +359,7 @@ class AgentService:
                 )
             )
         except (ModelTemporaryError, ModelPermanentError):
+            self.metrics.errors.labels("provider").inc()
             sanitizer.discard()
             run.state = RunState.FAILED
             emit_terminal(
@@ -359,6 +376,7 @@ class AgentService:
                 )
             )
         except Exception:
+            self.metrics.errors.labels("internal").inc()
             sanitizer.discard()
             run.state = RunState.FAILED
             emit_terminal(
@@ -381,6 +399,21 @@ class AgentService:
             finally:
                 try:
                     self.metrics.run_outcomes.labels(run.state).inc()
+                    provider = self.model.provider.name
+                    self.metrics.latency.labels(provider).observe(time.perf_counter() - started)
+                    provider_outcome = "success" if run.state is RunState.COMPLETED else "failure"
+                    self.metrics.provider_requests.labels(provider, provider_outcome).inc()
+                    self.metrics.circuit_state.set(
+                        0 if self.model.breaker.state.value == "closed" else 1
+                    )
+                    logging.getLogger(__name__).info(
+                        "agent run finished",
+                        extra={
+                            "event": "agent.run.completed",
+                            "outcome": str(run.state),
+                            "errorType": "" if run.state is RunState.COMPLETED else "AgentRunError",
+                        },
+                    )
                     self.metrics.active_runs.dec()
                 finally:
                     done.set()

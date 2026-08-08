@@ -6,15 +6,23 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.real.domain.messaging.OutboxEvent;
 import com.real.domain.messaging.OutboxMapper;
 import com.real.infrastructure.RabbitMQ.RabbitMQConfig;
+import com.real.common.observability.AsyncTraceContext;
+import com.real.task.observability.TaskObservabilityMetrics;
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.TraceContext;
+import io.micrometer.tracing.Tracer;
 import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.core.MessageDeliveryMode;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.*;
@@ -38,16 +46,36 @@ public class OutboxPublisher {
     private final OutboxPublishFailpoint failpoint;
     private final Clock clock;
     private final Supplier<UUID> leaseIds;
+    private final TaskObservabilityMetrics metrics;
+    private final Tracer tracer;
 
+    @Autowired
     public OutboxPublisher(OutboxMapper mapper, RabbitTemplate rabbit, ObjectMapper json,
             TransactionTemplate tx, OutboxPublisherProperties properties,
+            ObjectProvider<OutboxPublishFailpoint> failpoints, TaskObservabilityMetrics metrics,
+            Tracer tracer) {
+        this(mapper, rabbit, json, tx, properties,
+                failpoints.getIfAvailable(NoOpFailpoint::new), Clock.systemUTC(), UUID::randomUUID,
+                metrics, tracer);
+    }
+
+    OutboxPublisher(OutboxMapper mapper, RabbitTemplate rabbit, ObjectMapper json,
+            TransactionTemplate tx, OutboxPublisherProperties properties,
             OutboxPublishFailpoint failpoint) {
-        this(mapper, rabbit, json, tx, properties, failpoint, Clock.systemUTC(), UUID::randomUUID);
+        this(mapper, rabbit, json, tx, properties, failpoint, Clock.systemUTC(), UUID::randomUUID,
+                null, Tracer.NOOP);
     }
 
     OutboxPublisher(OutboxMapper mapper, RabbitTemplate rabbit, ObjectMapper json,
             TransactionTemplate tx, OutboxPublisherProperties properties,
             OutboxPublishFailpoint failpoint, Clock clock, Supplier<UUID> leaseIds) {
+        this(mapper, rabbit, json, tx, properties, failpoint, clock, leaseIds, null, Tracer.NOOP);
+    }
+
+    private OutboxPublisher(OutboxMapper mapper, RabbitTemplate rabbit, ObjectMapper json,
+            TransactionTemplate tx, OutboxPublisherProperties properties,
+            OutboxPublishFailpoint failpoint, Clock clock, Supplier<UUID> leaseIds,
+            TaskObservabilityMetrics metrics, Tracer tracer) {
         this.mapper = mapper;
         this.rabbit = rabbit;
         this.json = json;
@@ -56,7 +84,11 @@ public class OutboxPublisher {
         this.failpoint = failpoint;
         this.clock = clock;
         this.leaseIds = leaseIds;
+        this.metrics = metrics;
+        this.tracer = tracer;
     }
+
+    private static final class NoOpFailpoint implements OutboxPublishFailpoint { }
 
     @Scheduled(fixedDelayString = "${hotshop.outbox.publisher.poll-delay:250ms}")
     public void poll() {
@@ -87,6 +119,32 @@ public class OutboxPublisher {
     }
 
     public void publish(OutboxEvent event) {
+        long started = System.nanoTime();
+        TraceContext parent = traceParent(event);
+        Span span = (parent == null ? tracer.spanBuilder().setNoParent()
+                : tracer.spanBuilder().setParent(parent))
+                .name("outbox.publish")
+                .kind(Span.Kind.PRODUCER)
+                .tag("messaging.system", "rabbitmq")
+                .tag("messaging.operation", "publish")
+                .tag("event.type", event.eventType())
+                .start();
+        try (Tracer.SpanInScope ignored = tracer.withSpan(span)) {
+            publishInternal(event);
+        } catch (RuntimeException failure) {
+            span.error(failure);
+            throw failure;
+        } finally {
+            OutboxEvent current = mapper.find(event.outboxId());
+            String outcome = current == null ? "missing" : current.status().toLowerCase();
+            span.tag("outcome", outcome).end();
+            if (metrics != null) {
+                metrics.outbox(outcome, Duration.ofNanos(System.nanoTime() - started));
+            }
+        }
+    }
+
+    private void publishInternal(OutboxEvent event) {
         failpoint.afterClaim(event);
         Route route;
         try {
@@ -115,6 +173,19 @@ public class OutboxPublisher {
             CorrelationData correlation = new CorrelationData(event.eventId());
             rabbit.convertAndSend(route.exchange(), route.routingKey(), envelope, message -> {
                 message.getMessageProperties().setDeliveryMode(MessageDeliveryMode.PERSISTENT);
+                copyContextHeader(route.payload(), message.getMessageProperties(),
+                        "requestId", AsyncTraceContext.REQUEST_ID);
+                String currentTraceParent = AsyncTraceContext.currentTraceParent();
+                if (!currentTraceParent.isBlank()) {
+                    message.getMessageProperties().setHeader(
+                            AsyncTraceContext.TRACE_PARENT, currentTraceParent
+                    );
+                } else {
+                    copyContextHeader(route.payload(), message.getMessageProperties(),
+                            AsyncTraceContext.TRACE_PARENT, AsyncTraceContext.TRACE_PARENT);
+                }
+                copyContextHeader(route.payload(), message.getMessageProperties(),
+                        AsyncTraceContext.TRACE_STATE, AsyncTraceContext.TRACE_STATE);
                 if (route.expirationMs() > 0) {
                     message.getMessageProperties().setExpiration(Long.toString(route.expirationMs()));
                 }
@@ -123,15 +194,18 @@ public class OutboxPublisher {
             CorrelationData.Confirm confirm = correlation.getFuture()
                     .get(properties.confirmTimeout().toMillis(), TimeUnit.MILLISECONDS);
             if (!confirm.isAck()) {
+                rabbitMetric("publish", "nack");
                 recordFailure(event, "BROKER_NACK", true);
                 return;
             }
             if (correlation.getReturned() != null) {
+                rabbitMetric("publish", "return");
                 recordFailure(event, "UNROUTABLE", true);
                 return;
             }
             failpoint.afterBrokerConfirm(event);
             markPublished(event);
+            rabbitMetric("publish", "ack");
         } catch (OutboxPublisherCrashException crash) {
             throw crash;
         } catch (OutboxLeaseLostException leaseLost) {
@@ -145,6 +219,21 @@ public class OutboxPublisher {
             recordFailure(event, "CONNECTION_FAILURE", true);
         } catch (Exception exception) {
             recordFailure(event, "CONNECTION_FAILURE", true);
+        }
+    }
+
+    private TraceContext traceParent(OutboxEvent event) {
+        try {
+            AsyncTraceContext.Parsed parsed = AsyncTraceContext.parse(
+                    json.readTree(event.payload()).path("traceparent").asText("")
+            );
+            if (!parsed.valid()) return null;
+            return tracer.traceContextBuilder().traceId(parsed.traceId())
+                    .spanId(parsed.parentSpanId())
+                    .sampled((Integer.parseInt(parsed.flags(), 16) & 1) == 1)
+                    .build();
+        } catch (Exception ignored) {
+            return null;
         }
     }
 
@@ -215,6 +304,19 @@ public class OutboxPublisher {
     }
 
     private LocalDateTime now() { return LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC); }
+
+    private void rabbitMetric(String operation, String outcome) {
+        if (metrics != null) metrics.rabbit(operation, outcome);
+    }
+
+    private static void copyContextHeader(JsonNode payload,
+            org.springframework.amqp.core.MessageProperties properties,
+            String payloadField, String header) {
+        String value = payload.path(payloadField).asText("");
+        if (!value.isBlank() && value.length() <= 512) {
+            properties.setHeader(header, value);
+        }
+    }
 
     private static boolean validUuid(String value) {
         try { return value != null && UUID.fromString(value).toString().equals(value.toLowerCase(Locale.ROOT)); }

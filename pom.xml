@@ -53,6 +53,7 @@
         <mybatis-spring-boot.version>3.0.5</mybatis-spring-boot.version>
         <pagehelper-spring-boot.version>2.1.1</pagehelper-spring-boot.version>
         <springdoc-openapi.version>2.8.17</springdoc-openapi.version>
+        <opentelemetry.version>1.51.0</opentelemetry.version>
         <openapi-generator.version>7.14.0</openapi-generator.version>
         <jjwt.version>0.11.5</jjwt.version>
         <maven.minimum.version>3.9.16</maven.minimum.version>
@@ -148,6 +149,23 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-otel</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-exporter-otlp</artifactId>
+            <version>${opentelemetry.version}</version>
         </dependency>
     </dependencies>
 

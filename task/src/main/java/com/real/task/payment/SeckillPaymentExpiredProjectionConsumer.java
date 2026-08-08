@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
 import com.real.infrastructure.RabbitMQ.RabbitMQConfig;
 import com.real.infrastructure.redis.SeckillRedisKeys;
+import com.real.common.observability.AsyncTraceContext;
+import com.real.task.observability.TaskObservabilityMetrics;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageDeliveryMode;
 import org.springframework.amqp.core.MessageProperties;
@@ -16,6 +18,7 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -32,6 +35,7 @@ public class SeckillPaymentExpiredProjectionConsumer {
             "aggregateType", "aggregateId", "occurredAt", "payload");
     private static final Set<String> PAYLOAD = Set.of("schemaVersion", "orderId", "reservationNo",
             "userId", "activityId", "productId", "quantity", "reason");
+    private static final Set<String> CONTEXT = Set.of("requestId", "traceparent", "tracestate");
     private static final Pattern ORDER_ID = Pattern.compile("^[A-Za-z0-9_-]{1,64}$");
     private static final Pattern RESERVATION_NO = Pattern.compile("^rsv_[0-9a-f]{32}$");
     private static final DefaultRedisScript<List> SCRIPT = script();
@@ -39,14 +43,24 @@ public class SeckillPaymentExpiredProjectionConsumer {
     private final StringRedisTemplate redis;
     private final RabbitTemplate rabbit;
     private final SeckillPaymentExpiredDeliveryProperties properties;
+    private final TaskObservabilityMetrics metrics;
 
     public SeckillPaymentExpiredProjectionConsumer(ObjectMapper json,
             @Qualifier("seckillStringRedisTemplate") StringRedisTemplate redis,
             RabbitTemplate rabbit, SeckillPaymentExpiredDeliveryProperties properties) {
+        this(json, redis, rabbit, properties, null);
+    }
+
+    @Autowired
+    public SeckillPaymentExpiredProjectionConsumer(ObjectMapper json,
+            @Qualifier("seckillStringRedisTemplate") StringRedisTemplate redis,
+            RabbitTemplate rabbit, SeckillPaymentExpiredDeliveryProperties properties,
+            TaskObservabilityMetrics metrics) {
         this.json = json;
         this.redis = redis;
         this.rabbit = rabbit;
         this.properties = properties;
+        this.metrics = metrics;
     }
 
     @RabbitListener(queues = RabbitMQConfig.SECKILL_PAYMENT_EXPIRED_QUEUE, ackMode = "MANUAL")
@@ -57,6 +71,7 @@ public class SeckillPaymentExpiredProjectionConsumer {
             event = parse(message.getBody());
         } catch (RuntimeException poison) {
             channel.basicReject(tag, false);
+            rabbitMetric("consume", "reject"); rabbitMetric("consume", "dlq");
             return;
         }
 
@@ -76,28 +91,36 @@ public class SeckillPaymentExpiredProjectionConsumer {
                 throw new DeterministicProjectionFailure();
             }
             channel.basicAck(tag, false);
+            rabbitMetric("consume", "ack");
+            inventoryMetric("compensation", "success");
         } catch (DeterministicProjectionFailure conflict) {
             channel.basicReject(tag, false);
+            rabbitMetric("consume", "reject"); rabbitMetric("consume", "dlq");
+            inventoryMetric("compensation", "failure");
         } catch (RuntimeException transientFailure) {
             if (attempt >= properties.getMaxDeliveryAttempts()) {
                 channel.basicReject(tag, false);
+                rabbitMetric("consume", "reject"); rabbitMetric("consume", "dlq");
+                inventoryMetric("compensation", "failure");
                 return;
             }
-            republishForRetry(message.getBody(), attempt);
+            republishForRetry(message, attempt);
             channel.basicAck(tag, false);
+            rabbitMetric("retry", "published");
         }
     }
 
-    private void republishForRetry(byte[] body, int attempt) {
+    private void republishForRetry(Message original, int attempt) {
         MessageProperties outgoing = new MessageProperties();
         outgoing.setContentType("application/json");
         outgoing.setDeliveryMode(MessageDeliveryMode.PERSISTENT);
         outgoing.setExpiration(Long.toString(properties.getRetryDelay().toMillis()));
         outgoing.setHeader("x-hotshop-delivery-attempt", attempt);
+        copyContext(original.getMessageProperties(), outgoing);
         CorrelationData correlation = new CorrelationData(UUID.randomUUID().toString());
         rabbit.send(RabbitMQConfig.SECKILL_PAYMENT_EXPIRED_RETRY_EXCHANGE,
                 RabbitMQConfig.SECKILL_PAYMENT_EXPIRED_ROUTING_KEY,
-                new Message(body, outgoing), correlation);
+                new Message(original.getBody(), outgoing), correlation);
         try {
             CorrelationData.Confirm confirm = correlation.getFuture().get(
                     properties.getConfirmTimeout().toMillis(), TimeUnit.MILLISECONDS);
@@ -127,7 +150,7 @@ public class SeckillPaymentExpiredProjectionConsumer {
             Instant.parse(text(root, "occurredAt", 35));
 
             JsonNode payload = root.get("payload");
-            exact(payload, PAYLOAD);
+            exactWithOptional(payload, PAYLOAD, CONTEXT);
             if (!integer(payload.get("schemaVersion"), 1)) throw new IllegalArgumentException();
             String orderId = text(payload, "orderId", 64);
             String reservationNo = text(payload, "reservationNo", 36);
@@ -151,6 +174,14 @@ public class SeckillPaymentExpiredProjectionConsumer {
         Set<String> actual = new HashSet<>();
         node.fieldNames().forEachRemaining(actual::add);
         if (!actual.equals(expected)) throw new IllegalArgumentException();
+    }
+    private void exactWithOptional(JsonNode node, Set<String> required, Set<String> optional) {
+        if (node == null || !node.isObject()) throw new IllegalArgumentException();
+        Set<String> actual = new HashSet<>(); node.fieldNames().forEachRemaining(actual::add);
+        Set<String> allowed = new HashSet<>(required); allowed.addAll(optional);
+        if (!actual.containsAll(required) || !allowed.containsAll(actual)) {
+            throw new IllegalArgumentException();
+        }
     }
     private String text(JsonNode node, String field, int max) {
         JsonNode value = node.get(field);
@@ -180,6 +211,24 @@ public class SeckillPaymentExpiredProjectionConsumer {
     private int headerAttempt(Message message) {
         Object value = message.getMessageProperties().getHeaders().get("x-hotshop-delivery-attempt");
         return value instanceof Number number ? number.intValue() : 0;
+    }
+
+    private void rabbitMetric(String operation, String outcome) {
+        if (metrics != null) metrics.rabbit(operation, outcome);
+    }
+
+    private void inventoryMetric(String operation, String outcome) {
+        if (metrics != null) metrics.inventory(operation, outcome);
+    }
+
+    private static void copyContext(MessageProperties source, MessageProperties target) {
+        for (String name : List.of(AsyncTraceContext.REQUEST_ID, AsyncTraceContext.TRACE_PARENT,
+                AsyncTraceContext.TRACE_STATE)) {
+            Object value = source.getHeaders().get(name);
+            if (value instanceof String text && !text.isBlank() && text.length() <= 512) {
+                target.setHeader(name, text);
+            }
+        }
     }
 
     private static DefaultRedisScript<List> script() {

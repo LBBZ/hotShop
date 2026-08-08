@@ -23,4 +23,6 @@ ARG MODULE
 ARG PROFILE=""
 ENV SPRING_PROFILES_ACTIVE=${PROFILE}
 COPY --from=builder /workspace/app.jar /app.jar
-ENTRYPOINT ["java", "-jar", "/app.jar"]
+# The Alpine Temurin C2 compiler crashes reproducibly under the local Docker Desktop VM.
+# C1 keeps the reproducible local stack stable; production images should benchmark their own JVM.
+ENTRYPOINT ["java", "-XX:TieredStopAtLevel=1", "-jar", "/app.jar"]

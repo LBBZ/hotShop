@@ -5,10 +5,11 @@ export function createRequestId(): string {
 }
 
 export function withRequestId(headersInit?: HeadersInit): Headers {
-  const headers = new Headers(headersInit);
+  const headers = withTraceContext(headersInit);
   const supplied = headers.get("X-Request-Id");
   if (!supplied || !requestIdPattern.test(supplied)) {
     headers.set("X-Request-Id", createRequestId());
   }
   return headers;
 }
+import { withTraceContext } from "@/observability/trace-context";

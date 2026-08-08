@@ -68,8 +68,10 @@ class Settings(BaseSettings):
     circuit_recovery_seconds: float = Field(default=30.0, gt=0, le=600)
     global_concurrency_limit: int = Field(default=16, ge=1, le=1000)
     user_concurrency_limit: int = Field(default=2, ge=1, le=100)
+    zipkin_endpoint: str = "http://localhost:9411/api/v2/spans"
+    trace_sample_ratio: float = Field(default=1.0, ge=0.0, le=1.0)
 
-    @field_validator("portal_base_url", "qwen_base_url")
+    @field_validator("portal_base_url", "qwen_base_url", "zipkin_endpoint")
     @classmethod
     def validate_fixed_http_url(cls, value: str) -> str:
         if not (value.startswith("http://") or value.startswith("https://")):

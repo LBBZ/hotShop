@@ -1,0 +1,11 @@
+{
+  "annotations": {"list": []}, "editable": false, "graphTooltip": 1,
+  "panels": [
+    {"id": 1, "title": "k6 request rate", "type": "timeseries", "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"refId": "A", "expr": "sum(rate(k6_http_reqs_total[1m]))", "legendFormat": "requests/s"}], "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}},
+    {"id": 2, "title": "k6 failed request rate", "type": "timeseries", "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"refId": "A", "expr": "sum(rate(k6_http_req_failed_total[1m])) / clamp_min(sum(rate(k6_http_reqs_total[1m])), 1)", "legendFormat": "failure ratio"}], "fieldConfig": {"defaults": {"unit": "percentunit"}}, "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}},
+    {"id": 3, "title": "k6 p95 duration", "type": "timeseries", "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"refId": "A", "expr": "k6_http_req_duration_p95", "legendFormat": "p95"}], "fieldConfig": {"defaults": {"unit": "ms"}}, "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}},
+    {"id": 4, "title": "k6 virtual users", "type": "timeseries", "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"refId": "A", "expr": "sum(k6_vus)", "legendFormat": "VUs"}, {"refId": "B", "expr": "sum(k6_vus_max)", "legendFormat": "max VUs"}], "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}}
+  ],
+  "schemaVersion": 41, "tags": ["hotshop", "k6"], "templating": {"list": []},
+  "time": {"from": "now-30m", "to": "now"}, "title": "HotShop - k6 Load Test", "uid": "hotshop-k6", "version": 1
+}

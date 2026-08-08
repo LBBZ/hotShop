@@ -1,0 +1,12 @@
+{
+  "annotations": {"list": []}, "editable": false, "graphTooltip": 1,
+  "panels": [
+    {"id": 1, "title": "Agent request p95", "type": "timeseries", "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"refId": "A", "expr": "histogram_quantile(0.95, sum by (le, provider) (rate(hotshop_agent_latency_seconds_bucket[5m])))", "legendFormat": "{{provider}}"}], "fieldConfig": {"defaults": {"unit": "s"}}, "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}},
+    {"id": 2, "title": "Run outcomes", "type": "timeseries", "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"refId": "A", "expr": "sum by (outcome) (rate(hotshop_agent_run_outcomes_total[5m]))", "legendFormat": "{{outcome}}"}], "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}},
+    {"id": 3, "title": "Provider tokens", "type": "timeseries", "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"refId": "A", "expr": "sum by (provider, direction) (rate(hotshop_agent_model_tokens_total[5m]))", "legendFormat": "{{provider}} {{direction}}"}], "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8}},
+    {"id": 4, "title": "Tool calls", "type": "timeseries", "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"refId": "A", "expr": "sum by (tool, outcome) (rate(hotshop_agent_tool_calls_total[5m]))", "legendFormat": "{{tool}} {{outcome}}"}], "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8}},
+    {"id": 5, "title": "Limit and circuit events", "type": "timeseries", "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"refId": "A", "expr": "sum by (type) (rate(hotshop_agent_errors_total[5m]))", "legendFormat": "{{type}}"}, {"refId": "B", "expr": "hotshop_agent_circuit_state", "legendFormat": "circuit"}], "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8}}
+  ],
+  "schemaVersion": 41, "tags": ["hotshop", "agent"], "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"}, "title": "HotShop - Agent", "uid": "hotshop-agent", "version": 1
+}

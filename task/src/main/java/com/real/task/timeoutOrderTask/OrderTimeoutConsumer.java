@@ -4,9 +4,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
 import com.real.infrastructure.RabbitMQ.RabbitMQConfig;
+import com.real.task.observability.TaskObservabilityMetrics;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -22,18 +25,30 @@ public class OrderTimeoutConsumer {
             "aggregateId", "occurredAt", "payload");
     private static final Set<String> PAYLOAD = Set.of(
             "schemaVersion", "orderId", "userId", "amount", "currency",
-            "expiresAtMs", "timeoutAttempt");
+            "expiresAtMs", "timeoutAttempt", "requestId", "traceparent");
     private static final Pattern MONEY = Pattern.compile("^(0|[1-9][0-9]*)\\.[0-9]{2}$");
     private static final Pattern ORDER_ID = Pattern.compile("^[A-Za-z0-9_-]{1,64}$");
     private final ObjectMapper json;
     private final OrderTimeoutService service;
     private final OrderTimeoutConsumerFailpoint failpoint;
+    private final TaskObservabilityMetrics metrics;
 
     public OrderTimeoutConsumer(ObjectMapper json, OrderTimeoutService service,
             OrderTimeoutConsumerFailpoint failpoint) {
         this.json = json;
         this.service = service;
         this.failpoint = failpoint;
+        this.metrics = null;
+    }
+
+    @Autowired
+    public OrderTimeoutConsumer(ObjectMapper json, OrderTimeoutService service,
+            ObjectProvider<OrderTimeoutConsumerFailpoint> failpoints,
+            TaskObservabilityMetrics metrics) {
+        this.json = json;
+        this.service = service;
+        this.failpoint = failpoints.getIfAvailable(NoOpOrderTimeoutConsumerFailpoint::new);
+        this.metrics = metrics;
     }
 
     @RabbitListener(
@@ -49,10 +64,13 @@ public class OrderTimeoutConsumer {
             service.process(event);
         } catch (PoisonMessageException | TimeoutFactConflictException poison) {
             channel.basicReject(tag, false);
+            rabbit("consume", "reject");
+            rabbit("consume", "dlq");
             return;
         }
         failpoint.afterCommitBeforeAck(event);
         channel.basicAck(tag, false);
+        rabbit("consume", "ack");
     }
 
     OrderTimeoutService.TimeoutEvent parse(byte[] body) {
@@ -109,5 +127,8 @@ public class OrderTimeoutConsumer {
         catch (IllegalArgumentException exception) { return false; }
     }
     private static void require(boolean condition) { if (!condition) throw new PoisonMessageException(); }
+    private void rabbit(String operation, String outcome) {
+        if (metrics != null) metrics.rabbit(operation, outcome);
+    }
     private static final class PoisonMessageException extends RuntimeException { }
 }

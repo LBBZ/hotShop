@@ -23,8 +23,11 @@ spring:
     password: ${SPRING_RABBITMQ_PASSWORD:guest}
     publisher-confirm-type: correlated
     publisher-returns: true
+    template:
+      observation-enabled: true
     listener:
       simple:
+        observation-enabled: true
         acknowledge-mode: manual
         default-requeue-rejected: true
 
@@ -39,6 +42,8 @@ logging:
     com.real: INFO
 
 hotshop:
+  observability:
+    environment: ${HOTSHOP_DEPLOYMENT_ENVIRONMENT:local}
   order:
     legacy-payment-timeout: ${HOTSHOP_LEGACY_ORDER_TIMEOUT:15m}
   mock-payment:
@@ -73,7 +78,7 @@ hotshop:
       group-name: ${HOTSHOP_SECKILL_ORDER_GROUP:hotshop-order-v1}
       consumer-prefix: ${HOTSHOP_SECKILL_ORDER_CONSUMER_PREFIX:order}
       read-batch: ${HOTSHOP_SECKILL_ORDER_READ_BATCH:20}
-      read-block: ${HOTSHOP_SECKILL_ORDER_READ_BLOCK:2s}
+      read-block: ${HOTSHOP_SECKILL_ORDER_READ_BLOCK:1s}
       poll-delay: ${HOTSHOP_SECKILL_ORDER_POLL_DELAY:250ms}
       discovery-interval: ${HOTSHOP_SECKILL_ORDER_DISCOVERY_INTERVAL:10s}
       claim-idle: ${HOTSHOP_SECKILL_ORDER_CLAIM_IDLE:30s}
@@ -88,3 +93,28 @@ hotshop:
       reconciliation-batch: ${HOTSHOP_SECKILL_RECONCILIATION_BATCH:100}
       reconciliation-dry-run: ${HOTSHOP_SECKILL_RECONCILIATION_DRY_RUN:true}
       auto-repair: ${HOTSHOP_SECKILL_RECONCILIATION_AUTO_REPAIR:false}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+  tracing:
+    sampling:
+      probability: ${HOTSHOP_TRACE_SAMPLING_PROBABILITY:1.0}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      environment: ${HOTSHOP_DEPLOYMENT_ENVIRONMENT:local}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        hotshop.seckill.order.conversion_latency: true

@@ -52,3 +52,29 @@ logging:
     org.springframework.security: INFO
     com.real: INFO
     com.real.domain.mapper: WARN
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+  tracing:
+    sampling:
+      probability: ${HOTSHOP_TRACE_SAMPLING_PROBABILITY:1.0}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      environment: ${HOTSHOP_DEPLOYMENT_ENVIRONMENT:local}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+
+hotshop.observability.environment: ${HOTSHOP_DEPLOYMENT_ENVIRONMENT:local}

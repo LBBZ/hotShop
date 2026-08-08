@@ -1,0 +1,13 @@
+{
+  "annotations": {"list": []}, "editable": false, "graphTooltip": 1,
+  "panels": [
+    {"id": 1, "title": "Redis Stream pending and lag", "type": "timeseries", "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"refId": "A", "expr": "hotshop_seckill_order_pending", "legendFormat": "pending"}, {"refId": "B", "expr": "hotshop_seckill_stream_lag", "legendFormat": "lag"}], "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}},
+    {"id": 2, "title": "Stream consume / claim / retry", "type": "timeseries", "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"refId": "A", "expr": "rate(hotshop_seckill_order_consumed_total[1m])", "legendFormat": "consume"}, {"refId": "B", "expr": "rate(hotshop_seckill_order_claimed_total[1m])", "legendFormat": "claim"}, {"refId": "C", "expr": "rate(hotshop_seckill_order_retried_total[1m])", "legendFormat": "retry"}], "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}},
+    {"id": 3, "title": "Outbox backlog", "type": "timeseries", "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"refId": "A", "expr": "hotshop_outbox_backlog", "legendFormat": "events"}, {"refId": "B", "expr": "hotshop_outbox_oldest_age_seconds", "legendFormat": "oldest seconds"}], "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8}},
+    {"id": 4, "title": "Outbox publish outcomes", "type": "timeseries", "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"refId": "A", "expr": "sum by (outcome) (rate(hotshop_outbox_publish_total[5m]))", "legendFormat": "{{outcome}}"}], "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8}},
+    {"id": 5, "title": "RabbitMQ delivery outcomes", "type": "timeseries", "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"refId": "A", "expr": "sum by (operation, outcome) (rate(hotshop_rabbitmq_deliveries_total[5m]))", "legendFormat": "{{operation}} {{outcome}}"}], "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8}},
+    {"id": 6, "title": "Compensation and reconciliation", "type": "timeseries", "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"refId": "A", "expr": "sum by (operation, outcome) (rate(hotshop_inventory_operations_total[5m]))", "legendFormat": "{{operation}} {{outcome}}"}], "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16}}
+  ],
+  "schemaVersion": 41, "tags": ["hotshop", "messaging"], "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"}, "title": "HotShop - Messaging Reliability", "uid": "hotshop-messaging-reliability", "version": 1
+}

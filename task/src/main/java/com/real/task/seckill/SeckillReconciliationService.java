@@ -59,7 +59,13 @@ public class SeckillReconciliationService {
                     "${hotshop.seckill.order-consumer.reconciliation-initial-delay:30s}"
     )
     public void scheduledReconciliation() {
-        runBatch();
+        try {
+            runBatch();
+            metrics.inventory("reconciliation", "success");
+        } catch (RuntimeException failure) {
+            metrics.inventory("reconciliation", "failure");
+            throw failure;
+        }
     }
 
     public ReconciliationReport runBatch() {

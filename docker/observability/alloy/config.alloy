@@ -1,0 +1,94 @@
+logging {
+  level  = "info"
+  format = "json"
+}
+
+discovery.docker "hotshop" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "hotshop" {
+  targets = discovery.docker.hotshop.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "compose_service"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "compose_project"
+  }
+}
+
+loki.source.docker "hotshop" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.relabel.hotshop.output
+  forward_to    = [loki.process.hotshop.receiver]
+  refresh_interval = "5s"
+}
+
+loki.process "hotshop" {
+  stage.json {
+    expressions = {
+      service     = "service",
+      environment = "environment",
+      level       = "level",
+    }
+  }
+
+  stage.labels {
+    values = {
+      service     = "",
+      environment = "",
+      level       = "",
+    }
+  }
+
+  forward_to = [loki.write.hotshop.receiver]
+}
+
+loki.write "hotshop" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
+
+otelcol.receiver.otlp "hotshop" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+  output {
+    traces = [otelcol.processor.batch.hotshop.input]
+  }
+}
+
+otelcol.receiver.zipkin "hotshop" {
+  endpoint = "0.0.0.0:9411"
+  output {
+    traces = [otelcol.processor.batch.hotshop.input]
+  }
+}
+
+otelcol.processor.batch "hotshop" {
+  timeout         = "2s"
+  send_batch_size = 512
+  output {
+    traces = [otelcol.exporter.otlphttp.tempo.input]
+  }
+}
+
+otelcol.exporter.otlphttp "tempo" {
+  client {
+    endpoint = "http://tempo:4318"
+  }
+}

@@ -26,6 +26,7 @@ public record ReservationAcceptedEvent(
         String currency,
         int activityVersion,
         long occurredAtMs,
+        String requestId,
         String idempotencyKeyHash,
         String requestFingerprint,
         String payloadHash
@@ -83,6 +84,7 @@ public record ReservationAcceptedEvent(
         String unitPrice = value(raw, "unitPrice");
         String activityVersion = value(raw, "activityVersion");
         String occurredAt = value(raw, "occurredAtMs");
+        String requestId = value(raw, "requestId");
         String idempotencyHash = value(raw, "idempotencyKeyHash");
         String fingerprint = value(raw, "requestFingerprint");
 
@@ -95,6 +97,9 @@ public record ReservationAcceptedEvent(
         match(unitPrice, MONEY, errors, "UNIT_PRICE_INVALID");
         match(activityVersion, NON_NEGATIVE, errors, "ACTIVITY_VERSION_INVALID");
         match(occurredAt, POSITIVE, errors, "OCCURRED_AT_INVALID");
+        if (!requestId.matches("^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")) {
+            errors.add("REQUEST_ID_INVALID");
+        }
         match(idempotencyHash, HASH, errors, "IDEMPOTENCY_HASH_INVALID");
         match(fingerprint, HASH, errors, "FINGERPRINT_INVALID");
 
@@ -145,6 +150,7 @@ public record ReservationAcceptedEvent(
                     "CNY",
                     parsedVersion,
                     parsedOccurredAt,
+                    requestId,
                     idempotencyHash,
                     fingerprint,
                     payloadHash

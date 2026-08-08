@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from prometheus_client import CollectorRegistry, Counter, Gauge
+from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram
 
 
 class AgentMetrics:
@@ -27,5 +27,34 @@ class AgentMetrics:
             "hotshop_agent_run_outcomes_total",
             "Agent run outcomes",
             ("outcome",),
+            registry=self.registry,
+        )
+        self.latency = Histogram(
+            "hotshop_agent_latency_seconds",
+            "End-to-end Agent run latency",
+            ("provider",),
+            registry=self.registry,
+        )
+        self.provider_requests = Counter(
+            "hotshop_agent_provider_requests_total",
+            "Model provider request outcomes",
+            ("provider", "outcome"),
+            registry=self.registry,
+        )
+        self.tool_calls = Counter(
+            "hotshop_agent_tool_calls_total",
+            "Agent tool call outcomes",
+            ("tool", "outcome"),
+            registry=self.registry,
+        )
+        self.errors = Counter(
+            "hotshop_agent_errors_total",
+            "Bounded Agent error categories",
+            ("type",),
+            registry=self.registry,
+        )
+        self.circuit_state = Gauge(
+            "hotshop_agent_circuit_state",
+            "1 while the model circuit is open or half-open",
             registry=self.registry,
         )

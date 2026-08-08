@@ -1,0 +1,61 @@
+groups:
+  - name: hotshop-local-demo
+    rules:
+      # TASK-11 thresholds are intentionally sensitive local-demo thresholds, not production SLOs.
+      - alert: HotShopTargetDownLocalDemo
+        expr: up{job=~"portal|admin|task|agent"} == 0
+        for: 30s
+        labels: {severity: critical, scope: local-demo}
+        annotations:
+          summary: "Local demo target is down"
+          description: "{{ $labels.job }} has been unavailable for 30 seconds; this is not a production SLO."
+      - alert: HotShopHttp5xxLocalDemo
+        expr: sum by (application) (rate(http_server_requests_seconds_count{status=~"5.."}[2m])) > 0.05
+        for: 1m
+        labels: {severity: warning, scope: local-demo}
+        annotations: {summary: "Local demo HTTP 5xx rate is elevated"}
+      - alert: HotShopHttpLatencyLocalDemo
+        expr: histogram_quantile(0.95, sum by (le, application) (rate(http_server_requests_seconds_bucket[2m]))) > 0.5
+        for: 1m
+        labels: {severity: warning, scope: local-demo}
+        annotations: {summary: "Local demo HTTP p95 exceeds 500 ms"}
+      - alert: HotShopHikariSaturationLocalDemo
+        expr: max by (application) (hikaricp_connections_active / clamp_min(hikaricp_connections_max, 1)) > 0.8
+        for: 1m
+        labels: {severity: warning, scope: local-demo}
+        annotations: {summary: "Local demo HikariCP pool exceeds 80% utilization"}
+      - alert: HotShopRedisLuaFailureLocalDemo
+        expr: sum(rate(hotshop_redis_lua_calls_total{outcome!="success"}[2m])) > 0
+        for: 30s
+        labels: {severity: warning, scope: local-demo}
+        annotations: {summary: "Local demo Redis Lua call failed"}
+      - alert: HotShopStreamPendingLocalDemo
+        expr: hotshop_seckill_order_pending > 20 or hotshop_seckill_stream_lag > 50
+        for: 1m
+        labels: {severity: warning, scope: local-demo}
+        annotations: {summary: "Local demo Redis Stream pending or lag threshold exceeded"}
+      - alert: HotShopOutboxBacklogLocalDemo
+        expr: hotshop_outbox_backlog > 20 or hotshop_outbox_oldest_age_seconds > 60
+        for: 1m
+        labels: {severity: warning, scope: local-demo}
+        annotations: {summary: "Local demo Outbox backlog is old or growing"}
+      - alert: HotShopRabbitDeliveryFailureLocalDemo
+        expr: sum(rate(hotshop_rabbitmq_deliveries_total{outcome=~"nack|return|dlq"}[2m])) > 0
+        for: 30s
+        labels: {severity: warning, scope: local-demo}
+        annotations: {summary: "Local demo RabbitMQ nack, return, or DLQ activity detected"}
+      - alert: HotShopCompensationFailureLocalDemo
+        expr: sum(rate(hotshop_inventory_operations_total{operation=~"compensation|reconciliation",outcome="failure"}[5m])) > 0
+        for: 30s
+        labels: {severity: warning, scope: local-demo}
+        annotations: {summary: "Local demo compensation or reconciliation failed"}
+      - alert: HotShopPaymentCallbackFailureLocalDemo
+        expr: sum(rate(hotshop_payment_callbacks_total{outcome="failure"}[5m])) > 0.05
+        for: 2m
+        labels: {severity: warning, scope: local-demo}
+        annotations: {summary: "Local demo payment callbacks are continuously failing"}
+      - alert: HotShopAgentFailureLocalDemo
+        expr: sum(rate(hotshop_agent_run_outcomes_total{outcome=~"FAILED|TIMED_OUT"}[5m])) > 0.05 or hotshop_agent_circuit_state == 1
+        for: 1m
+        labels: {severity: warning, scope: local-demo}
+        annotations: {summary: "Local demo Agent error rate or circuit breaker is elevated"}

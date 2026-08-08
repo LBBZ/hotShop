@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <springProperty scope="context" name="service" source="spring.application.name" defaultValue="portal"/>
+    <springProperty scope="context" name="environment" source="hotshop.observability.environment" defaultValue="local"/>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="com.real.common.observability.JsonLogEncoder">
+            <service>${service}</service>
+            <environment>${environment}</environment>
+        </encoder>
+    </appender>
+    <root level="INFO"><appender-ref ref="CONSOLE"/></root>
+</configuration>

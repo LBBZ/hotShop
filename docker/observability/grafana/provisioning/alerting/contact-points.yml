@@ -1,0 +1,11 @@
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: hotshop-local-console
+    receivers:
+      - uid: hotshop-local-console
+        type: webhook
+        disableResolveMessage: false
+        settings:
+          url: http://127.0.0.1:9/hotshop-local-demo

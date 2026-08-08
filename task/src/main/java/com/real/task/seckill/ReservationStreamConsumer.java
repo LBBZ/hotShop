@@ -1,18 +1,26 @@
 package com.real.task.seckill;
 
+import com.real.common.observability.AsyncTraceContext;
 import com.real.infrastructure.redis.SeckillRedisKeys;
 import io.lettuce.core.StreamMessage;
 import io.lettuce.core.XAutoClaimArgs;
 import io.lettuce.core.api.async.RedisStreamAsyncCommands;
+import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.models.stream.ClaimedMessages;
 import io.micrometer.core.instrument.Timer;
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.Link;
+import io.micrometer.tracing.TraceContext;
+import io.micrometer.tracing.Tracer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.domain.Range;
 import org.springframework.data.redis.connection.RedisConnection;
+import org.springframework.data.redis.connection.Limit;
 import org.springframework.data.redis.connection.stream.Consumer;
 import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.data.redis.connection.stream.PendingMessage;
@@ -25,6 +33,8 @@ import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
@@ -60,6 +70,7 @@ public class ReservationStreamConsumer {
     private final SeckillProcessingFailpoint failpoint;
     private final SeckillOrderMetrics metrics;
     private final String consumerName;
+    private final Tracer tracer;
     private final AtomicInteger roundRobin = new AtomicInteger();
     private final Map<String, String> claimCursors = new HashMap<>();
     private volatile List<String> streams = List.of();
@@ -73,13 +84,40 @@ public class ReservationStreamConsumer {
             SeckillProcessingFailpoint failpoint,
             SeckillOrderMetrics metrics
     ) {
+        this(redis, properties, reservationGateway, processingService, failpoint, metrics, Tracer.NOOP);
+    }
+
+    public ReservationStreamConsumer(
+            @Qualifier("seckillStringRedisTemplate") StringRedisTemplate redis,
+            SeckillOrderProperties properties,
+            SeckillRedisReservationGateway reservationGateway,
+            SeckillProcessingService processingService,
+            SeckillProcessingFailpoint failpoint,
+            SeckillOrderMetrics metrics,
+            Tracer tracer
+    ) {
         this.redis = redis;
         this.properties = properties;
         this.reservationGateway = reservationGateway;
         this.processingService = processingService;
         this.failpoint = failpoint;
         this.metrics = metrics;
+        this.tracer = tracer;
         this.consumerName = uniqueConsumerName(properties.getConsumerPrefix());
+    }
+
+    @Autowired
+    public ReservationStreamConsumer(
+            @Qualifier("seckillStringRedisTemplate") StringRedisTemplate redis,
+            SeckillOrderProperties properties,
+            SeckillRedisReservationGateway reservationGateway,
+            SeckillProcessingService processingService,
+            ObjectProvider<SeckillProcessingFailpoint> failpoints,
+            SeckillOrderMetrics metrics,
+            Tracer tracer
+    ) {
+        this(redis, properties, reservationGateway, processingService,
+                failpoints.getIfAvailable(NoOpSeckillProcessingFailpoint::new), metrics, tracer);
     }
 
     @Scheduled(fixedDelayString = "${hotshop.seckill.order-consumer.poll-delay:250ms}")
@@ -95,21 +133,28 @@ public class ReservationStreamConsumer {
             boolean consumedAny = false;
             long pendingCount = 0;
             long oldestIdle = 0;
+            long lag = 0;
             for (int offset = 0; offset < snapshot.size(); offset++) {
                 String stream = snapshot.get((start + offset) % snapshot.size());
                 PendingSummary pending = pendingSummary(stream);
                 pendingCount += pending.count();
                 oldestIdle = Math.max(oldestIdle, pending.oldestIdleMs());
-                consumedAny |= claimOnePage(stream);
+                lag += groupLag(stream);
+                if (pending.count() > 0) {
+                    consumedAny |= claimOnePage(stream);
+                }
                 consumedAny |= readNew(stream, false);
             }
             metrics.pending(pendingCount, oldestIdle);
+            metrics.streamLag(lag);
             if (!consumedAny) {
                 readNew(snapshot.get(start), true);
             }
         } catch (DataAccessException exception) {
             metrics.failures().increment();
-            log.warn("Seckill Stream poll deferred because a dependency is unavailable");
+            Throwable cause = exception.getMostSpecificCause();
+            log.warn("Seckill Stream poll deferred; category={}, cause={}",
+                    exception.getClass().getSimpleName(), cause.getClass().getSimpleName(), exception);
         } catch (RuntimeException exception) {
             metrics.failures().increment();
             log.error("Seckill Stream poll failed with category {}", exception.getClass().getSimpleName());
@@ -201,8 +246,39 @@ public class ReservationStreamConsumer {
         }
 
         ReservationAcceptedEvent event = parsed.event();
+        String storedTraceParent = redis.opsForValue().get(
+                AsyncTraceContext.redisKey(event.requestId())
+        );
+        AsyncTraceContext.Parsed parent = AsyncTraceContext.parse(storedTraceParent);
+        String previousRequestId = MDC.get("requestId");
+        String previousTraceId = MDC.get("traceId");
+        String previousSpanId = MDC.get("spanId");
+        MDC.put("requestId", event.requestId());
+        if (parent.valid()) {
+            MDC.put("traceId", parent.traceId());
+            MDC.put("spanId", parent.parentSpanId());
+        }
+        TraceContext remote = parent.valid()
+                ? tracer.traceContextBuilder().traceId(parent.traceId())
+                        .spanId(parent.parentSpanId())
+                        .sampled((Integer.parseInt(parent.flags(), 16) & 1) == 1)
+                        .build()
+                : null;
+        Span.Builder spanBuilder = remote == null
+                ? tracer.spanBuilder().setNoParent()
+                : claimed
+                        ? tracer.spanBuilder().setNoParent().addLink(
+                                new Link(remote, Map.of("messaging.redelivery", true))
+                        )
+                        : tracer.spanBuilder().setParent(remote);
+        Span span = spanBuilder
+                .name("redis.stream.consume")
+                .kind(Span.Kind.CONSUMER)
+                .tag("messaging.system", "redis")
+                .tag("messaging.operation", claimed ? "claim" : "receive")
+                .start();
         Timer.Sample sample = Timer.start();
-        try {
+        try (Tracer.SpanInScope ignored = tracer.withSpan(span)) {
             SeckillRedisReservationGateway.ReservationProof proof =
                     reservationGateway.verify(event);
             if (!proof.valid()) {
@@ -256,7 +332,7 @@ public class ReservationStreamConsumer {
                         );
                 case COMPENSATED -> {
                     SeckillRedisReservationGateway.CompensationResult result =
-                            reservationGateway.compensate(
+                            compensate(
                                     event,
                                     outcome.compensationId(),
                                     outcome.reasonCode()
@@ -280,6 +356,7 @@ public class ReservationStreamConsumer {
                 case RETRY_NOT_DUE -> metrics.retried().increment();
             }
         } catch (SeckillProcessingService.SafeInventoryFailure exception) {
+            span.error(exception);
             handleFailure(
                     stream,
                     entryId,
@@ -288,6 +365,7 @@ public class ReservationStreamConsumer {
                     exception.getMessage()
             );
         } catch (SeckillProcessingService.ManualFactFailure exception) {
+            span.error(exception);
             handleFailure(
                     stream,
                     entryId,
@@ -296,13 +374,40 @@ public class ReservationStreamConsumer {
                     exception.getMessage()
             );
         } catch (DataAccessException exception) {
+            span.error(exception);
             recordTransientBestEffort(stream, entryId, event, "DEPENDENCY_UNAVAILABLE");
             metrics.failures().increment();
         } catch (RuntimeException exception) {
+            span.error(exception);
             recordTransientBestEffort(stream, entryId, event, "UNEXPECTED_PROCESSING_FAILURE");
             metrics.failures().increment();
         } finally {
+            span.end();
             sample.stop(metrics.conversionLatency());
+            restoreMdc("requestId", previousRequestId);
+            restoreMdc("traceId", previousTraceId);
+            restoreMdc("spanId", previousSpanId);
+        }
+    }
+
+    private long groupLag(String stream) {
+        return redis.opsForStream().groups(stream).stream()
+                .filter(group -> properties.getGroupName().equals(group.groupName()))
+                .findFirst()
+                .map(group -> redis.opsForStream().range(
+                        stream,
+                        Range.rightUnbounded(Range.Bound.exclusive(group.lastDeliveredId())),
+                        Limit.limit().count(10_001)
+                ))
+                .map(List::size)
+                .orElse(0);
+    }
+
+    private static void restoreMdc(String key, String value) {
+        if (value == null) {
+            MDC.remove(key);
+        } else {
+            MDC.put(key, value);
         }
     }
 
@@ -356,7 +461,7 @@ public class ReservationStreamConsumer {
             String reasonCode
     ) {
         SeckillRedisReservationGateway.CompensationResult compensation =
-                reservationGateway.compensate(event, compensationId, reasonCode);
+                compensate(event, compensationId, reasonCode);
         if (!compensation.successful()) {
             if (compensation.code()
                     == SeckillRedisReservationGateway.CompensationCode.STORAGE_ERROR) {
@@ -380,6 +485,22 @@ public class ReservationStreamConsumer {
         processingService.finishCompensation(event, compensationId, reasonCode);
         acknowledge(stream, entryId);
         metrics.compensated().increment();
+    }
+
+    private SeckillRedisReservationGateway.CompensationResult compensate(
+            ReservationAcceptedEvent event,
+            String compensationId,
+            String reasonCode
+    ) {
+        try {
+            SeckillRedisReservationGateway.CompensationResult result =
+                    reservationGateway.compensate(event, compensationId, reasonCode);
+            metrics.inventory("compensation", result.successful() ? "success" : "failure");
+            return result;
+        } catch (RuntimeException failure) {
+            metrics.inventory("compensation", "failure");
+            throw failure;
+        }
     }
 
     private void finalizeAndAck(
@@ -497,12 +618,7 @@ public class ReservationStreamConsumer {
             String stream,
             String cursor
     ) {
-        Object nativeConnection = connection.getNativeConnection();
-        if (!(nativeConnection instanceof RedisStreamAsyncCommands<?, ?> async)) {
-            throw new IllegalStateException("Redis driver does not expose Stream commands");
-        }
-        RedisStreamAsyncCommands<byte[], byte[]> commands =
-                (RedisStreamAsyncCommands<byte[], byte[]>) async;
+        RedisStreamAsyncCommands<byte[], byte[]> commands = streamCommands(connection);
         XAutoClaimArgs<byte[]> args = new XAutoClaimArgs<byte[]>()
                 .consumer(io.lettuce.core.Consumer.from(
                         bytes(properties.getGroupName()),
@@ -533,6 +649,18 @@ public class ReservationStreamConsumer {
         }
         String next = claimed.getId();
         return new AutoClaimPage(next == null || next.isBlank() ? "0-0" : next, records);
+    }
+
+    @SuppressWarnings("unchecked")
+    private RedisStreamAsyncCommands<byte[], byte[]> streamCommands(RedisConnection connection) {
+        Object nativeConnection = connection.getNativeConnection();
+        if (nativeConnection instanceof RedisStreamAsyncCommands<?, ?> async) {
+            return (RedisStreamAsyncCommands<byte[], byte[]>) async;
+        }
+        if (nativeConnection instanceof StatefulRedisConnection<?, ?> stateful) {
+            return (RedisStreamAsyncCommands<byte[], byte[]>) stateful.async();
+        }
+        throw new IllegalStateException("Redis driver does not expose Stream commands");
     }
 
     private static String uniqueConsumerName(String configuredPrefix) {

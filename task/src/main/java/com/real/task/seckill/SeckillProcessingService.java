@@ -2,6 +2,9 @@ package com.real.task.seckill;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.real.common.observability.AsyncTraceContext;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -45,6 +48,17 @@ public class SeckillProcessingService {
             SeckillProcessingFailpoint failpoint
     ) {
         this(jdbc, objectMapper, properties, failpoint, Clock.systemUTC());
+    }
+
+    @Autowired
+    public SeckillProcessingService(
+            JdbcTemplate jdbc,
+            ObjectMapper objectMapper,
+            SeckillOrderProperties properties,
+            ObjectProvider<SeckillProcessingFailpoint> failpoints
+    ) {
+        this(jdbc, objectMapper, properties,
+                failpoints.getIfAvailable(NoOpSeckillProcessingFailpoint::new), Clock.systemUTC());
     }
 
     SeckillProcessingService(
@@ -199,6 +213,8 @@ public class SeckillProcessingService {
                         Map.entry("unitPrice", event.unitPrice()),
                         Map.entry("totalAmount", amount),
                         Map.entry("currency", event.currency()),
+                        Map.entry("requestId", event.requestId()),
+                        Map.entry("traceparent", AsyncTraceContext.currentTraceParent()),
                         Map.entry("occurredAtMs", clock.millis())
                 )
         );
@@ -214,6 +230,8 @@ public class SeckillProcessingService {
                         "userId", event.userId(),
                         "amount", amount.setScale(2).toPlainString(),
                         "currency", event.currency(),
+                        "requestId", event.requestId(),
+                        "traceparent", AsyncTraceContext.currentTraceParent(),
                         "expiresAtMs", paymentExpiresAt.toEpochMilli(),
                         "timeoutAttempt", 0
                 )
@@ -420,17 +438,19 @@ public class SeckillProcessingService {
                 "RESERVATION",
                 event.reservationNo(),
                 "RESERVATION_COMPENSATED",
-                Map.of(
-                        "schemaVersion", 1,
-                        "eventType", "RESERVATION_COMPENSATED",
-                        "reservationNo", event.reservationNo(),
-                        "activityId", event.activityId(),
-                        "productId", event.productId(),
-                        "quantity", event.quantity(),
-                        "currency", event.currency(),
-                        "compensationId", compensationId,
-                        "reasonCode", reasonCode,
-                        "occurredAtMs", event.occurredAtMs()
+                Map.ofEntries(
+                        Map.entry("schemaVersion", 1),
+                        Map.entry("eventType", "RESERVATION_COMPENSATED"),
+                        Map.entry("reservationNo", event.reservationNo()),
+                        Map.entry("activityId", event.activityId()),
+                        Map.entry("productId", event.productId()),
+                        Map.entry("quantity", event.quantity()),
+                        Map.entry("currency", event.currency()),
+                        Map.entry("requestId", event.requestId()),
+                        Map.entry("traceparent", AsyncTraceContext.currentTraceParent()),
+                        Map.entry("compensationId", compensationId),
+                        Map.entry("reasonCode", reasonCode),
+                        Map.entry("occurredAtMs", event.occurredAtMs())
                 )
         );
         jdbc.update("""

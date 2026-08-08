@@ -7,3 +7,4 @@
 .local
 **/target
 *.log
+docker/observability/data

@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.real.common.api.dto.MockPaymentCallbackResponse;
 import com.real.domain.payment.MockPaymentProperties;
 import com.real.domain.payment.PaymentProvider;
+import com.real.common.observability.AsyncTraceContext;
+import org.slf4j.MDC;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
@@ -202,6 +204,8 @@ public class MockPaymentCallbackService {
             payload.put("provider", "MOCK");
             payload.put("outcome", c.outcome());
             payload.put("occurredAt", c.occurredAt().toString());
+            payload.put("requestId", safeRequestId());
+            payload.put("traceparent", AsyncTraceContext.currentTraceParent());
             String eventId = UUID.nameUUIDFromBytes(("hotshop/outbox/v1/" + type + "/" + c.paymentNo())
                     .getBytes(StandardCharsets.UTF_8)).toString();
             jdbc.update("""
@@ -253,6 +257,10 @@ public class MockPaymentCallbackService {
         catch (Exception exception) { throw new IllegalStateException("SHA-256 unavailable", exception); }
     }
     private void requireOne(int changed) { if (changed != 1) throw new IllegalStateException("Conditional payment update lost"); }
+    private String safeRequestId() {
+        String value = MDC.get("requestId");
+        return value != null && value.matches("^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$") ? value : "unknown";
+    }
     private CallbackRejectedException reject(String category, HttpStatus status) { return new CallbackRejectedException(category, status); }
     private CallbackRejectedException reject(String category, HttpStatus status, Callback c) {
         return new CallbackRejectedException(category, status, c.paymentNo(), c.outcome());

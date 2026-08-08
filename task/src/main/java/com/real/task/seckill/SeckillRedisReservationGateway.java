@@ -2,6 +2,7 @@ package com.real.task.seckill;
 
 import com.real.infrastructure.redis.SeckillRedisKeys;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
@@ -21,6 +22,7 @@ public class SeckillRedisReservationGateway {
     private final StringRedisTemplate redis;
     private final Clock clock;
 
+    @Autowired
     public SeckillRedisReservationGateway(
             @Qualifier("seckillStringRedisTemplate") StringRedisTemplate redis
     ) {

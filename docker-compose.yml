@@ -179,6 +179,10 @@ services:
       HOTSHOP_TRUST_FORWARDED_HEADERS: ${HOTSHOP_TRUST_FORWARDED_HEADERS:-false}
       HOTSHOP_TRUSTED_PROXY_ADDRESSES: ${HOTSHOP_TRUSTED_PROXY_ADDRESSES:-}
       SERVER_PORT: 8088
+      HOTSHOP_DEPLOYMENT_ENVIRONMENT: ${HOTSHOP_DEPLOYMENT_ENVIRONMENT:-local}
+      HOTSHOP_TRACE_SAMPLING_PROBABILITY: ${HOTSHOP_TRACE_SAMPLING_PROBABILITY:-1.0}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://alloy:4318/v1/traces}
+      OTEL_RESOURCE_ATTRIBUTES: service.name=admin,deployment.environment=${HOTSHOP_DEPLOYMENT_ENVIRONMENT:-local}
       TZ: ${TZ:-UTC}
     volumes:
       - ${HOTSHOP_KEY_DIR:-./.local/keys/hotshop}/administrator-private.pem:/run/secrets/hotshop/administrator-private.pem:ro
@@ -243,6 +247,10 @@ services:
       HOTSHOP_TRUST_FORWARDED_HEADERS: ${HOTSHOP_TRUST_FORWARDED_HEADERS:-false}
       HOTSHOP_TRUSTED_PROXY_ADDRESSES: ${HOTSHOP_TRUSTED_PROXY_ADDRESSES:-}
       SERVER_PORT: 8080
+      HOTSHOP_DEPLOYMENT_ENVIRONMENT: ${HOTSHOP_DEPLOYMENT_ENVIRONMENT:-local}
+      HOTSHOP_TRACE_SAMPLING_PROBABILITY: ${HOTSHOP_TRACE_SAMPLING_PROBABILITY:-1.0}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://alloy:4318/v1/traces}
+      OTEL_RESOURCE_ATTRIBUTES: service.name=portal,deployment.environment=${HOTSHOP_DEPLOYMENT_ENVIRONMENT:-local}
       TZ: ${TZ:-UTC}
     volumes:
       - ${HOTSHOP_KEY_DIR:-./.local/keys/hotshop}/user-private.pem:/run/secrets/hotshop/user-private.pem:ro
@@ -329,6 +337,10 @@ services:
       SPRING_RABBITMQ_USERNAME: ${RABBITMQ_DEFAULT_USER:-hotshop}
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_DEFAULT_PASS:-change-me-local-rabbitmq}
       SERVER_PORT: 8888
+      HOTSHOP_DEPLOYMENT_ENVIRONMENT: ${HOTSHOP_DEPLOYMENT_ENVIRONMENT:-local}
+      HOTSHOP_TRACE_SAMPLING_PROBABILITY: ${HOTSHOP_TRACE_SAMPLING_PROBABILITY:-1.0}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://alloy:4318/v1/traces}
+      OTEL_RESOURCE_ATTRIBUTES: service.name=task,deployment.environment=${HOTSHOP_DEPLOYMENT_ENVIRONMENT:-local}
       TZ: ${TZ:-UTC}
     ports:
       - "${TASK_PORT:-8888}:8888"
@@ -375,6 +387,8 @@ services:
       AGENT_CIRCUIT_RECOVERY_SECONDS: ${AGENT_CIRCUIT_RECOVERY_SECONDS:-30}
       AGENT_GLOBAL_CONCURRENCY_LIMIT: ${AGENT_GLOBAL_CONCURRENCY_LIMIT:-16}
       AGENT_USER_CONCURRENCY_LIMIT: ${AGENT_USER_CONCURRENCY_LIMIT:-2}
+      AGENT_ZIPKIN_ENDPOINT: http://alloy:9411/api/v2/spans
+      AGENT_TRACE_SAMPLE_RATIO: ${HOTSHOP_TRACE_SAMPLING_PROBABILITY:-1.0}
       TZ: ${TZ:-UTC}
     volumes:
       - ${HOTSHOP_KEY_DIR:-./.local/keys/hotshop}/agent-service-private.pem:/run/secrets/hotshop/agent-service-private.pem:ro
@@ -391,11 +405,153 @@ services:
     mem_limit: ${AGENT_MEMORY_LIMIT:-512m}
     restart: unless-stopped
 
+  prometheus:
+    profiles: [observability]
+    image: ${PROMETHEUS_IMAGE:-prom/prometheus:v3.5.0}
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --storage.tsdb.retention.size=4GB
+      - --web.enable-lifecycle
+      - --web.enable-remote-write-receiver
+    volumes:
+      - ./docker/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    networks:
+      - hotShop-network
+    healthcheck:
+      test: [CMD, wget, -qO-, http://127.0.0.1:9090/-/ready]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    mem_limit: ${PROMETHEUS_MEMORY_LIMIT:-512m}
+    cpus: 1.0
+    restart: unless-stopped
+
+  loki:
+    profiles: [observability]
+    image: ${LOKI_IMAGE:-grafana/loki:3.5.3}
+    command: [-config.file=/etc/loki/loki.yml]
+    volumes:
+      - ./docker/observability/loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki_data:/loki
+    ports:
+      - "${LOKI_PORT:-3100}:3100"
+    networks:
+      - hotShop-network
+    healthcheck:
+      test: [CMD-SHELL, "wget -qO- http://127.0.0.1:3100/ready | grep -q ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 20s
+    mem_limit: ${LOKI_MEMORY_LIMIT:-512m}
+    cpus: 1.0
+    restart: unless-stopped
+
+  tempo:
+    profiles: [observability]
+    image: ${TEMPO_IMAGE:-grafana/tempo:2.8.1}
+    command: [-config.file=/etc/tempo/tempo.yml]
+    volumes:
+      - ./docker/observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempo_data:/var/tempo
+    ports:
+      - "${TEMPO_PORT:-3200}:3200"
+    networks:
+      - hotShop-network
+    healthcheck:
+      test: [CMD, /tempo, -config.file=/etc/tempo/tempo.yml, -config.verify=true]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 20s
+    mem_limit: ${TEMPO_MEMORY_LIMIT:-512m}
+    cpus: 1.0
+    restart: unless-stopped
+
+  alloy:
+    profiles: [observability]
+    image: ${ALLOY_IMAGE:-grafana/alloy:v1.10.2}
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./docker/observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy_data:/var/lib/alloy/data
+    ports:
+      - "${ALLOY_PORT:-12345}:12345"
+      - "${OTLP_GRPC_PORT:-4317}:4317"
+      - "${OTLP_HTTP_PORT:-4318}:4318"
+    depends_on:
+      loki:
+        condition: service_healthy
+      tempo:
+        condition: service_healthy
+    networks:
+      - hotShop-network
+    healthcheck:
+      test: [CMD, /bin/alloy, validate, /etc/alloy/config.alloy]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 20s
+    mem_limit: ${ALLOY_MEMORY_LIMIT:-384m}
+    cpus: 0.75
+    restart: unless-stopped
+
+  grafana:
+    profiles: [observability]
+    image: ${GRAFANA_IMAGE:-grafana/grafana:12.1.0}
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-change-me-local-grafana}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./docker/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+      tempo:
+        condition: service_healthy
+    networks:
+      - hotShop-network
+    healthcheck:
+      test: [CMD-SHELL, "wget -qO- http://127.0.0.1:3000/api/health | grep -q ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 20s
+    mem_limit: ${GRAFANA_MEMORY_LIMIT:-512m}
+    cpus: 1.0
+    restart: unless-stopped
+
 volumes:
   mysql_data:
   redis_cache_data:
   redis_seckill_data:
   rabbitmq_data:
+  prometheus_data:
+  grafana_data:
+  loki_data:
+  tempo_data:
+  alloy_data:
 
 networks:
   hotShop-network:

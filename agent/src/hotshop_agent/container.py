@@ -7,6 +7,7 @@ from hotshop_agent.config import Settings
 from hotshop_agent.exchange import TokenExchangeClient
 from hotshop_agent.graph import build_graph
 from hotshop_agent.metrics import AgentMetrics
+from hotshop_agent.observability import Telemetry
 from hotshop_agent.providers.base import ModelProvider
 from hotshop_agent.providers.fake import FakeModel
 from hotshop_agent.providers.qwen import QwenModel
@@ -26,6 +27,7 @@ class Container:
         verifier: JwtVerifier,
         exchange: TokenExchangeClient,
         service: AgentService,
+        telemetry: Telemetry,
     ) -> None:
         self.settings = settings
         self.http_client = http_client
@@ -33,10 +35,12 @@ class Container:
         self.verifier = verifier
         self.exchange = exchange
         self.service = service
+        self.telemetry = telemetry
 
     async def close(self) -> None:
         await self.service.shutdown()
         await self.store.close()
+        await self.telemetry.close()
         await self.http_client.aclose()
 
 
@@ -67,7 +71,9 @@ def build_container(
             settings.user_concurrency_limit,
         ),
     )
-    service = AgentService(settings, state_store, reliable, AgentMetrics(), build_graph())
+    metrics = AgentMetrics()
+    telemetry = Telemetry(settings)
+    service = AgentService(settings, state_store, reliable, metrics, build_graph(), telemetry)
     return Container(
         settings=settings,
         http_client=client,
@@ -75,6 +81,7 @@ def build_container(
         verifier=verifier,
         exchange=exchange,
         service=service,
+        telemetry=telemetry,
     )
 
 

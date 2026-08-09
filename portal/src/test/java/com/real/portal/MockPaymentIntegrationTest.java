@@ -13,6 +13,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -109,6 +110,116 @@ class MockPaymentIntegrationTest {
     }
 
     @Test
+    void traceStateCrossesPaymentActionCallbackAndResultOutboxes() throws Exception {
+        String orderId = order(112, "23.00", "PENDING");
+        PaymentResponse payment = tx.execute(ignored -> payments.create(112, orderId));
+        String tracestate = "hotshop=payment-boundary";
+        String traceparent = "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01";
+        MDC.put("requestId", "payment-action-request");
+        MDC.put("traceId", "1234567890abcdef1234567890abcdef");
+        MDC.put("spanId", "1234567890abcdef");
+        MDC.put("tracestate", tracestate);
+        try {
+            tx.execute(ignored -> payments.action(112, payment.paymentNo(),
+                    new MockPaymentActionRequest("SUCCEEDED", Duration.ZERO, 1)));
+        } finally {
+            MDC.clear();
+        }
+        assertThat(value("""
+                SELECT JSON_UNQUOTE(JSON_EXTRACT(payload,'$.tracestate'))
+                  FROM outbox_event
+                 WHERE aggregate_id=? AND event_type='MOCK_PAYMENT_CALLBACK_REQUESTED'
+                """, payment.paymentNo())).isEqualTo(tracestate);
+
+        byte[] callback = body(UUID.randomUUID().toString(), payment.paymentNo(),
+                "SUCCEEDED", "23.00");
+        String timestamp = now();
+        String nonce = nonce();
+        MockHttpServletRequest request = request(traceparent, tracestate);
+        MDC.put("requestId", "payment-callback-request");
+        MDC.put("traceId", "1234567890abcdef1234567890abcdef");
+        MDC.put("spanId", "abcdef1234567890");
+        MDC.put("tracestate", tracestate);
+        try {
+            tx.execute(ignored -> callbacks.accept(timestamp, nonce,
+                    provider.sign(timestamp, nonce, callback), callback, request));
+        } finally {
+            MDC.clear();
+        }
+        Map<String, Object> resultContext = jdbc.queryForMap("""
+                SELECT JSON_UNQUOTE(JSON_EXTRACT(payload,'$.requestId')) request_id,
+                       JSON_UNQUOTE(JSON_EXTRACT(payload,'$.traceparent')) traceparent,
+                       JSON_UNQUOTE(JSON_EXTRACT(payload,'$.tracestate')) tracestate
+                  FROM outbox_event
+                 WHERE aggregate_id=? AND event_type='PAYMENT_SUCCEEDED'
+                """, payment.paymentNo());
+        assertThat(resultContext).containsEntry("request_id", "payment-callback-request")
+                .containsEntry("tracestate", tracestate);
+        assertThat(resultContext.get("traceparent").toString())
+                .startsWith("00-1234567890abcdef1234567890abcdef-");
+        Map<String, Object> timelineContext = jdbc.queryForMap("""
+                SELECT COALESCE(traceparent,'') traceparent,
+                       COALESCE(tracestate,'') tracestate
+                  FROM user_transaction_timeline
+                 WHERE order_id=? AND event_type='PAID'
+                """, orderId);
+        assertThat(timelineContext).containsEntry("traceparent", resultContext.get("traceparent"))
+                .containsEntry("tracestate", tracestate);
+    }
+
+    @Test
+    void malformedHttpCarrierCannotRollbackAValidSignedPaymentCallback() throws Exception {
+        String orderId = order(113, "24.00", "PENDING");
+        PaymentResponse payment = tx.execute(ignored -> payments.create(113, orderId));
+        String callbackId = UUID.randomUUID().toString();
+        byte[] callback = body(callbackId, payment.paymentNo(), "SUCCEEDED", "24.00");
+        String timestamp = now();
+        String nonce = nonce();
+        String malformedTraceParent = "not-a-traceparent";
+        String oversizedTraceState = "hotshop=" + "x".repeat(513);
+        MockHttpServletRequest request = request(malformedTraceParent, oversizedTraceState);
+
+        MDC.clear();
+        var response = callbacks.accept(timestamp, nonce,
+                provider.sign(timestamp, nonce, callback), callback, request);
+
+        assertThat(response.acknowledged()).isTrue();
+        assertThat(response.result()).isEqualTo("PAYMENT_SUCCEEDED");
+        assertThat(value("SELECT status FROM sales_order WHERE order_id=?", orderId))
+                .isEqualTo("PAID");
+        assertThat(value("SELECT status FROM payment_order WHERE payment_no=?", payment.paymentNo()))
+                .isEqualTo("SUCCEEDED");
+        assertThat(count("SELECT COUNT(*) FROM payment_callback_nonce WHERE callback_id=?",
+                callbackId)).isOne();
+        assertThat(count("SELECT COUNT(*) FROM payment_callback_ledger WHERE callback_id=?",
+                callbackId)).isOne();
+        assertThat(count("SELECT COUNT(*) FROM user_transaction_timeline"
+                + " WHERE order_id=? AND event_type='PAID'", orderId)).isOne();
+        assertThat(count("SELECT COUNT(*) FROM outbox_event"
+                + " WHERE aggregate_id=? AND event_type='PAYMENT_SUCCEEDED'", payment.paymentNo()))
+                .isOne();
+
+        Map<String, Object> timelineContext = jdbc.queryForMap("""
+                SELECT COALESCE(traceparent,'') traceparent,
+                       COALESCE(tracestate,'') tracestate
+                  FROM user_transaction_timeline
+                 WHERE order_id=? AND event_type='PAID'
+                """, orderId);
+        Map<String, Object> outboxContext = jdbc.queryForMap("""
+                SELECT JSON_UNQUOTE(JSON_EXTRACT(payload,'$.traceparent')) traceparent,
+                       JSON_UNQUOTE(JSON_EXTRACT(payload,'$.tracestate')) tracestate
+                  FROM outbox_event
+                 WHERE aggregate_id=? AND event_type='PAYMENT_SUCCEEDED'
+                """, payment.paymentNo());
+        assertThat(timelineContext).containsEntry("traceparent", "")
+                .containsEntry("tracestate", "");
+        assertThat(outboxContext).containsEntry("traceparent", "")
+                .containsEntry("tracestate", "");
+        assertThat(timelineContext.values()).doesNotContain(malformedTraceParent, oversizedTraceState);
+        assertThat(outboxContext.values()).doesNotContain(malformedTraceParent, oversizedTraceState);
+    }
+
+    @Test
     void terminalOrdersRejectRepeatedPaymentCreationEvenWhenAPaymentAlreadyExists() {
         String paidOrder = order(109, "19.00", "PENDING");
         tx.executeWithoutResult(ignored -> payments.create(109, paidOrder));
@@ -135,6 +246,8 @@ class MockPaymentIntegrationTest {
         assertThat(value("SELECT status FROM sales_order WHERE order_id=?", orderId)).isEqualTo("PAID");
         assertThat(value("SELECT status FROM payment_order WHERE payment_no=?", paymentNo)).isEqualTo("SUCCEEDED");
         assertThat(count("SELECT COUNT(*) FROM outbox_event WHERE aggregate_id=? AND event_type='PAYMENT_SUCCEEDED'", paymentNo)).isOne();
+        assertThat(count("SELECT COUNT(*) FROM user_transaction_timeline WHERE order_id=? AND event_type='PENDING_PAYMENT'", orderId)).isOne();
+        assertThat(count("SELECT COUNT(*) FROM user_transaction_timeline WHERE order_id=? AND event_type='PAID'", orderId)).isOne();
 
         assertRejected(body, nonce, now(), "NONCE_REPLAY");
         byte[] changed = body.clone(); changed[changed.length - 2] ^= 1;
@@ -153,6 +266,7 @@ class MockPaymentIntegrationTest {
         accept(failed, nonce(), now());
         assertThat(value("SELECT status FROM sales_order WHERE order_id=?", orderId)).isEqualTo("PENDING");
         assertThat(value("SELECT status FROM payment_order WHERE payment_no=?", paymentNo)).isEqualTo("FAILED");
+        assertThat(count("SELECT COUNT(*) FROM user_transaction_timeline WHERE order_id=? AND event_type='PAYMENT_FAILED'", orderId)).isOne();
         byte[] conflict = body(callbackId, paymentNo, "SUCCEEDED", "41.00");
         assertRejected(conflict, nonce(), now(), "CALLBACK_ID_CONFLICT");
         assertRejected(body(UUID.randomUUID().toString(), paymentNo, "SUCCEEDED", "99.00"), nonce(), now(), "PAYMENT_FACT_CONFLICT");
@@ -194,6 +308,9 @@ class MockPaymentIntegrationTest {
         assertThat(value("SELECT status FROM sales_order WHERE order_id=?", orderId)).isEqualTo("CANCELED");
         assertThat(value("SELECT status FROM payment_order WHERE payment_no=?", paymentNo)).isEqualTo("LATE_SUCCEEDED");
         assertThat(count("SELECT COUNT(*) FROM outbox_event WHERE aggregate_id=? AND event_type='PAYMENT_LATE_SUCCEEDED'", paymentNo)).isOne();
+        assertThat(count("SELECT COUNT(*) FROM user_transaction_timeline WHERE order_id=? AND event_type='CLOSED'", orderId)).isOne();
+        assertThat(count("SELECT COUNT(*) FROM user_transaction_timeline WHERE order_id=? AND event_type='CANCELED'", orderId)).isOne();
+        assertThat(count("SELECT COUNT(*) FROM user_transaction_timeline WHERE order_id=? AND event_type='LATE_SUCCEEDED'", orderId)).isOne();
     }
 
     @Test
@@ -209,6 +326,7 @@ class MockPaymentIntegrationTest {
         assertThat(value("SELECT status FROM payment_order WHERE payment_no=?", paymentNo)).isEqualTo("PENDING");
         assertThat(count("SELECT COUNT(*) FROM payment_callback_ledger WHERE payment_no=?", paymentNo)).isZero();
         assertThat(count("SELECT COUNT(*) FROM outbox_event WHERE aggregate_id=? AND event_type='PAYMENT_SUCCEEDED'", paymentNo)).isZero();
+        assertThat(count("SELECT COUNT(*) FROM user_transaction_timeline WHERE order_id=? AND event_type='PAID'", orderId)).isZero();
     }
 
     @Test
@@ -281,6 +399,17 @@ class MockPaymentIntegrationTest {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setAttribute(com.real.common.api.RequestContext.REQUEST_ID_ATTRIBUTE, UUID.randomUUID().toString());
         request.setAttribute(com.real.common.api.RequestContext.TRACE_ID_ATTRIBUTE, "a".repeat(32));
+        return request;
+    }
+
+    private static MockHttpServletRequest request(String traceparent, String tracestate) {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setAttribute(com.real.common.api.RequestContext.REQUEST_ID_ATTRIBUTE,
+                "payment-callback-request");
+        request.setAttribute(com.real.common.api.RequestContext.TRACE_ID_ATTRIBUTE,
+                "1234567890abcdef1234567890abcdef");
+        request.addHeader("traceparent", traceparent);
+        request.addHeader("tracestate", tracestate);
         return request;
     }
 

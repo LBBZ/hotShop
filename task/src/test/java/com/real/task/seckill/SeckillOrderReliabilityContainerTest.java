@@ -4,9 +4,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.real.infrastructure.redis.SeckillRedisKeys;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.micrometer.tracing.Tracer;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.domain.Range;
@@ -37,6 +39,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.sql.DriverManager;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HexFormat;
@@ -47,6 +50,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 @SpringJUnitConfig(SeckillOrderReliabilityContainerTest.TestConfiguration.class)
 class SeckillOrderReliabilityContainerTest {
@@ -103,24 +108,27 @@ class SeckillOrderReliabilityContainerTest {
         properties.setReconciliationDryRun(true);
         properties.setAutoRepair(false);
         redis.getConnectionFactory().getConnection().serverCommands().flushDb();
-        for (String table : List.of(
-                "seckill_reconciliation_checkpoint",
-                "seckill_reconciliation_issue",
-                "seckill_event_processing",
-                "processed_event",
-                "outbox_event",
-                "sales_order_item",
-                "sales_order",
-                "sale_reservation",
-                "flash_sale_activity",
-                "catalog_product",
-                "payment_order",
-                "refresh_token",
-                "audit_log",
-                "app_user"
-        )) {
-            jdbc.execute("TRUNCATE TABLE " + table);
-        }
+        await().atMost(Duration.ofSeconds(30)).ignoreExceptions().untilAsserted(() -> {
+            for (String table : List.of(
+                    "seckill_reconciliation_checkpoint",
+                    "seckill_reconciliation_issue",
+                    "seckill_event_processing",
+                    "processed_event",
+                    "user_transaction_timeline",
+                    "outbox_event",
+                    "sales_order_item",
+                    "sales_order",
+                    "sale_reservation",
+                    "flash_sale_activity",
+                    "catalog_product",
+                    "payment_order",
+                    "refresh_token",
+                    "audit_log",
+                    "app_user"
+            )) {
+                jdbc.execute("TRUNCATE TABLE " + table);
+            }
+        });
     }
 
     @Test
@@ -147,6 +155,61 @@ class SeckillOrderReliabilityContainerTest {
                 .isEqualTo("ORDER_CREATED");
         assertThat(pending(first.stream())).isZero();
         assertThat(pending(second.stream())).isZero();
+        assertThat(countWhere("user_transaction_timeline",
+                "resource_type = 'RESERVATION' AND event_type = 'RESERVED'")).isEqualTo(2);
+        assertThat(countWhere("user_transaction_timeline",
+                "resource_type = 'RESERVATION' AND event_type = 'ORDER_CREATED'")).isEqualTo(2);
+        assertThat(countWhere("outbox_event",
+                "JSON_UNQUOTE(JSON_EXTRACT(payload, '$.tracestate')) = 'hotshop=seckill-test'"))
+                .isEqualTo(4);
+    }
+
+    @Test
+    void emptyCarrierWithBrokenTracerCannotLeakWorkerTraceIntoTimelineOrOutbox() {
+        seedActivity(13, 113, 1, 1);
+        Accepted event = accepted(13_001, 13, 113, 13_101, 1, "8.50");
+        Map<String, String> fields = new LinkedHashMap<>(event.fields());
+        fields.put("traceparent", "");
+        fields.put("tracestate", "");
+        Map<String, String> reservationHash = new LinkedHashMap<>(fields);
+        reservationHash.remove("eventType");
+        reservationHash.remove("eventId");
+        reservationHash.remove("occurredAtMs");
+        redis.opsForHash().putAll(event.reservationKey(), reservationHash);
+        redis.opsForValue().set(event.userKey(), event.reservationNo());
+        redis.opsForValue().decrement(
+                SeckillRedisKeys.availableStock(event.activityId()), event.quantity());
+        redis.opsForSet().add(SeckillRedisKeys.reservationStreamRegistry(), event.stream());
+        appendRaw(event.stream(), fields);
+
+        Tracer brokenTracer = mock(Tracer.class);
+        when(brokenTracer.spanBuilder()).thenThrow(
+                new IllegalStateException("consumer tracer unavailable"));
+        ReservationStreamConsumer isolatedConsumer = new ReservationStreamConsumer(
+                redis, properties, reservationGateway, processingService, failpoint, metrics,
+                brokenTracer);
+        Map<String, String> ambient = Map.of(
+                "requestId", "unrelated-request",
+                "traceId", "a".repeat(32),
+                "spanId", "b".repeat(16),
+                "tracestate", "unrelated=value");
+        MDC.setContextMap(ambient);
+        try {
+            isolatedConsumer.refreshStreams();
+            isolatedConsumer.poll();
+            assertThat(MDC.getCopyOfContextMap()).containsAllEntriesOf(ambient);
+        } finally {
+            MDC.clear();
+        }
+
+        assertThat(count("sales_order")).isOne();
+        assertThat(countWhere("user_transaction_timeline",
+                "COALESCE(traceparent,'') <> '' OR COALESCE(tracestate,'') <> ''")).isZero();
+        assertThat(countWhere("outbox_event",
+                "JSON_UNQUOTE(JSON_EXTRACT(payload,'$.traceparent')) <> ''"
+                        + " OR JSON_UNQUOTE(JSON_EXTRACT(payload,'$.tracestate')) <> ''"))
+                .isZero();
+        assertThat(count("outbox_event")).isEqualTo(2);
     }
 
     @Test
@@ -402,6 +465,9 @@ class SeckillOrderReliabilityContainerTest {
         assertThat(countWhere("outbox_event", "event_type = 'RESERVATION_COMPENSATED'"))
                 .isEqualTo(1);
         assertThat(countWhere("audit_log", "action = 'RESERVATION_COMPENSATED'")).isEqualTo(1);
+        assertThat(countWhere("user_transaction_timeline", "event_type = 'RESERVED'")).isEqualTo(1);
+        assertThat(countWhere("user_transaction_timeline", "event_type = 'COMPENSATING'")).isEqualTo(1);
+        assertThat(countWhere("user_transaction_timeline", "event_type = 'COMPENSATED'")).isEqualTo(1);
         assertThat(count("sales_order")).isZero();
         assertThat(pending(event.stream())).isZero();
     }
@@ -598,6 +664,7 @@ class SeckillOrderReliabilityContainerTest {
                 unitPrice,
                 1,
                 System.currentTimeMillis(),
+                "seckill-test-" + seed,
                 idempotencyHash,
                 fingerprint
         );
@@ -633,7 +700,7 @@ class SeckillOrderReliabilityContainerTest {
 
     private void awaitRetryAndClaim(String stream) {
         awaitClaimablePending(stream);
-        await().atMost(Duration.ofSeconds(5)).pollInterval(Duration.ofMillis(25)).untilAsserted(() -> {
+        await().atMost(Duration.ofSeconds(20)).pollInterval(Duration.ofMillis(25)).untilAsserted(() -> {
             consumer.poll();
             assertThat(pending(stream)).isZero();
         });
@@ -712,6 +779,14 @@ class SeckillOrderReliabilityContainerTest {
 
     private static void unpause(String containerId) {
         DockerClientFactory.instance().client().unpauseContainerCmd(containerId).exec();
+        if (containerId.equals(MYSQL.getContainerId())) {
+            await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+                try (var connection = DriverManager.getConnection(
+                        MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword())) {
+                    assertThat(connection.isValid(2)).isTrue();
+                }
+            });
+        }
     }
 
     @Configuration(proxyBeanMethods = false)
@@ -724,7 +799,7 @@ class SeckillOrderReliabilityContainerTest {
             String jdbcUrl = MYSQL.getJdbcUrl();
             dataSource.setUrl(jdbcUrl
                     + (jdbcUrl.contains("?") ? "&" : "?")
-                    + "connectTimeout=500&socketTimeout=500");
+                    + "connectTimeout=5000&socketTimeout=5000");
             dataSource.setUsername(MYSQL.getUsername());
             dataSource.setPassword(MYSQL.getPassword());
             return dataSource;
@@ -747,7 +822,7 @@ class SeckillOrderReliabilityContainerTest {
                     REDIS.getMappedPort(6379)
             );
             LettuceClientConfiguration client = LettuceClientConfiguration.builder()
-                    .commandTimeout(Duration.ofMillis(500))
+                    .commandTimeout(Duration.ofSeconds(2))
                     .build();
             return new LettuceConnectionFactory(standalone, client);
         }
@@ -942,6 +1017,7 @@ class SeckillOrderReliabilityContainerTest {
             String unitPrice,
             int activityVersion,
             long occurredAtMs,
+            String requestId,
             String idempotencyKeyHash,
             String requestFingerprint
     ) {
@@ -968,6 +1044,7 @@ class SeckillOrderReliabilityContainerTest {
                     unitPrice,
                     activityVersion,
                     occurredAtMs,
+                    requestId,
                     idempotencyKeyHash,
                     requestFingerprint
             );
@@ -988,6 +1065,10 @@ class SeckillOrderReliabilityContainerTest {
             values.put("status", "RESERVED");
             values.put("activityVersion", Integer.toString(activityVersion));
             values.put("occurredAtMs", Long.toString(occurredAtMs));
+            values.put("requestId", requestId);
+            values.put("traceparent",
+                    "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01");
+            values.put("tracestate", "hotshop=seckill-test");
             values.put("idempotencyKeyHash", idempotencyKeyHash);
             values.put("requestFingerprint", requestFingerprint);
             return values;

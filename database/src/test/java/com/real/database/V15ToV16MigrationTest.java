@@ -38,8 +38,8 @@ class V15ToV16MigrationTest {
         }
         Flyway latest = Flyway.configure().dataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword())
                 .locations("classpath:db/migration").load();
-        assertThat(latest.migrate().migrationsExecuted).isOne();
-        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("1.6");
+        assertThat(latest.migrate().migrationsExecuted).isEqualTo(2);
+        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("1.7");
         try (var connection = DriverManager.getConnection(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword());
              var statement = connection.createStatement();
              var result = statement.executeQuery("SELECT COUNT(*) FROM payment_order WHERE payment_no='v15-payment'")) {

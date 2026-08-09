@@ -122,7 +122,7 @@ class AdminIdentitySecurityTest {
                 .validateMigrationNaming(true)
                 .cleanDisabled(true)
                 .load();
-        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(7);
+        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(8);
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
         String hash = new BCryptPasswordEncoder().encode(PASSWORD);
         jdbcTemplate.update(
@@ -578,10 +578,23 @@ class AdminIdentitySecurityTest {
 
     private LoginResult loginAdmin() throws Exception {
         MvcResult result = mockMvc.perform(post("/admin/api/v1/auth/login")
+                        .cookie(new Cookie(
+                                RefreshCookieService.ADMIN_CSRF_COOKIE,
+                                "legacy-admin-path-csrf"
+                        ))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(loginJson(PASSWORD)))
                 .andExpect(status().isOk())
                 .andReturn();
+        assertThat(result.getResponse().getHeaders(HttpHeaders.SET_COOKIE))
+                .anySatisfy(value -> assertThat(value)
+                        .startsWith(RefreshCookieService.ADMIN_CSRF_COOKIE + "=")
+                        .contains("Path=/admin")
+                        .doesNotContain("Max-Age=0"))
+                .anySatisfy(value -> assertThat(value)
+                        .startsWith(RefreshCookieService.ADMIN_CSRF_COOKIE + "=")
+                        .contains("Path=/admin/api/v1/auth")
+                        .contains("Max-Age=0"));
         return parse(result);
     }
 

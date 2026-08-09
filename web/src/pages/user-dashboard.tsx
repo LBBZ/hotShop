@@ -1,4 +1,4 @@
-import { ArrowUpRight, Clock3, PackageCheck } from "lucide-react";
+import { ArrowUpRight, Clock3, PackageCheck, ShoppingBag } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useStore } from "zustand";
 
@@ -53,12 +53,13 @@ export function UserDashboard() {
         </article>
         <div className="dashboard-empty">
           <EmptyState
-            title="还没有可展示的订单"
-            description="交易能力将在后续任务接入。当前基座已经准备好类型安全的 User API 客户端与查询缓存。"
+            title="从一件真实商品开始"
+            description="普通订单和秒杀预约都会写入服务端事实，并通过可恢复状态流推进。"
             action={
-              <Button asChild variant="secondary" size="sm">
+              <Button asChild size="sm">
                 <Link to="/">
-                  返回商品发现
+                  <ShoppingBag aria-hidden="true" className="size-3.5" />
+                  浏览商品与活动
                   <ArrowUpRight aria-hidden="true" className="size-3.5" />
                 </Link>
               </Button>

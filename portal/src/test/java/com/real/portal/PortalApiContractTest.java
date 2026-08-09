@@ -3,6 +3,7 @@ package com.real.portal;
 import com.real.common.api.ApiException;
 import com.real.common.api.CursorSlice;
 import com.real.common.api.dto.FlashSaleReservationStatusResponse;
+import com.real.common.api.dto.FlashSaleActivityResponse;
 import com.real.common.enums.OrderStatus;
 import com.real.common.enums.Role;
 import com.real.domain.entity.Order;
@@ -19,7 +20,12 @@ import com.real.security.entity.CustomUserDetails;
 import com.real.security.service.TokenBlacklistService;
 import com.real.portal.payment.PaymentService;
 import com.real.portal.payment.MockPaymentCallbackService;
+import com.real.portal.sse.TransactionEventStreamService;
+import com.real.portal.timeline.TransactionTimelineService;
+import com.real.portal.userjourney.FlashSaleActivityQueryService;
+import com.real.portal.userjourney.IdempotentOrderCreationService;
 import com.real.portal.payment.CallbackRejectedException;
+import com.real.security.service.UserTransactionRateLimiter;
 import com.real.common.api.dto.MockPaymentCallbackResponse;
 import com.real.common.api.dto.MockPaymentActionResponse;
 import org.junit.jupiter.api.Test;
@@ -33,6 +39,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.slf4j.MDC;
 
 import java.math.BigDecimal;
@@ -55,6 +62,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(properties = {
@@ -92,6 +100,116 @@ class PortalApiContractTest {
     private PaymentService paymentService;
     @MockitoBean
     private MockPaymentCallbackService mockPaymentCallbackService;
+    @MockitoBean
+    private FlashSaleActivityQueryService flashSaleActivityQueryService;
+    @MockitoBean
+    private IdempotentOrderCreationService idempotentOrderCreationService;
+    @MockitoBean
+    private TransactionTimelineService transactionTimelineService;
+    @MockitoBean
+    private TransactionEventStreamService transactionEventStreamService;
+    @MockitoBean
+    private UserTransactionRateLimiter userTransactionRateLimiter;
+
+    @Test
+    void anonymousActivityQueryExposesServerClockAndProductFacts() throws Exception {
+        when(flashSaleActivityQueryService.currentAndUpcoming(12)).thenReturn(List.of(
+                new FlashSaleActivityResponse(
+                        7001L, "DROP-7001", 41L, "Contract product", "Contract",
+                        "A real sale window", new BigDecimal("9.90"), 3, 1,
+                        "ACTIVE", "LIVE", Instant.parse("2026-08-08T05:00:00Z"),
+                        Instant.parse("2026-08-08T06:00:00Z"),
+                        Instant.parse("2026-08-08T05:30:00Z")
+                )
+        ));
+
+        mockMvc.perform(get("/api/v1/flash-sale-activities"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].activityId").value("7001"))
+                .andExpect(jsonPath("$[0].productId").value("41"))
+                .andExpect(jsonPath("$[0].salePrice").value("9.90"))
+                .andExpect(jsonPath("$[0].phase").value("LIVE"))
+                .andExpect(jsonPath("$[0].serverTime").value("2026-08-08T05:30:00Z"));
+    }
+
+    @Test
+    void ordinaryOrderCreationUsesDurableIdempotencyContract() throws Exception {
+        when(idempotentOrderCreationService.create(
+                anyLong(), any(), any(), any()
+        )).thenReturn(new IdempotentOrderCreationService.Result(
+                "order-idempotent", OrderStatus.PENDING, "order-request-1", true
+        ));
+
+        mockMvc.perform(post("/api/v1/orders")
+                        .with(user(userPrincipal()))
+                        .header("X-Request-Id", "order-request-1")
+                        .header("Idempotency-Key", "order-key-000000000000000001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":[{\"productId\":\"41\",\"quantity\":1}]}"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Idempotency-Replayed", "true"))
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.orderId").value("order-idempotent"))
+                .andExpect(jsonPath("$.requestId").value("order-request-1"))
+                .andExpect(jsonPath("$.idempotencyReplayed").value(true));
+    }
+
+    @Test
+    void ordinaryOrderFirstCreationReturns201WithoutReplayHeader() throws Exception {
+        when(idempotentOrderCreationService.create(anyLong(), any(), any(), any()))
+                .thenReturn(new IdempotentOrderCreationService.Result(
+                        "order-created", OrderStatus.PENDING, "original-request-id", false
+                ));
+
+        mockMvc.perform(post("/api/v1/orders")
+                        .with(user(userPrincipal()))
+                        .header("X-Request-Id", "original-request-id")
+                        .header("Idempotency-Key", "order-key-000000000000000003")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":[{\"productId\":\"41\",\"quantity\":1}]}"))
+                .andExpect(status().isCreated())
+                .andExpect(header().doesNotExist("Idempotency-Replayed"))
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.orderId").value("order-created"))
+                .andExpect(jsonPath("$.requestId").value("original-request-id"))
+                .andExpect(jsonPath("$.idempotencyReplayed").value(false));
+    }
+
+    @Test
+    void ordinaryOrderChangedFingerprintReturns409ApiProblem() throws Exception {
+        when(idempotentOrderCreationService.create(anyLong(), any(), any(), any()))
+                .thenThrow(ApiException.conflict(
+                        "IDEMPOTENCY_KEY_CONFLICT",
+                        "Idempotency-Key is already bound to a different order request"
+                ));
+
+        mockMvc.perform(post("/api/v1/orders")
+                        .with(user(userPrincipal()))
+                        .header("X-Request-Id", "conflicting-request-id")
+                        .header("Idempotency-Key", "order-key-000000000000000004")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":[{\"productId\":\"41\",\"quantity\":2}]}"))
+                .andExpect(status().isConflict())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_CONFLICT"))
+                .andExpect(jsonPath("$.requestId").value("conflicting-request-id"));
+    }
+
+    @Test
+    void authenticatedEventStreamForwardsLastEventIdAsAHeader() throws Exception {
+        SseEmitter emitter = new SseEmitter(1_000L);
+        when(transactionEventStreamService.order("order-stream", 100L, 42L)).thenReturn(emitter);
+
+        mockMvc.perform(get("/api/v1/orders/order-stream/events")
+                        .with(user(userPrincipal()))
+                        .header("Last-Event-ID", "42")
+                        .accept(MediaType.TEXT_EVENT_STREAM))
+                .andExpect(status().isOk())
+                .andExpect(request().asyncStarted());
+
+        verify(transactionEventStreamService).order("order-stream", 100L, 42L);
+        emitter.complete();
+    }
 
     @Test
     void anonymousProductListReturnsDtoFormatsAndCorrelatedIds() throws Exception {
@@ -375,6 +493,7 @@ class PortalApiContractTest {
     void jsonIdsRejectFloatingPointProneNumberTokens() throws Exception {
         mockMvc.perform(post("/api/v1/orders")
                         .with(user(userPrincipal()))
+                        .header("Idempotency-Key", "order-key-000000000000000002")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -479,6 +598,25 @@ class PortalApiContractTest {
         mockMvc.perform(get("/v3/api-docs/user"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.paths['/api/v1/orders']").exists())
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/orders'].post.responses['201'].content"
+                                + "['application/json'].schema['$ref']"
+                ).value("#/components/schemas/OrderCreatedResponse"))
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/orders'].post.responses['200'].content"
+                                + "['application/json'].schema['$ref']"
+                ).value("#/components/schemas/OrderCreatedResponse"))
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/orders'].post.responses['200'].headers"
+                                + "['Idempotency-Replayed'].schema.type"
+                ).value("boolean"))
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/orders'].post.responses['409'].content"
+                                + "['application/problem+json'].schema['$ref']"
+                ).value("#/components/schemas/ApiProblem"))
+                .andExpect(jsonPath(
+                        "$.components.headers.IdempotencyReplayed.schema.type"
+                ).value("boolean"))
                 .andExpect(jsonPath(
                         "$.paths['/api/v1/flash-sales/{activityId}/reservations']"
                                 + ".post.responses['202']"

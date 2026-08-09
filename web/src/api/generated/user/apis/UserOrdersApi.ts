@@ -19,6 +19,8 @@ import type {
   CreateOrderRequest,
   CursorPageResponseOrderResponse,
   OrderCreatedResponse,
+  OrderResponse,
+  TransactionTimelineEventResponse,
 } from '../models/index';
 import {
     ApiProblemFromJSON,
@@ -29,10 +31,21 @@ import {
     CursorPageResponseOrderResponseToJSON,
     OrderCreatedResponseFromJSON,
     OrderCreatedResponseToJSON,
+    OrderResponseFromJSON,
+    OrderResponseToJSON,
+    TransactionTimelineEventResponseFromJSON,
+    TransactionTimelineEventResponseToJSON,
 } from '../models/index';
 
 export interface CreateOrderOperationRequest {
+    idempotencyKey: string;
     createOrderRequest: CreateOrderRequest;
+    xRequestId?: string;
+    traceparent?: string;
+}
+
+export interface GetOrderRequest {
+    orderId: string;
     xRequestId?: string;
     traceparent?: string;
 }
@@ -47,6 +60,13 @@ export interface GetOrdersRequest {
     traceparent?: string;
 }
 
+export interface TimelineRequest {
+    orderId: string;
+    afterEventId?: number;
+    xRequestId?: string;
+    traceparent?: string;
+}
+
 /**
  * UserOrdersApi - interface
  *
@@ -55,8 +75,9 @@ export interface GetOrdersRequest {
  */
 export interface UserOrdersApiInterface {
     /**
-     * Creates an Order synchronously. Idempotency-Key is not supported until persistent replay is implemented.
+     * Creates an Order synchronously with durable Idempotency-Key replay.
      * @summary Create an Order
+     * @param {string} idempotencyKey
      * @param {CreateOrderRequest} createOrderRequest
      * @param {string} [xRequestId] Caller-supplied correlation ID. Invalid values are replaced by the server.
      * @param {string} [traceparent] W3C trace context. Its trace ID is distinct from X-Request-Id.
@@ -67,10 +88,28 @@ export interface UserOrdersApiInterface {
     createOrderRaw(requestParameters: CreateOrderOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<OrderCreatedResponse>>;
 
     /**
-     * Creates an Order synchronously. Idempotency-Key is not supported until persistent replay is implemented.
+     * Creates an Order synchronously with durable Idempotency-Key replay.
      * Create an Order
      */
     createOrder(requestParameters: CreateOrderOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<OrderCreatedResponse>;
+
+    /**
+     * Unknown and other-User Orders share 404 semantics
+     * @summary Get my Order
+     * @param {string} orderId
+     * @param {string} [xRequestId] Caller-supplied correlation ID. Invalid values are replaced by the server.
+     * @param {string} [traceparent] W3C trace context. Its trace ID is distinct from X-Request-Id.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof UserOrdersApiInterface
+     */
+    getOrderRaw(requestParameters: GetOrderRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<OrderResponse>>;
+
+    /**
+     * Unknown and other-User Orders share 404 semantics
+     * Get my Order
+     */
+    getOrder(requestParameters: GetOrderRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<OrderResponse>;
 
     /**
      * Stable keyset pagination ordered by createdAt descending, then orderId descending
@@ -94,6 +133,24 @@ export interface UserOrdersApiInterface {
      */
     getOrders(requestParameters: GetOrdersRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<CursorPageResponseOrderResponse>;
 
+    /**
+     *
+     * @summary Get my durable Order timeline
+     * @param {string} orderId
+     * @param {number} [afterEventId]
+     * @param {string} [xRequestId] Caller-supplied correlation ID. Invalid values are replaced by the server.
+     * @param {string} [traceparent] W3C trace context. Its trace ID is distinct from X-Request-Id.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof UserOrdersApiInterface
+     */
+    timelineRaw(requestParameters: TimelineRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<TransactionTimelineEventResponse>>>;
+
+    /**
+     * Get my durable Order timeline
+     */
+    timeline(requestParameters: TimelineRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<TransactionTimelineEventResponse>>;
+
 }
 
 /**
@@ -102,10 +159,17 @@ export interface UserOrdersApiInterface {
 export class UserOrdersApi extends runtime.BaseAPI implements UserOrdersApiInterface {
 
     /**
-     * Creates an Order synchronously. Idempotency-Key is not supported until persistent replay is implemented.
+     * Creates an Order synchronously with durable Idempotency-Key replay.
      * Create an Order
      */
     async createOrderRaw(requestParameters: CreateOrderOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<OrderCreatedResponse>> {
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling createOrder().'
+            );
+        }
+
         if (requestParameters['createOrderRequest'] == null) {
             throw new runtime.RequiredError(
                 'createOrderRequest',
@@ -118,6 +182,10 @@ export class UserOrdersApi extends runtime.BaseAPI implements UserOrdersApiInter
         const headerParameters: runtime.HTTPHeaders = {};
 
         headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
 
         if (requestParameters['xRequestId'] != null) {
             headerParameters['X-Request-Id'] = String(requestParameters['xRequestId']);
@@ -150,11 +218,66 @@ export class UserOrdersApi extends runtime.BaseAPI implements UserOrdersApiInter
     }
 
     /**
-     * Creates an Order synchronously. Idempotency-Key is not supported until persistent replay is implemented.
+     * Creates an Order synchronously with durable Idempotency-Key replay.
      * Create an Order
      */
     async createOrder(requestParameters: CreateOrderOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<OrderCreatedResponse> {
         const response = await this.createOrderRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Unknown and other-User Orders share 404 semantics
+     * Get my Order
+     */
+    async getOrderRaw(requestParameters: GetOrderRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<OrderResponse>> {
+        if (requestParameters['orderId'] == null) {
+            throw new runtime.RequiredError(
+                'orderId',
+                'Required parameter "orderId" was null or undefined when calling getOrder().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (requestParameters['xRequestId'] != null) {
+            headerParameters['X-Request-Id'] = String(requestParameters['xRequestId']);
+        }
+
+        if (requestParameters['traceparent'] != null) {
+            headerParameters['traceparent'] = String(requestParameters['traceparent']);
+        }
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("bearerAuth", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/api/v1/orders/{orderId}`;
+        urlPath = urlPath.replace(`{${"orderId"}}`, encodeURIComponent(String(requestParameters['orderId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => OrderResponseFromJSON(jsonValue));
+    }
+
+    /**
+     * Unknown and other-User Orders share 404 semantics
+     * Get my Order
+     */
+    async getOrder(requestParameters: GetOrderRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<OrderResponse> {
+        const response = await this.getOrderRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -222,6 +345,63 @@ export class UserOrdersApi extends runtime.BaseAPI implements UserOrdersApiInter
      */
     async getOrders(requestParameters: GetOrdersRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<CursorPageResponseOrderResponse> {
         const response = await this.getOrdersRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Get my durable Order timeline
+     */
+    async timelineRaw(requestParameters: TimelineRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<TransactionTimelineEventResponse>>> {
+        if (requestParameters['orderId'] == null) {
+            throw new runtime.RequiredError(
+                'orderId',
+                'Required parameter "orderId" was null or undefined when calling timeline().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        if (requestParameters['afterEventId'] != null) {
+            queryParameters['afterEventId'] = requestParameters['afterEventId'];
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (requestParameters['xRequestId'] != null) {
+            headerParameters['X-Request-Id'] = String(requestParameters['xRequestId']);
+        }
+
+        if (requestParameters['traceparent'] != null) {
+            headerParameters['traceparent'] = String(requestParameters['traceparent']);
+        }
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("bearerAuth", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/api/v1/orders/{orderId}/timeline`;
+        urlPath = urlPath.replace(`{${"orderId"}}`, encodeURIComponent(String(requestParameters['orderId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(TransactionTimelineEventResponseFromJSON));
+    }
+
+    /**
+     * Get my durable Order timeline
+     */
+    async timeline(requestParameters: TimelineRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<TransactionTimelineEventResponse>> {
+        const response = await this.timelineRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

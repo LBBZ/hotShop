@@ -3,6 +3,7 @@ package com.real.task.timeoutOrderTask;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.real.common.audit.InventoryCompensationAuditState;
+import com.real.domain.userjourney.TransactionTimelineWriter;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -89,6 +90,9 @@ public class OrderTimeoutService {
                  WHERE payment_no=? AND status='PENDING'
                 """, payment.paymentNo());
             if (closed != 1) throw new IllegalStateException("Payment close lost");
+            TransactionTimelineWriter.order(jdbc, event.userId(), event.orderId(), "CLOSED",
+                    Instant.now(), event.requestId(), event.traceparent(), event.tracestate(),
+                    "PAYMENT_WINDOW_CLOSED");
         }
         int restored;
         if (reservation == null) {
@@ -117,6 +121,9 @@ public class OrderTimeoutService {
             insertSeckillExpired(event, reservation);
         }
         insertInventoryCompensationAudit(event, reservation, restored);
+        TransactionTimelineWriter.order(jdbc, event.userId(), event.orderId(), "CANCELED",
+                Instant.now(), event.requestId(), event.traceparent(), event.tracestate(),
+                "ORDER_TIMEOUT_WON_RACE");
         insertCanceled(event);
         return ProcessResult.CANCELED;
     }
@@ -158,6 +165,9 @@ public class OrderTimeoutService {
         payload.put("productId", reservation.productId());
         payload.put("quantity", reservation.quantity());
         payload.put("reason", "PAYMENT_TIMEOUT");
+        if (event.requestId() != null) payload.put("requestId", event.requestId());
+        if (event.traceparent() != null) payload.put("traceparent", event.traceparent());
+        if (event.tracestate() != null) payload.put("tracestate", event.tracestate());
         insertOutbox(eventId, "SECKILL_PAYMENT_EXPIRED", event.orderId(), payload, false);
     }
 
@@ -201,6 +211,9 @@ public class OrderTimeoutService {
         payload.put("amount", event.amount().toPlainString());
         payload.put("currency", event.currency());
         payload.put("expiresAtMs", event.expiresAtMs());
+        if (event.requestId() != null) payload.put("requestId", event.requestId());
+        if (event.traceparent() != null) payload.put("traceparent", event.traceparent());
+        if (event.tracestate() != null) payload.put("tracestate", event.tracestate());
         return payload;
     }
 
@@ -228,7 +241,15 @@ public class OrderTimeoutService {
 
     public record TimeoutEvent(String eventId, String eventType, String aggregateType,
             String aggregateId, String orderId, long userId, BigDecimal amount,
-            String currency, long expiresAtMs, int timeoutAttempt, Instant occurredAt) { }
+            String currency, long expiresAtMs, int timeoutAttempt, Instant occurredAt,
+            String requestId, String traceparent, String tracestate) {
+        public TimeoutEvent(String eventId, String eventType, String aggregateType,
+                String aggregateId, String orderId, long userId, BigDecimal amount,
+                String currency, long expiresAtMs, int timeoutAttempt, Instant occurredAt) {
+            this(eventId, eventType, aggregateType, aggregateId, orderId, userId, amount,
+                    currency, expiresAtMs, timeoutAttempt, occurredAt, null, null, null);
+        }
+    }
     private record OrderFact(String orderId, long userId, Long reservationId, BigDecimal amount,
             String currency, String status, long expiresAtMs, boolean expired) { }
     private record PaymentFact(String paymentNo, String status) { }

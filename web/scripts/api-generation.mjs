@@ -68,28 +68,46 @@ function generateDomain(domain, outputRoot) {
   rmSync(output, { recursive: true, force: true });
   mkdirSync(output, { recursive: true });
 
-  const result = spawnSync(
-    executableName(),
-    [
-      "generate",
-      "-g",
-      "typescript-fetch",
-      "-i",
-      input,
-      "-o",
-      output,
-      "--additional-properties",
-      "supportsES6=true,typescriptThreePlus=true,useSingleRequestParameter=true,withInterfaces=true",
-      "--global-property",
-      "apiDocs=false,apiTests=false,modelDocs=false,modelTests=false",
-    ],
-    {
-      cwd: webRoot,
-      encoding: "utf8",
-      shell: process.platform === "win32",
-      stdio: "inherit",
-    },
-  );
+  const generatorArguments = [
+    "generate",
+    "-g",
+    "typescript-fetch",
+    "-i",
+    input,
+    "-o",
+    output,
+    "--additional-properties",
+    "supportsES6=true,typescriptThreePlus=true,useSingleRequestParameter=true,withInterfaces=true",
+    "--global-property",
+    "apiDocs=false,apiTests=false,modelDocs=false,modelTests=false",
+  ];
+  const useDocker = process.env.HOTSHOP_OPENAPI_GENERATOR_DOCKER === "1";
+  const result = useDocker
+    ? spawnSync(
+        "docker",
+        [
+          "run",
+          "--rm",
+          "--mount",
+          `type=bind,source=${repositoryRoot},target=/workspace,readonly`,
+          "--mount",
+          `type=bind,source=${output},target=/output`,
+          "openapitools/openapi-generator-cli:v7.14.0",
+          ...generatorArguments.map((argument) => {
+            if (argument === input) {
+              return `/workspace/docs/api/openapi-baseline/${domain}.json`;
+            }
+            return argument === output ? "/output" : argument;
+          }),
+        ],
+        { cwd: webRoot, encoding: "utf8", stdio: "inherit" },
+      )
+    : spawnSync(executableName(), generatorArguments, {
+        cwd: webRoot,
+        encoding: "utf8",
+        shell: process.platform === "win32",
+        stdio: "inherit",
+      });
 
   if (result.status !== 0) {
     throw new Error(`OpenAPI generation failed for ${domain}`);

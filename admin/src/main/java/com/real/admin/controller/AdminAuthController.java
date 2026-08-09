@@ -188,9 +188,15 @@ public class AdminAuthController {
             RefreshSessionTokens refresh
     ) {
         ResponseCookie refreshCookie = cookieService.refreshCookie(SessionType.ADMIN, refresh.refreshToken());
+        ResponseCookie legacyCsrfCookie = cookieService.legacyCsrfCookie(SessionType.ADMIN);
         ResponseCookie csrfCookie = cookieService.csrfCookie(SessionType.ADMIN, refresh.csrfToken());
         return noStore(ResponseEntity.ok())
-                .header(HttpHeaders.SET_COOKIE, refreshCookie.toString(), csrfCookie.toString())
+                .header(
+                        HttpHeaders.SET_COOKIE,
+                        refreshCookie.toString(),
+                        csrfCookie.toString(),
+                        legacyCsrfCookie.toString()
+                )
                 .body(new AuthTokenResponse(
                         Role.ROLE_ADMIN,
                         userId,

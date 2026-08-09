@@ -4,6 +4,8 @@ import { Link } from "react-router-dom";
 import { PulseRail } from "@/components/pulse-rail";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ActivityBoard } from "@/features/catalog/activity-board";
+import { ProductCatalog } from "@/features/catalog/product-catalog";
 
 const principles = [
   {
@@ -66,6 +68,10 @@ export function AnonymousHome() {
           <PulseRail />
         </div>
       </section>
+
+      <ActivityBoard />
+
+      <ProductCatalog />
 
       <section className="principle-section" aria-labelledby="principles-title">
         <div className="section-heading">

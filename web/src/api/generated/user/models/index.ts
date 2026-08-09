@@ -16,4 +16,6 @@ export * from './OrderCreatedResponse';
 export * from './OrderItemResponse';
 export * from './OrderResponse';
 export * from './PaymentResponse';
+export * from './SseEmitter';
+export * from './TransactionTimelineEventResponse';
 export * from './UserResponse';

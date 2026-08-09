@@ -41,6 +41,22 @@ pnpm test:e2e
 pnpm api:check
 ```
 
+## TASK-13 real journey
+
+`e2e/smoke.spec.ts` remains a fast mocked shell smoke. `e2e/user-transaction-real.spec.ts` is the real Compose gate: it does not use `page.route`, call the provider callback, or contain the callback HMAC secret. Load the deterministic UTF-8 seed into a fresh isolated Compose project. Global setup then signs in as the local seed Administrator and uses the audited activity-load API before both Playwright projects run.
+
+```bash
+HOTSHOP_REAL_COMPOSE=1 \
+HOTSHOP_PORTAL_URL=http://127.0.0.1:18080 \
+HOTSHOP_ADMIN_URL=http://127.0.0.1:18088 \
+HOTSHOP_E2E_COMPOSE_PROJECT=hotshop-task13-reconcile \
+HOTSHOP_E2E_SHORT_ACCESS=1 \
+HOTSHOP_E2E_SHORT_TIMEOUT=1 \
+pnpm exec playwright test e2e/user-transaction-real.spec.ts
+```
+
+The Compose services must set a 60-second User access TTL and short order/payment timeouts for the two explicit expiry/race proofs. Payment scenarios are initiated only through the User Mock Checkout API; delivery then follows Outbox → RabbitMQ → Task → signed callback → durable timeline → SSE.
+
 ## Docker
 
 宿主机只需要 Docker。镜像固定 Playwright Chromium 版本，并内置 Node、pnpm 与 Java
@@ -52,4 +68,4 @@ docker compose -f web/compose.yaml run --rm web pnpm check
 docker compose -f web/compose.yaml run --rm web pnpm test:e2e
 ```
 
-Playwright 测试通过路由 mock 提供 token 响应，不连接公网或真实后端。
+快速 smoke 使用路由 mock；TASK-13 real journey 必须连接上面的隔离 Compose 后端。

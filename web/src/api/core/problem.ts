@@ -70,6 +70,20 @@ export class ApiProblemError extends Error {
   }
 }
 
+export function findApiProblemError(
+  error: unknown,
+): ApiProblemError | undefined {
+  let current = error;
+  const visited = new Set<unknown>();
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (current instanceof ApiProblemError) return current;
+    if (!(current instanceof Error) || visited.has(current)) return undefined;
+    visited.add(current);
+    current = current.cause;
+  }
+  return undefined;
+}
+
 export async function mapProblemResponse(
   response: Response,
 ): Promise<ApiProblemError> {

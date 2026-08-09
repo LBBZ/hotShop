@@ -9,6 +9,7 @@ import com.real.domain.service.seckill.FlashSaleReservationResult;
 import com.real.domain.service.seckill.FlashSaleReservationService;
 import com.real.domain.service.seckill.FlashSaleReservationStatusService;
 import com.real.security.entity.CustomUserDetails;
+import com.real.security.service.UserTransactionRateLimiter;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -44,13 +45,16 @@ import org.springframework.web.bind.annotation.RestController;
 public class FlashSaleReservationController {
     private final FlashSaleReservationService reservationService;
     private final FlashSaleReservationStatusService statusService;
+    private final UserTransactionRateLimiter transactionRateLimiter;
 
     public FlashSaleReservationController(
             FlashSaleReservationService reservationService,
-            FlashSaleReservationStatusService statusService
+            FlashSaleReservationStatusService statusService,
+            UserTransactionRateLimiter transactionRateLimiter
     ) {
         this.reservationService = reservationService;
         this.statusService = statusService;
+        this.transactionRateLimiter = transactionRateLimiter;
     }
 
     @Operation(
@@ -124,6 +128,7 @@ public class FlashSaleReservationController {
             @AuthenticationPrincipal CustomUserDetails principal,
             HttpServletRequest servletRequest
     ) {
+        transactionRateLimiter.beforeReservation(principal.getUserId());
         String requestId = RequestContext.requestId(servletRequest);
         FlashSaleReservationResult result = reservationService.reserve(
                 activityId,

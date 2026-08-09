@@ -1,10 +1,13 @@
 import { ArrowUpRight } from "lucide-react";
 import { Link, NavLink, Outlet } from "react-router-dom";
+import { useStore } from "zustand";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { userAuth } from "@/auth/domains";
 
 export function PublicShell() {
+  const session = useStore(userAuth.store, (state) => state.session);
   return (
     <div className="min-h-screen bg-[var(--canvas)]">
       <a className="skip-link" href="#main-content">
@@ -38,9 +41,17 @@ export function PublicShell() {
           >
             User 工作台
           </NavLink>
+          <NavLink
+            to="/admin"
+            className={({ isActive }) =>
+              cn("nav-link", isActive && "nav-link-active")
+            }
+          >
+            运营区
+          </NavLink>
           <Button asChild variant="dark" size="sm">
-            <Link to="/admin">
-              Administrator
+            <Link to={session ? "/user" : "/auth"}>
+              {session ? `你好，${session.username}` : "登录 / 注册"}
               <ArrowUpRight aria-hidden="true" className="size-3.5" />
             </Link>
           </Button>

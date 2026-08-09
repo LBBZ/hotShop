@@ -8,6 +8,12 @@ public record OrderCreatedResponse(
                 requiredMode = Schema.RequiredMode.REQUIRED)
         String orderId,
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
-        OrderStatus status
+        OrderStatus status,
+        @Schema(description = "Correlation ID retained by the durable purchase intent",
+                requiredMode = Schema.RequiredMode.REQUIRED)
+        String requestId,
+        @Schema(description = "True when this response replays a persisted Idempotency-Key result",
+                requiredMode = Schema.RequiredMode.REQUIRED)
+        boolean idempotencyReplayed
 ) {
 }

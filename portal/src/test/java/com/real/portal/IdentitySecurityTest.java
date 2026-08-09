@@ -143,7 +143,7 @@ class IdentitySecurityTest {
                 .validateMigrationNaming(true)
                 .cleanDisabled(true)
                 .load();
-        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(7);
+        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(8);
         assertThat(flyway.migrate().migrationsExecuted).isZero();
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
 
@@ -211,7 +211,12 @@ class IdentitySecurityTest {
         assertThat(login.csrfSetCookie())
                 .doesNotContain("HttpOnly")
                 .contains("SameSite=Strict")
-                .contains("Path=/api/v1/auth");
+                .contains("Path=/");
+        assertThat(login.response().getResponse().getHeaders(HttpHeaders.SET_COOKIE))
+                .anySatisfy(value -> assertThat(value)
+                        .startsWith(RefreshCookieService.USER_CSRF_COOKIE + "=")
+                        .contains("Path=/api/v1/auth")
+                        .contains("Max-Age=0"));
         assertThat(login.response().getResponse().getHeader(HttpHeaders.CACHE_CONTROL))
                 .isEqualTo("no-store");
         assertThat(login.response().getResponse().getHeader(HttpHeaders.PRAGMA))
@@ -291,6 +296,14 @@ class IdentitySecurityTest {
                 .andReturn();
         LoginResult successor = fromTokenResponse(rotated, SessionTypeNames.USER);
         assertThat(successor.refreshToken()).isNotEqualTo(login.refreshToken());
+        assertThat(rotated.getResponse().getHeaders(HttpHeaders.SET_COOKIE))
+                .anySatisfy(value -> assertThat(value)
+                        .startsWith(RefreshCookieService.USER_CSRF_COOKIE + "=")
+                        .contains("Path=/api/v1/auth")
+                        .contains("Max-Age=0"));
+        mockMvc.perform(get("/api/v1/orders")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(successor.accessToken())))
+                .andExpect(status().isOk());
 
         MvcResult reused = refresh(login.refreshToken(), login.csrfToken(), null)
                 .andExpect(status().isUnauthorized())
@@ -395,7 +408,16 @@ class IdentitySecurityTest {
                 .andExpect(status().isOk())
                 .andExpect(header().exists(HttpHeaders.SET_COOKIE))
                 .andReturn();
-        assertThat(repeated.getResponse().getHeaders(HttpHeaders.SET_COOKIE)).hasSize(2);
+        assertThat(repeated.getResponse().getHeaders(HttpHeaders.SET_COOKIE))
+                .hasSize(3)
+                .anySatisfy(value -> assertThat(value)
+                        .startsWith(RefreshCookieService.USER_CSRF_COOKIE + "=")
+                        .contains("Path=/;")
+                        .contains("Max-Age=0"))
+                .anySatisfy(value -> assertThat(value)
+                        .startsWith(RefreshCookieService.USER_CSRF_COOKIE + "=")
+                        .contains("Path=/api/v1/auth;")
+                        .contains("Max-Age=0"));
 
         mockMvc.perform(get("/api/v1/orders")
                         .header(HttpHeaders.AUTHORIZATION, bearer(login.accessToken())))
@@ -688,6 +710,10 @@ class IdentitySecurityTest {
 
     private LoginResult loginUser() throws Exception {
         MvcResult result = mockMvc.perform(post("/api/v1/auth/login")
+                        .cookie(new Cookie(
+                                RefreshCookieService.USER_CSRF_COOKIE,
+                                "legacy-path-csrf"
+                        ))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(loginJson(USERNAME, PASSWORD)))
                 .andExpect(status().isOk())

@@ -11,6 +11,9 @@ import com.real.task.observability.TaskObservabilityMetrics;
 import io.micrometer.tracing.Span;
 import io.micrometer.tracing.TraceContext;
 import io.micrometer.tracing.Tracer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.core.MessageDeliveryMode;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
@@ -32,6 +35,7 @@ import java.util.function.Supplier;
 
 @Component
 public class OutboxPublisher {
+    private static final Logger log = LoggerFactory.getLogger(OutboxPublisher.class);
     private static final Set<String> BUSINESS_EVENTS = Set.of(
             "ORDER_CREATED", "RESERVATION_COMPENSATED", "ORDER_CANCELED",
             "PAYMENT_SUCCEEDED", "PAYMENT_FAILED", "PAYMENT_LATE_SUCCEEDED",
@@ -72,7 +76,7 @@ public class OutboxPublisher {
         this(mapper, rabbit, json, tx, properties, failpoint, clock, leaseIds, null, Tracer.NOOP);
     }
 
-    private OutboxPublisher(OutboxMapper mapper, RabbitTemplate rabbit, ObjectMapper json,
+    OutboxPublisher(OutboxMapper mapper, RabbitTemplate rabbit, ObjectMapper json,
             TransactionTemplate tx, OutboxPublisherProperties properties,
             OutboxPublishFailpoint failpoint, Clock clock, Supplier<UUID> leaseIds,
             TaskObservabilityMetrics metrics, Tracer tracer) {
@@ -120,31 +124,107 @@ public class OutboxPublisher {
 
     public void publish(OutboxEvent event) {
         long started = System.nanoTime();
-        TraceContext parent = traceParent(event);
-        Span span = (parent == null ? tracer.spanBuilder().setNoParent()
-                : tracer.spanBuilder().setParent(parent))
-                .name("outbox.publish")
-                .kind(Span.Kind.PRODUCER)
-                .tag("messaging.system", "rabbitmq")
-                .tag("messaging.operation", "publish")
-                .tag("event.type", event.eventType())
-                .start();
-        try (Tracer.SpanInScope ignored = tracer.withSpan(span)) {
-            publishInternal(event);
+        Map<String, String> previousMdc = MDC.getCopyOfContextMap();
+        Span span = startObservationSpan(event);
+        Tracer.SpanInScope scope = openScope(span);
+        try {
+            publishInternal(event, span, scope != null);
         } catch (RuntimeException failure) {
-            span.error(failure);
+            observeError(span, failure);
             throw failure;
         } finally {
-            OutboxEvent current = mapper.find(event.outboxId());
-            String outcome = current == null ? "missing" : current.status().toLowerCase();
-            span.tag("outcome", outcome).end();
-            if (metrics != null) {
-                metrics.outbox(outcome, Duration.ofNanos(System.nanoTime() - started));
-            }
+            closeScope(scope);
+            String outcome = observationOutcome(event);
+            endObservationSpan(span, outcome);
+            recordObservationMetric(outcome, started);
+            restoreMdc(previousMdc);
         }
     }
 
-    private void publishInternal(OutboxEvent event) {
+    private Span startObservationSpan(OutboxEvent event) {
+        try {
+            TraceContext parent = traceParent(event);
+            return (parent == null ? tracer.spanBuilder().setNoParent()
+                    : tracer.spanBuilder().setParent(parent))
+                    .name("outbox.publish")
+                    .kind(Span.Kind.PRODUCER)
+                    .tag("messaging.system", "rabbitmq")
+                    .tag("messaging.operation", "publish")
+                    .tag("event.type", event.eventType())
+                    .start();
+        } catch (RuntimeException failure) {
+            observationFailure("span_start");
+            return null;
+        }
+    }
+
+    private Tracer.SpanInScope openScope(Span span) {
+        if (span == null) return null;
+        try {
+            return tracer.withSpan(span);
+        } catch (RuntimeException failure) {
+            observationFailure("scope_open");
+            return null;
+        }
+    }
+
+    private void observeError(Span span, RuntimeException failure) {
+        if (span == null) return;
+        try {
+            span.error(failure);
+        } catch (RuntimeException observationFailure) {
+            observationFailure("span_error");
+        }
+    }
+
+    private void closeScope(Tracer.SpanInScope scope) {
+        if (scope == null) return;
+        try {
+            scope.close();
+        } catch (RuntimeException failure) {
+            observationFailure("scope_close");
+        }
+    }
+
+    private String observationOutcome(OutboxEvent event) {
+        try {
+            OutboxEvent current = mapper.find(event.outboxId());
+            return current == null ? "missing" : current.status().toLowerCase(Locale.ROOT);
+        } catch (RuntimeException failure) {
+            observationFailure("outcome_read");
+            return "unknown";
+        }
+    }
+
+    private void endObservationSpan(Span span, String outcome) {
+        if (span == null) return;
+        try {
+            span.tag("outcome", outcome).end();
+        } catch (RuntimeException failure) {
+            observationFailure("span_end");
+        }
+    }
+
+    private void recordObservationMetric(String outcome, long started) {
+        if (metrics == null) return;
+        try {
+            metrics.outbox(outcome, Duration.ofNanos(System.nanoTime() - started));
+        } catch (RuntimeException failure) {
+            observationFailure("metric_record");
+        }
+    }
+
+    private static void restoreMdc(Map<String, String> previous) {
+        MDC.clear();
+        if (previous != null) MDC.setContextMap(previous);
+    }
+
+    private static void observationFailure(String stage) {
+        log.warn("Outbox observation failure isolated stage={}", stage);
+    }
+
+    private void publishInternal(OutboxEvent event, Span publisherSpan,
+            boolean publisherScopeOpened) {
         failpoint.afterClaim(event);
         Route route;
         try {
@@ -161,6 +241,8 @@ public class OutboxPublisher {
         }
 
         try {
+            CarrierContext carrier = carrierContext(
+                    route.payload(), publisherSpan, publisherScopeOpened);
             Map<String, Object> envelope = new LinkedHashMap<>();
             envelope.put("schemaVersion", 1);
             envelope.put("eventId", event.eventId());
@@ -175,17 +257,15 @@ public class OutboxPublisher {
                 message.getMessageProperties().setDeliveryMode(MessageDeliveryMode.PERSISTENT);
                 copyContextHeader(route.payload(), message.getMessageProperties(),
                         "requestId", AsyncTraceContext.REQUEST_ID);
-                String currentTraceParent = AsyncTraceContext.currentTraceParent();
-                if (!currentTraceParent.isBlank()) {
+                if (!carrier.traceparent().isBlank()) {
                     message.getMessageProperties().setHeader(
-                            AsyncTraceContext.TRACE_PARENT, currentTraceParent
+                            AsyncTraceContext.TRACE_PARENT, carrier.traceparent()
                     );
-                } else {
-                    copyContextHeader(route.payload(), message.getMessageProperties(),
-                            AsyncTraceContext.TRACE_PARENT, AsyncTraceContext.TRACE_PARENT);
                 }
-                copyContextHeader(route.payload(), message.getMessageProperties(),
-                        AsyncTraceContext.TRACE_STATE, AsyncTraceContext.TRACE_STATE);
+                if (!carrier.tracestate().isBlank()) {
+                    message.getMessageProperties().setHeader(
+                            AsyncTraceContext.TRACE_STATE, carrier.tracestate());
+                }
                 if (route.expirationMs() > 0) {
                     message.getMessageProperties().setExpiration(Long.toString(route.expirationMs()));
                 }
@@ -220,6 +300,30 @@ public class OutboxPublisher {
         } catch (Exception exception) {
             recordFailure(event, "CONNECTION_FAILURE", true);
         }
+    }
+
+    private CarrierContext carrierContext(JsonNode payload, Span publisherSpan,
+            boolean publisherScopeOpened) {
+        String persistedTraceParent = payload.path(AsyncTraceContext.TRACE_PARENT).asText("");
+        if (!AsyncTraceContext.parse(persistedTraceParent).valid()) {
+            persistedTraceParent = "";
+        }
+        String persistedTraceState = AsyncTraceContext.sanitizeTraceState(
+                payload.path(AsyncTraceContext.TRACE_STATE).asText(""));
+        if (!publisherScopeOpened || publisherSpan == null) {
+            return new CarrierContext(persistedTraceParent, persistedTraceState);
+        }
+        try {
+            TraceContext context = publisherSpan.context();
+            String publisherTraceParent = "00-" + context.traceId() + "-" + context.spanId()
+                    + (Boolean.TRUE.equals(context.sampled()) ? "-01" : "-00");
+            if (AsyncTraceContext.parse(publisherTraceParent).valid()) {
+                return new CarrierContext(publisherTraceParent, persistedTraceState);
+            }
+        } catch (RuntimeException observationFailure) {
+            observationFailure("carrier_read");
+        }
+        return new CarrierContext(persistedTraceParent, persistedTraceState);
     }
 
     private TraceContext traceParent(OutboxEvent event) {
@@ -306,7 +410,12 @@ public class OutboxPublisher {
     private LocalDateTime now() { return LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC); }
 
     private void rabbitMetric(String operation, String outcome) {
-        if (metrics != null) metrics.rabbit(operation, outcome);
+        if (metrics == null) return;
+        try {
+            metrics.rabbit(operation, outcome);
+        } catch (RuntimeException failure) {
+            observationFailure("rabbit_metric");
+        }
     }
 
     private static void copyContextHeader(JsonNode payload,
@@ -324,6 +433,7 @@ public class OutboxPublisher {
     }
 
     private record Route(String exchange, String routingKey, long expirationMs, JsonNode payload) { }
+    private record CarrierContext(String traceparent, String tracestate) { }
     private static final class UnknownEventType extends RuntimeException { }
     private static final class InvalidPayload extends RuntimeException { }
     private static final class InvalidRoute extends RuntimeException { }

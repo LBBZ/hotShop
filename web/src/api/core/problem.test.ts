@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { mapProblemResponse } from "@/api/core/problem";
+import { findApiProblemError, mapProblemResponse } from "@/api/core/problem";
 
 describe("Problem Details mapping", () => {
   it("maps RFC 9457 fields, violations, and correlation headers", async () => {
@@ -55,5 +55,26 @@ describe("Problem Details mapping", () => {
 
     expect(error.problem.code).toBe("UNEXPECTED_RESPONSE");
     expect(error.problem.detail).toContain("502");
+  });
+
+  it("recovers a mapped Problem wrapped by a generated-client FetchError", async () => {
+    const response = Response.json(
+      {
+        status: 503,
+        detail: "Flash-sale state is temporarily unavailable",
+        code: "SECKILL_STATE_INVALID",
+        requestId: "retry-request",
+      },
+      { status: 503 },
+    );
+    const problem = await mapProblemResponse(response);
+    const generatedClientError = new Error("generated fetch failed", {
+      cause: problem,
+    });
+
+    expect(findApiProblemError(generatedClientError)).toBe(problem);
+    expect(
+      findApiProblemError(new Error("network disconnected")),
+    ).toBeUndefined();
   });
 });

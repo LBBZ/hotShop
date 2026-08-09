@@ -26,17 +26,29 @@ public class RefreshCookieService {
     }
 
     public ResponseCookie refreshCookie(SessionType type, String value) {
-        return cookie(refreshName(type), value, true, Duration.ofSeconds(properties.getRefresh().getTtlSeconds()));
+        return cookie(refreshName(type), value, true, refreshPath(type),
+                Duration.ofSeconds(properties.getRefresh().getTtlSeconds()));
     }
 
     public ResponseCookie csrfCookie(SessionType type, String value) {
-        return cookie(csrfName(type), value, false, Duration.ofSeconds(properties.getRefresh().getTtlSeconds()));
+        return cookie(csrfName(type), value, false, csrfPath(type),
+                Duration.ofSeconds(properties.getRefresh().getTtlSeconds()));
+    }
+
+    /**
+     * Expires the pre-V1.7 CSRF cookie that used the authentication-only path.
+     * Browsers treat equal names on different paths as distinct cookies, so every
+     * successful issuance must remove this legacy variant explicitly.
+     */
+    public ResponseCookie legacyCsrfCookie(SessionType type) {
+        return cookie(csrfName(type), "", false, refreshPath(type), Duration.ZERO);
     }
 
     public List<ResponseCookie> clearCookies(SessionType type) {
         return List.of(
-                cookie(refreshName(type), "", true, Duration.ZERO),
-                cookie(csrfName(type), "", false, Duration.ZERO)
+                cookie(refreshName(type), "", true, refreshPath(type), Duration.ZERO),
+                cookie(csrfName(type), "", false, csrfPath(type), Duration.ZERO),
+                legacyCsrfCookie(type)
         );
     }
 
@@ -62,22 +74,26 @@ public class RefreshCookieService {
         return type == SessionType.USER ? USER_CSRF_COOKIE : ADMIN_CSRF_COOKIE;
     }
 
-    public String path(SessionType type) {
+    public String refreshPath(SessionType type) {
         return type == SessionType.USER ? "/api/v1/auth" : "/admin/api/v1/auth";
+    }
+
+    public String csrfPath(SessionType type) {
+        return type == SessionType.USER ? "/" : "/admin";
     }
 
     private ResponseCookie cookie(
             String name,
             String value,
             boolean httpOnly,
+            String path,
             Duration maxAge
     ) {
-        SessionType type = name.startsWith("hotshop_user_") ? SessionType.USER : SessionType.ADMIN;
         return ResponseCookie.from(name, value)
                 .httpOnly(httpOnly)
                 .secure(properties.getRefresh().isSecureCookie())
                 .sameSite("Strict")
-                .path(path(type))
+                .path(path)
                 .maxAge(maxAge)
                 .build();
     }

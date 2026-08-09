@@ -27,6 +27,8 @@ public record ReservationAcceptedEvent(
         int activityVersion,
         long occurredAtMs,
         String requestId,
+        String traceparent,
+        String tracestate,
         String idempotencyKeyHash,
         String requestFingerprint,
         String payloadHash
@@ -50,6 +52,8 @@ public record ReservationAcceptedEvent(
             "currency",
             "status",
             "requestId",
+            "traceparent",
+            "tracestate",
             "occurredAtMs",
             "activityVersion",
             "idempotencyKeyHash",
@@ -85,6 +89,8 @@ public record ReservationAcceptedEvent(
         String activityVersion = value(raw, "activityVersion");
         String occurredAt = value(raw, "occurredAtMs");
         String requestId = value(raw, "requestId");
+        String traceparent = value(raw, "traceparent");
+        String tracestate = value(raw, "tracestate");
         String idempotencyHash = value(raw, "idempotencyKeyHash");
         String fingerprint = value(raw, "requestFingerprint");
 
@@ -97,8 +103,17 @@ public record ReservationAcceptedEvent(
         match(unitPrice, MONEY, errors, "UNIT_PRICE_INVALID");
         match(activityVersion, NON_NEGATIVE, errors, "ACTIVITY_VERSION_INVALID");
         match(occurredAt, POSITIVE, errors, "OCCURRED_AT_INVALID");
-        if (!requestId.matches("^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")) {
+        if (requestId == null || !requestId.matches("^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")) {
             errors.add("REQUEST_ID_INVALID");
+        }
+        if (traceparent == null || (!traceparent.isBlank()
+                && !com.real.common.observability.AsyncTraceContext.parse(traceparent).valid())) {
+            errors.add("TRACEPARENT_INVALID");
+        }
+        if (tracestate == null || (!tracestate.isBlank()
+                && com.real.common.observability.AsyncTraceContext
+                        .sanitizeTraceState(tracestate).isBlank())) {
+            errors.add("TRACESTATE_INVALID");
         }
         match(idempotencyHash, HASH, errors, "IDEMPOTENCY_HASH_INVALID");
         match(fingerprint, HASH, errors, "FINGERPRINT_INVALID");
@@ -151,6 +166,8 @@ public record ReservationAcceptedEvent(
                     parsedVersion,
                     parsedOccurredAt,
                     requestId,
+                    traceparent,
+                    tracestate,
                     idempotencyHash,
                     fingerprint,
                     payloadHash

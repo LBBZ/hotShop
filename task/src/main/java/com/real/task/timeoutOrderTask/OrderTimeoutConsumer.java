@@ -25,7 +25,7 @@ public class OrderTimeoutConsumer {
             "aggregateId", "occurredAt", "payload");
     private static final Set<String> PAYLOAD = Set.of(
             "schemaVersion", "orderId", "userId", "amount", "currency",
-            "expiresAtMs", "timeoutAttempt", "requestId", "traceparent");
+            "expiresAtMs", "timeoutAttempt", "requestId", "traceparent", "tracestate");
     private static final Pattern MONEY = Pattern.compile("^(0|[1-9][0-9]*)\\.[0-9]{2}$");
     private static final Pattern ORDER_ID = Pattern.compile("^[A-Za-z0-9_-]{1,64}$");
     private final ObjectMapper json;
@@ -105,7 +105,8 @@ public class OrderTimeoutConsumer {
             return new OrderTimeoutService.TimeoutEvent(eventId, "LEGACY_ORDER_TIMEOUT_REQUESTED",
                     "ORDER", aggregateId, orderId, payload.path("userId").longValue(),
                     new BigDecimal(amountText), "CNY", payload.path("expiresAtMs").longValue(),
-                    timeoutAttempt, occurredAt);
+                    timeoutAttempt, occurredAt, optionalText(payload, "requestId"),
+                    optionalText(payload, "traceparent"), optionalText(payload, "tracestate"));
         } catch (IOException | DateTimeParseException | ArithmeticException exception) {
             throw new PoisonMessageException();
         }
@@ -121,6 +122,10 @@ public class OrderTimeoutConsumer {
         JsonNode value = node.path(field);
         require(value.isTextual() && !value.textValue().isBlank());
         return value.textValue();
+    }
+    private static String optionalText(JsonNode node, String field) {
+        JsonNode value = node.path(field);
+        return value.isTextual() && !value.textValue().isBlank() ? value.textValue() : null;
     }
     private static boolean validUuid(String value) {
         try { return UUID.fromString(value).toString().equals(value.toLowerCase(Locale.ROOT)); }

@@ -6,7 +6,9 @@ function randomHex(bytes: number): string {
   do {
     crypto.getRandomValues(value);
   } while (value.every((item) => item === 0));
-  return Array.from(value, (item) => item.toString(16).padStart(2, "0")).join("");
+  return Array.from(value, (item) => item.toString(16).padStart(2, "0")).join(
+    "",
+  );
 }
 
 export function createTraceparent(): string {

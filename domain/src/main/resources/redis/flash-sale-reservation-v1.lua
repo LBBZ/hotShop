@@ -10,7 +10,8 @@
 -- ARGV:
 -- 1 activityId, 2 userId, 3 quantity, 4 request fingerprint,
 -- 5 reservationNo, 6 eventId, 7 requestId,
--- 8 reservation TTL seconds, 9 idempotency TTL seconds, 10 idempotency key hash
+-- 8 reservation TTL seconds, 9 idempotency TTL seconds, 10 idempotency key hash,
+-- 11 traceparent, 12 tracestate
 
 local function result(code, reservationNo, requestId, streamId)
     return {code, reservationNo or '', requestId or '', streamId or ''}
@@ -135,6 +136,8 @@ local reservationWrite = redis.pcall(
     'currency', 'CNY',
     'status', 'RESERVED',
     'requestId', ARGV[7],
+    'traceparent', ARGV[11],
+    'tracestate', ARGV[12],
     'activityVersion', activityVersion,
     'idempotencyKeyHash', ARGV[10],
     'requestFingerprint', ARGV[4],
@@ -196,6 +199,8 @@ local streamWrite = redis.pcall(
     'currency', 'CNY',
     'status', 'RESERVED',
     'requestId', ARGV[7],
+    'traceparent', ARGV[11],
+    'tracestate', ARGV[12],
     'occurredAtMs', tostring(nowMs),
     'activityVersion', activityVersion,
     'idempotencyKeyHash', ARGV[10],

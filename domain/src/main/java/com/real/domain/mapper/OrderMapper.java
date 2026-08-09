@@ -16,6 +16,7 @@ public interface OrderMapper {
     int insertOrder(Order order);
     int updateOrder(Order order);
     Order selectOrderById(String orderId);
+    Order selectOwnedOrderById(@Param("orderId") String orderId, @Param("userId") Long userId);
 
     // 根据订单状态查询订单
     List<Order> selectOrdersByOrderStatus(OrderStatus status);

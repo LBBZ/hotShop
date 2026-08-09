@@ -3,6 +3,7 @@ package com.real.task.seckill;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.real.common.observability.AsyncTraceContext;
+import com.real.domain.userjourney.TransactionTimelineWriter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.dao.DuplicateKeyException;
@@ -113,6 +114,10 @@ public class SeckillProcessingService {
         }
 
         ReservationRow reservation = insertOrLockReservation(event, "RESERVED");
+        TransactionTimelineWriter.reservation(jdbc, event.userId(), event.reservationNo(),
+                reservation.orderId(), "RESERVED", Instant.ofEpochMilli(event.occurredAtMs()),
+                event.requestId(), AsyncTraceContext.currentTraceParent(),
+                AsyncTraceContext.currentTraceState(), "INVENTORY_RESERVED");
         if (!immutableFactsMatch(reservation, event)) {
             markManualInCurrentTransaction(
                     processing.processingId(),
@@ -195,6 +200,10 @@ public class SeckillProcessingService {
         if (reservationUpdated != 1) {
             throw new ManualFactFailure("RESERVATION_TRANSITION_CONFLICT");
         }
+        TransactionTimelineWriter.order(jdbc, event.userId(), orderId, ORDER_CREATED,
+                clock.instant(), event.requestId(), AsyncTraceContext.currentTraceParent(),
+                AsyncTraceContext.currentTraceState(),
+                "ASYNC_ORDER_CREATED");
 
         recordProcessedEvent(event);
         insertOutbox(
@@ -215,6 +224,7 @@ public class SeckillProcessingService {
                         Map.entry("currency", event.currency()),
                         Map.entry("requestId", event.requestId()),
                         Map.entry("traceparent", AsyncTraceContext.currentTraceParent()),
+                        Map.entry("tracestate", AsyncTraceContext.currentTraceState()),
                         Map.entry("occurredAtMs", clock.millis())
                 )
         );
@@ -232,6 +242,7 @@ public class SeckillProcessingService {
                         "currency", event.currency(),
                         "requestId", event.requestId(),
                         "traceparent", AsyncTraceContext.currentTraceParent(),
+                        "tracestate", AsyncTraceContext.currentTraceState(),
                         "expiresAtMs", paymentExpiresAt.toEpochMilli(),
                         "timeoutAttempt", 0
                 )
@@ -422,6 +433,10 @@ public class SeckillProcessingService {
                 throw new ManualFactFailure("MYSQL_COMPENSATION_STATE_CONFLICT");
             }
         }
+        TransactionTimelineWriter.reservation(jdbc, event.userId(), event.reservationNo(), null,
+                COMPENSATED, clock.instant(), event.requestId(),
+                AsyncTraceContext.currentTraceParent(), AsyncTraceContext.currentTraceState(),
+                "INVENTORY_COMPENSATED");
         jdbc.update("""
                 UPDATE seckill_event_processing
                    SET status = 'COMPENSATED',
@@ -448,6 +463,7 @@ public class SeckillProcessingService {
                         Map.entry("currency", event.currency()),
                         Map.entry("requestId", event.requestId()),
                         Map.entry("traceparent", AsyncTraceContext.currentTraceParent()),
+                        Map.entry("tracestate", AsyncTraceContext.currentTraceState()),
                         Map.entry("compensationId", compensationId),
                         Map.entry("reasonCode", reasonCode),
                         Map.entry("occurredAtMs", event.occurredAtMs())
@@ -621,6 +637,10 @@ public class SeckillProcessingService {
             String reasonCode
     ) {
         ReservationRow reservation = insertOrLockReservation(event, "COMPENSATING");
+        TransactionTimelineWriter.reservation(jdbc, event.userId(), event.reservationNo(),
+                reservation.orderId(), "RESERVED", Instant.ofEpochMilli(event.occurredAtMs()),
+                event.requestId(), AsyncTraceContext.currentTraceParent(),
+                AsyncTraceContext.currentTraceState(), "INVENTORY_RESERVED");
         if (!immutableFactsMatch(reservation, event)) {
             markManualInCurrentTransaction(
                     processing.processingId(),
@@ -669,6 +689,10 @@ public class SeckillProcessingService {
                        version = version + 1
                  WHERE processing_id = ?
                 """, attempts, compensationId, reasonCode, processing.processingId());
+        TransactionTimelineWriter.reservation(jdbc, event.userId(), event.reservationNo(), null,
+                COMPENSATING, clock.instant(), event.requestId(),
+                AsyncTraceContext.currentTraceParent(), AsyncTraceContext.currentTraceState(),
+                "INVENTORY_COMPENSATION_RUNNING");
         return FailureOutcome.compensating(compensationId, reasonCode);
     }
 

@@ -7,6 +7,10 @@ import com.real.domain.service.seckill.FlashSaleReservationCode;
 import com.real.domain.service.seckill.FlashSaleReservationResult;
 import com.real.domain.service.seckill.FlashSaleReservationService;
 import com.real.domain.service.seckill.FlashSaleReservationStatusService;
+import com.real.domain.userjourney.TransactionTimelineWriter;
+import com.real.portal.timeline.TransactionTimelineService;
+import com.real.common.api.ApiException;
+import com.real.common.api.dto.TransactionTimelineEventResponse;
 import com.real.infrastructure.redis.SeckillRedisKeys;
 import com.real.security.entity.CustomUserDetails;
 import org.flywaydb.core.Flyway;
@@ -18,6 +22,7 @@ import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.TestMethodOrder;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -31,6 +36,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.util.AopTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
@@ -54,6 +60,7 @@ import static org.junit.jupiter.api.Assertions.assertTimeout;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -120,6 +127,8 @@ class FlashSaleReservationIntegrationTest {
     @Autowired
     FlashSaleReservationStatusService reservationStatusService;
     @Autowired
+    TransactionTimelineService timelineService;
+    @Autowired
     JdbcTemplate jdbcTemplate;
     @Autowired
     MockMvc mockMvc;
@@ -145,6 +154,12 @@ class FlashSaleReservationIntegrationTest {
         SECKILL.execInContainer("redis-cli", "CONFIG", "SET", "maxmemory-policy", "noeviction");
         seckillRedis.getConnectionFactory().getConnection().serverCommands().flushDb();
         cacheRedis.getConnectionFactory().getConnection().serverCommands().flushDb();
+        jdbcTemplate.update("DELETE FROM user_transaction_timeline");
+        jdbcTemplate.update("DELETE FROM order_purchase_intent");
+        jdbcTemplate.update("DELETE FROM payment_order");
+        jdbcTemplate.update("DELETE FROM sales_order_item");
+        jdbcTemplate.update("DELETE FROM sales_order");
+        jdbcTemplate.update("DELETE FROM sale_reservation");
         jdbcTemplate.update("DELETE FROM flash_sale_activity");
         jdbcTemplate.update("DELETE FROM catalog_product");
         insertProduct();
@@ -373,6 +388,49 @@ class FlashSaleReservationIntegrationTest {
 
     @Test
     @Order(7)
+    void streamCarriesTraceContextAtomicallyWithoutRequestIdCorrelation() {
+        insertActivity(ACTIVITY_ID, 3, 3, 1, "ACTIVE", -60, 600, 1);
+        loader.load(ACTIVITY_ID);
+        String sharedRequestId = "shared-request-id";
+        FlashSaleReservationService target = AopTestUtils.getTargetObject(reservationService);
+        try {
+            MDC.put("traceId", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+            MDC.put("spanId", "1111111111111111");
+            MDC.put("tracestate", "vendor=first");
+            assertThat(target.reserve(
+                    ACTIVITY_ID, 701, 1,
+                    "trace-user-one-0000000000000000000000001", sharedRequestId
+            ).code()).isEqualTo(FlashSaleReservationCode.ACCEPTED);
+
+            MDC.put("traceId", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+            MDC.put("spanId", "2222222222222222");
+            MDC.put("tracestate", "vendor=second");
+            assertThat(target.reserve(
+                    ACTIVITY_ID, 702, 1,
+                    "trace-user-two-0000000000000000000000001", sharedRequestId
+            ).code()).isEqualTo(FlashSaleReservationCode.ACCEPTED);
+        } finally {
+            MDC.clear();
+        }
+
+        List<MapRecord<String, Object, Object>> events = seckillRedis.opsForStream().range(
+                SeckillRedisKeys.reservationStream(ACTIVITY_ID),
+                org.springframework.data.domain.Range.unbounded()
+        );
+        assertThat(events).hasSize(2);
+        assertThat(events).extracting(event -> event.getValue().get("requestId"))
+                .containsOnly(sharedRequestId);
+        assertThat(events).extracting(event -> event.getValue().get("traceparent"))
+                .containsExactly(
+                        "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-1111111111111111-01",
+                        "00-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-2222222222222222-01"
+                );
+        assertThat(events).extracting(event -> event.getValue().get("tracestate"))
+                .containsExactly("vendor=first", "vendor=second");
+    }
+
+    @Test
+    @Order(8)
     void wrongTypeAndNoevictionOomLeaveNoOrphanOrSilentEventLoss() throws Exception {
         insertActivity(ACTIVITY_ID, 3, 3, 1, "ACTIVE", -60, 600, 1);
         loader.load(ACTIVITY_ID);
@@ -398,21 +456,40 @@ class FlashSaleReservationIntegrationTest {
                 "warm-script-key-0000000000000000000000001",
                 "warm-script"
         );
+        String replayKey = "oom-replay-key-0000000000000000000000001";
+        FlashSaleReservationResult accepted = reservationService.reserve(
+                ACTIVITY_ID,
+                503,
+                1,
+                replayKey,
+                "oom-replay-original"
+        );
+        assertThat(accepted.code()).isEqualTo(FlashSaleReservationCode.ACCEPTED);
         long stockBefore = stock(ACTIVITY_ID);
         SECKILL.execInContainer(
                 "redis-cli", "CONFIG", "SET", "maxmemory", "1"
         );
+        FlashSaleReservationResult replay = reservationService.reserve(
+                ACTIVITY_ID,
+                503,
+                1,
+                replayKey,
+                "same-client-request-id"
+        );
+        assertThat(replay.code()).isEqualTo(FlashSaleReservationCode.IDEMPOTENT_REPLAY);
+        assertThat(replay.reservationNo()).isEqualTo(accepted.reservationNo());
+        assertThat(replay.requestId()).isEqualTo("oom-replay-original");
         FlashSaleReservationResult oom = reservationService.reserve(
                 ACTIVITY_ID,
-                502,
+                504,
                 1,
                 "oom-failure-key-0000000000000000000000001",
                 "oom-failure"
         );
         assertThat(oom.code()).isEqualTo(FlashSaleReservationCode.INTERNAL_STATE_INVALID);
         assertThat(stock(ACTIVITY_ID)).isEqualTo(stockBefore);
-        assertThat(streamLength(ACTIVITY_ID)).isZero();
-        assertThat(reservationRecordCount(ACTIVITY_ID)).isZero();
+        assertThat(streamLength(ACTIVITY_ID)).isOne();
+        assertThat(reservationRecordCount(ACTIVITY_ID)).isOne();
     }
 
     @Test
@@ -538,6 +615,172 @@ class FlashSaleReservationIntegrationTest {
             assertThat(response.orderId())
                     .isEqualTo("ord_0123456789abcdef0123456789abcdef");
         });
+    }
+
+    @Test
+    @Order(10)
+    void durableTimelineRecoversAfterLastEventIdAndServiceRecreation() {
+        String orderId = "order_timeline_1";
+        long ownerId = 611L;
+        Instant orderCreatedAt = Instant.parse("2026-08-08T06:00:00Z");
+        Instant paymentCreatedAt = orderCreatedAt.plusSeconds(1);
+        Instant paidAt = orderCreatedAt.plusSeconds(2);
+        jdbcTemplate.update("""
+                INSERT INTO sales_order (order_id, user_id, total_amount, currency, status)
+                VALUES (?, ?, 19.90, 'CNY', 'PENDING')
+                """, orderId, ownerId);
+        TransactionTimelineWriter.order(jdbcTemplate, ownerId, orderId, "ORDER_CREATED",
+                orderCreatedAt, "timeline-order-created", "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01",
+                "", "ORDER_DURABLY_CREATED");
+        jdbcTemplate.update("""
+                INSERT INTO payment_order (
+                    payment_no, order_id, provider, amount, currency, status
+                ) VALUES ('MOCK_11111111111111111111111111111111', ?, 'MOCK',
+                          19.90, 'CNY', 'PENDING')
+                """, orderId);
+        TransactionTimelineWriter.order(jdbcTemplate, ownerId, orderId, "PENDING_PAYMENT",
+                paymentCreatedAt, "timeline-payment-created", "", "", "AWAITING_MOCK_PAYMENT");
+
+        timelineService.requireOwnedOrder(orderId, ownerId);
+        List<TransactionTimelineEventResponse> initial = timelineService.durableOrderEvents(
+                orderId, ownerId, 0
+        );
+        assertThat(initial).extracting(TransactionTimelineEventResponse::eventType)
+                .containsExactly("ORDER_CREATED", "PENDING_PAYMENT");
+        long lastEventId = initial.get(initial.size() - 1).eventId();
+
+        jdbcTemplate.update("UPDATE sales_order SET status = 'PAID', paid_at = ? WHERE order_id = ?",
+                Timestamp.from(paidAt), orderId);
+        jdbcTemplate.update("""
+                UPDATE payment_order
+                   SET provider_transaction_no = 'txn-timeline-1', status = 'SUCCEEDED', paid_at = ?
+                 WHERE order_id = ?
+                """, Timestamp.from(paidAt), orderId);
+
+        TransactionTimelineService recreated = new TransactionTimelineService(
+                jdbcTemplate, reservationStatusService
+        );
+        int rowsBeforeRead = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM user_transaction_timeline WHERE order_id = ?",
+                Integer.class,
+                orderId
+        );
+        assertThat(recreated.orderEvents(orderId, ownerId, 0))
+                .extracting(TransactionTimelineEventResponse::eventType)
+                .containsExactly("ORDER_CREATED", "PENDING_PAYMENT");
+        assertThat(recreated.durableOrderEvents(orderId, ownerId, lastEventId))
+                .as("the SSE loader must read committed receipts without synthesizing PAID")
+                .isEmpty();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM user_transaction_timeline WHERE order_id = ?",
+                Integer.class,
+                orderId
+        )).isEqualTo(rowsBeforeRead);
+
+        TransactionTimelineWriter.order(jdbcTemplate, ownerId, orderId, "PAID", paidAt,
+                "timeline-payment-callback", "", "", "MOCK_PAYMENT_CONFIRMED");
+
+        recreated.requireOwnedOrder(orderId, ownerId);
+        List<TransactionTimelineEventResponse> recovered = recreated.durableOrderEvents(
+                orderId, ownerId, lastEventId
+        );
+        assertThat(recovered).extracting(TransactionTimelineEventResponse::eventType)
+                .containsExactly("PAID");
+        assertThat(recovered.get(0).eventId()).isGreaterThan(lastEventId);
+        assertThat(recreated.durableOrderEvents(orderId, ownerId, 0))
+                .extracting(TransactionTimelineEventResponse::eventType)
+                .containsExactly("ORDER_CREATED", "PENDING_PAYMENT", "PAID");
+        assertThat(recovered.get(0).occurredAt()).isEqualTo(paidAt);
+        assertThat(recovered.get(0).requestId()).isEqualTo("timeline-payment-callback");
+        org.junit.jupiter.api.Assertions.assertThrows(
+                ApiException.class,
+                () -> recreated.requireOwnedOrder(orderId, ownerId + 1)
+        );
+    }
+
+    @Test
+    @Order(11)
+    void ordinaryOrderHttpContractDistinguishesCreateReplayAndConflict() throws Exception {
+        CustomUserDetails principal = CustomUserDetails.builder()
+                .userId(811L)
+                .username("ordinary-contract-user")
+                .password("")
+                .authorities(List.of(new SimpleGrantedAuthority("ROLE_USER")))
+                .build();
+        String key = "ordinary-contract-key-00000000000000000001";
+        String traceparent = "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01";
+        String tracestate = "hotshop=ordinary-contract";
+        String body = "{\"items\":[{\"productId\":\"" + PRODUCT_ID
+                + "\",\"quantity\":1}]}";
+
+        String first = mockMvc.perform(post("/api/v1/orders")
+                        .with(user(principal))
+                        .header("X-Request-ID", "ordinary-original-request")
+                        .header("traceparent", traceparent)
+                        .header("tracestate", tracestate)
+                        .header("Idempotency-Key", key)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isCreated())
+                .andExpect(header().doesNotExist("Idempotency-Replayed"))
+                .andExpect(jsonPath("$.requestId").value("ordinary-original-request"))
+                .andExpect(jsonPath("$.idempotencyReplayed").value(false))
+                .andReturn().getResponse().getContentAsString();
+        String orderId = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readTree(first).path("orderId").asText();
+        assertThat(orderId).isNotBlank();
+
+        mockMvc.perform(post("/api/v1/orders")
+                        .with(user(principal))
+                        .header("X-Request-ID", "ordinary-retry-request")
+                        .header("Idempotency-Key", key)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Idempotency-Replayed", "true"))
+                .andExpect(jsonPath("$.orderId").value(orderId))
+                .andExpect(jsonPath("$.requestId").value("ordinary-original-request"))
+                .andExpect(jsonPath("$.idempotencyReplayed").value(true));
+
+        mockMvc.perform(post("/api/v1/orders")
+                        .with(user(principal))
+                        .header("X-Request-ID", "ordinary-conflict-request")
+                        .header("Idempotency-Key", key)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":[{\"productId\":\"" + PRODUCT_ID
+                                + "\",\"quantity\":2}]}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_CONFLICT"));
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM sales_order WHERE user_id = ?",
+                Integer.class,
+                811L
+        )).isOne();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM user_transaction_timeline WHERE order_id = ? "
+                        + "AND event_type = 'ORDER_CREATED'",
+                Integer.class,
+                orderId
+        )).isOne();
+        java.util.Map<String, Object> timelineTrace = jdbcTemplate.queryForMap(
+                "SELECT request_id, traceparent, tracestate "
+                        + "FROM user_transaction_timeline WHERE resource_type = 'ORDER' "
+                        + "AND order_id = ? AND event_type = 'ORDER_CREATED'",
+                orderId
+        );
+        assertThat(timelineTrace).containsEntry("request_id", "ordinary-original-request")
+                .containsEntry("tracestate", tracestate);
+        assertThat(timelineTrace.get("traceparent").toString())
+                .startsWith("00-1234567890abcdef1234567890abcdef-")
+                .endsWith("-01");
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT JSON_UNQUOTE(JSON_EXTRACT(payload, '$.tracestate'))
+                  FROM outbox_event
+                 WHERE aggregate_id = ?
+                   AND event_type IN ('ORDER_CREATED', 'LEGACY_ORDER_TIMEOUT_REQUESTED')
+                 ORDER BY event_type
+                """, String.class, orderId)).containsExactly(tracestate, tracestate);
     }
 
     private List<FlashSaleReservationResult> invoke(

@@ -303,6 +303,11 @@ class ReliableMessagingContainerTest {
         assertThat(singleInt("SELECT stock FROM catalog_product WHERE product_id=?", productId)).isEqualTo(6);
         assertThat(singleInt("SELECT COUNT(*) FROM processed_event WHERE event_id=?", event.eventId())).isOne();
         assertThat(singleInt("SELECT COUNT(*) FROM outbox_event WHERE aggregate_id=? AND event_type='ORDER_CANCELED'", orderId)).isOne();
+        assertThat(jdbc.queryForObject("""
+                SELECT JSON_UNQUOTE(JSON_EXTRACT(payload, '$.tracestate'))
+                  FROM outbox_event
+                 WHERE aggregate_id=? AND event_type='ORDER_CANCELED'
+                """, String.class, orderId)).isEqualTo("hotshop=timeout-test");
         Map<String, Object> audit = jdbc.queryForMap("""
             SELECT actor_type,action,resource_type,resource_id,result,source,CAST(state_summary AS CHAR) state_summary
               FROM audit_log WHERE action='INVENTORY_COMPENSATED' AND resource_id=?
@@ -704,6 +709,11 @@ class ReliableMessagingContainerTest {
                 orderId)).isOne();
         assertThat(singleInt("SELECT COUNT(*) FROM outbox_event WHERE aggregate_id=? AND event_type='SECKILL_PAYMENT_EXPIRED'",
                 orderId)).isOne();
+        assertThat(jdbc.queryForObject("""
+                SELECT JSON_UNQUOTE(JSON_EXTRACT(payload, '$.tracestate'))
+                  FROM outbox_event
+                 WHERE aggregate_id=? AND event_type='SECKILL_PAYMENT_EXPIRED'
+                """, String.class, orderId)).isEqualTo("hotshop=timeout-test");
         Map<String, Object> audit = jdbc.queryForMap("""
             SELECT actor_type,action,resource_type,result,source,CAST(state_summary AS CHAR) state_summary
               FROM audit_log WHERE action='INVENTORY_COMPENSATED' AND resource_id=?
@@ -1046,7 +1056,10 @@ class ReliableMessagingContainerTest {
                 Long.class, orderId);
         return new OrderTimeoutService.TimeoutEvent(UUID.randomUUID().toString(),
                 "LEGACY_ORDER_TIMEOUT_REQUESTED", "ORDER", orderId, orderId,
-                42L, new BigDecimal("10.00"), "CNY", expiresAtMs, 0, java.time.Instant.now());
+                42L, new BigDecimal("10.00"), "CNY", expiresAtMs, 0,
+                java.time.Instant.now(), "timeout-test-request",
+                "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01",
+                "hotshop=timeout-test");
     }
 
     private int singleInt(String sql, Object... args) {

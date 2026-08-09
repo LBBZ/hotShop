@@ -15,6 +15,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.mockito.ArgumentCaptor;
 
 import java.math.BigDecimal;
 import java.util.Arrays;
@@ -95,6 +96,35 @@ class OrderServiceTest {
         assertNotNull(orderId);
         verify(orderMapper, times(1)).insertOrder(any(Order.class));
         verify(orderMapper, times(2)).insertOrderItem(any(OrderItem.class));
+    }
+
+    @Test
+    void ordinaryOrderOutboxCarriesOriginalRequestAndTraceContext() throws Exception {
+        Order order = buildTestOrder();
+        when(productMapper.reduceStock(any(Long.class), any(Integer.class))).thenReturn(1);
+        when(productMapper.selectById(1001L)).thenReturn(
+                new Product(1001L, "Product A", new BigDecimal("50.00"), 10, null, null, null));
+        when(productMapper.selectById(1002L)).thenReturn(
+                new Product(1002L, "Product B", new BigDecimal("100.00"), 5, null, null, null));
+
+        orderStateService.createOrder(
+                order,
+                "request-ordinary-1",
+                "00-11111111111111111111111111111111-2222222222222222-01",
+                "vendor=value"
+        );
+
+        ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
+        verify(outboxMapper, times(2)).insert(any(), any(), any(), any(), payload.capture());
+        for (String value : payload.getAllValues()) {
+            var json = new ObjectMapper().readTree(value);
+            assertEquals("request-ordinary-1", json.path("requestId").textValue());
+            assertEquals(
+                    "00-11111111111111111111111111111111-2222222222222222-01",
+                    json.path("traceparent").textValue()
+            );
+            assertEquals("vendor=value", json.path("tracestate").textValue());
+        }
     }
 
     @Test

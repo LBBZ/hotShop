@@ -17,6 +17,31 @@ const UserDashboard = lazy(() =>
     default: module.UserDashboard,
   })),
 );
+const UserAuthPage = lazy(() =>
+  import("@/pages/user-auth-page").then((module) => ({
+    default: module.UserAuthPage,
+  })),
+);
+const ProductDetailPage = lazy(() =>
+  import("@/pages/product-detail-page").then((module) => ({
+    default: module.ProductDetailPage,
+  })),
+);
+const OrderListPage = lazy(() =>
+  import("@/pages/order-list-page").then((module) => ({
+    default: module.OrderListPage,
+  })),
+);
+const OrderDetailPage = lazy(() =>
+  import("@/pages/order-detail-page").then((module) => ({
+    default: module.OrderDetailPage,
+  })),
+);
+const ReservationDetailPage = lazy(() =>
+  import("@/pages/reservation-detail-page").then((module) => ({
+    default: module.ReservationDetailPage,
+  })),
+);
 const AdminDashboard = lazy(() =>
   import("@/pages/admin-dashboard").then((module) => ({
     default: module.AdminDashboard,
@@ -53,6 +78,8 @@ export function AppRouter() {
         <Routes>
           <Route element={<PublicShell />}>
             <Route index element={<AnonymousHome />} />
+            <Route path="auth" element={<UserAuthPage />} />
+            <Route path="products/:productId" element={<ProductDetailPage />} />
           </Route>
 
           <Route element={<ProtectedRoute domain={userAuth} />}>
@@ -72,7 +99,12 @@ export function AppRouter() {
               }
             >
               <Route index element={<UserDashboard />} />
-              <Route path="orders" element={<UserDashboard />} />
+              <Route path="orders" element={<OrderListPage />} />
+              <Route path="orders/:orderId" element={<OrderDetailPage />} />
+              <Route
+                path="reservations/:activityId/:reservationNo"
+                element={<ReservationDetailPage />}
+              />
             </Route>
           </Route>
 

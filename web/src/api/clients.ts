@@ -1,10 +1,13 @@
 import {
   PublicAuthenticationApi,
+  PublicFlashSaleActivitiesApi,
   PublicProductsApi,
 } from "@/api/generated/public";
 import { Configuration as PublicConfiguration } from "@/api/generated/public/runtime";
 import {
   PublicAuthenticationApi as UserAuthenticationApi,
+  UserFlashSaleReservationsApi,
+  UserMockPaymentsApi,
   UserOrdersApi,
   UserProfileApi,
 } from "@/api/generated/user";
@@ -41,12 +44,15 @@ const adminConfiguration = new AdminConfiguration({
 
 export const apiClients = Object.freeze({
   public: Object.freeze({
+    activities: new PublicFlashSaleActivitiesApi(publicConfiguration),
     authentication: new PublicAuthenticationApi(publicConfiguration),
     products: new PublicProductsApi(publicConfiguration),
   }),
   user: Object.freeze({
     authentication: new UserAuthenticationApi(userConfiguration),
+    flashSales: new UserFlashSaleReservationsApi(userConfiguration),
     orders: new UserOrdersApi(userConfiguration),
+    payments: new UserMockPaymentsApi(userConfiguration),
     profile: new UserProfileApi(userConfiguration),
   }),
   admin: Object.freeze({

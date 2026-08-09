@@ -30,6 +30,10 @@ public class OrderService {
         return orderMapper.selectOrderById(orderId);
     }
 
+    public Order getOwnedOrderById(String orderId, Long userId) {
+        return orderMapper.selectOwnedOrderById(orderId, userId);
+    }
+
     /**
      * 根据状态查询订单
      */

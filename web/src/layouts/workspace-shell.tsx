@@ -6,13 +6,16 @@ import {
   Gauge,
   ShieldCheck,
   Users,
+  LogOut,
 } from "lucide-react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useStore } from "zustand";
 
 import { Badge } from "@/components/ui/badge";
 import type { AuthDomain } from "@/auth/auth-domain";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { logoutUser } from "@/features/auth/logout-user";
 
 const icons = {
   overview: Gauge,
@@ -41,6 +44,7 @@ export function WorkspaceShell({
   items,
 }: WorkspaceShellProps) {
   const session = useStore(domain.store, (state) => state.session);
+  const navigate = useNavigate();
 
   return (
     <div className={cn("workspace", `workspace-${tone}`)}>
@@ -90,6 +94,21 @@ export function WorkspaceShell({
             <span>{session?.role}</span>
           </div>
           <Badge tone="healthy">内存会话</Badge>
+          {tone === "user" ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                void logoutUser().finally(() => {
+                  void navigate("/");
+                })
+              }
+            >
+              <LogOut aria-hidden="true" />
+              退出登录
+            </Button>
+          ) : null}
         </div>
       </aside>
       <div className="workspace-stage">

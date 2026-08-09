@@ -9,6 +9,7 @@ import com.real.portal.payment.PaymentCallbackAuditService;
 import com.real.security.audit.AuditSensitiveDataSanitizer;
 import com.real.security.audit.JdbcAuditLogWriter;
 import com.real.task.timeoutOrderTask.OrderTimeoutService;
+import com.zaxxer.hikari.HikariDataSource;
 import jakarta.servlet.http.HttpServletRequest;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
@@ -44,6 +45,7 @@ class PaymentTerminalRaceContainerTest {
             .withCommand("--log-bin-trust-function-creators=1");
 
     static JdbcTemplate jdbc;
+    static HikariDataSource dataSource;
     static DataSourceTransactionManager transactionManager;
     static TransactionTemplate tx;
     static ObjectMapper json;
@@ -55,8 +57,12 @@ class PaymentTerminalRaceContainerTest {
     static void setup() {
         Flyway.configure().dataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword())
                 .locations("classpath:db/migration").load().migrate();
-        var dataSource = new org.springframework.jdbc.datasource.DriverManagerDataSource(
-                MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword());
+        dataSource = new HikariDataSource();
+        dataSource.setJdbcUrl(MYSQL.getJdbcUrl());
+        dataSource.setUsername(MYSQL.getUsername());
+        dataSource.setPassword(MYSQL.getPassword());
+        dataSource.setMaximumPoolSize(6);
+        dataSource.setConnectionTimeout(TimeUnit.SECONDS.toMillis(30));
         jdbc = new JdbcTemplate(dataSource);
         transactionManager = new DataSourceTransactionManager(dataSource);
         tx = new TransactionTemplate(transactionManager);
@@ -80,6 +86,7 @@ class PaymentTerminalRaceContainerTest {
 
     @AfterAll
     static void containerOwnsDatabaseLifecycle() {
+        dataSource.close();
         // Testcontainers closes the database after the class.
     }
 
@@ -121,8 +128,8 @@ class PaymentTerminalRaceContainerTest {
                 });
                 assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
                 start.countDown();
-                MockPaymentCallbackResponse paymentResult = payment.get(20, TimeUnit.SECONDS);
-                OrderTimeoutService.ProcessResult timeoutResult = timeout.get(20, TimeUnit.SECONDS);
+                MockPaymentCallbackResponse paymentResult = payment.get(60, TimeUnit.SECONDS);
+                OrderTimeoutService.ProcessResult timeoutResult = timeout.get(60, TimeUnit.SECONDS);
                 assertThat(paymentResult.result()).isIn("PAYMENT_SUCCEEDED", "PAYMENT_LATE_SUCCEEDED");
                 assertThat(timeoutResult).isIn(
                         OrderTimeoutService.ProcessResult.CANCELED,

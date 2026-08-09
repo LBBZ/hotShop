@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.info.Info;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.headers.Header;
 import io.swagger.v3.oas.models.media.ArraySchema;
+import io.swagger.v3.oas.models.media.BooleanSchema;
 import io.swagger.v3.oas.models.media.IntegerSchema;
 import io.swagger.v3.oas.models.media.ObjectSchema;
 import io.swagger.v3.oas.models.media.Schema;
@@ -88,6 +89,7 @@ public class OpenApiConfig {
                 .displayName("Public API v1")
                 .pathsToMatch(
                         "/api/v1/products/**",
+                        "/api/v1/flash-sale-activities",
                         "/api/v1/auth/register",
                         "/api/v1/auth/login"
                 )
@@ -240,7 +242,7 @@ public class OpenApiConfig {
                 "IdempotencyReplayed",
                 new Header()
                         .description("true when a persisted response is replayed for the same Idempotency-Key and fingerprint")
-                        .schema(new Schema<Boolean>().type("boolean"))
+                        .schema(new BooleanSchema())
         );
     }
 

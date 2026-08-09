@@ -58,8 +58,8 @@ class SchemaConstraintTest {
 
     @Test
     void emptyDatabaseMigratesToLatestAndValidates() {
-        assertThat(initialMigrationCount).isEqualTo(7);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1.6");
+        assertThat(initialMigrationCount).isEqualTo(8);
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1.7");
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
     }
 
@@ -358,6 +358,245 @@ class SchemaConstraintTest {
     }
 
     @Test
+    void userJourneyTablesEnforceIdempotencyAndTimelineDeduplication() throws SQLException {
+        try (Connection connection = connection()) {
+            String keyHash = "a".repeat(64);
+            String fingerprint = "b".repeat(64);
+            executeUpdate(connection, """
+                    INSERT INTO order_purchase_intent (
+                        user_id, idempotency_key_hash, request_fingerprint, request_id
+                    ) VALUES (9001, '%s', '%s', 'request-one')
+                    """.formatted(keyHash, fingerprint));
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                    INSERT INTO order_purchase_intent (
+                        user_id, idempotency_key_hash, request_fingerprint, request_id
+                    ) VALUES (9001, '%s', '%s', 'request-two')
+                    """.formatted(keyHash, fingerprint)));
+
+            executeUpdate(connection, """
+                    INSERT INTO order_purchase_intent (
+                        user_id, idempotency_key_hash, request_fingerprint,
+                        order_id, request_id, status
+                    ) VALUES (9002, '%s', '%s', 'order-unique-9002',
+                              'request-order-one', 'ORDER_CREATED')
+                    """.formatted("2".repeat(64), "3".repeat(64)));
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                    INSERT INTO order_purchase_intent (
+                        user_id, idempotency_key_hash, request_fingerprint,
+                        order_id, request_id, status
+                    ) VALUES (9003, '%s', '%s', 'order-unique-9002',
+                              'request-order-two', 'ORDER_CREATED')
+                    """.formatted("4".repeat(64), "5".repeat(64))));
+
+            executeUpdate(connection, """
+                    INSERT INTO user_transaction_timeline (
+                        user_id, resource_type, resource_id, order_id, event_type, detail_code
+                    ) VALUES (9001, 'ORDER', 'order-9001', 'order-9001',
+                              'ORDER_CREATED', 'ORDER_DURABLY_CREATED')
+                    """);
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                    INSERT INTO user_transaction_timeline (
+                        user_id, resource_type, resource_id, order_id, event_type, detail_code
+                    ) VALUES (9001, 'ORDER', 'order-9001', 'order-9001',
+                              'ORDER_CREATED', 'DUPLICATE')
+                    """));
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                    INSERT INTO user_transaction_timeline (
+                        user_id, resource_type, resource_id, event_type, detail_code
+                    ) VALUES (9001, 'ORDER', 'order-invalid', 'INVENTED', 'INVALID')
+                    """));
+        }
+    }
+
+    @Test
+    void userJourneyChecksRejectInvalidIdentityStateAndCorrelationData() throws SQLException {
+        try (Connection connection = connection()) {
+            String keyHash = "c".repeat(64);
+            String fingerprint = "d".repeat(64);
+            executeUpdate(connection, """
+                    INSERT INTO order_purchase_intent (
+                        user_id, idempotency_key_hash, request_fingerprint, request_id
+                    ) VALUES (9200, '%s', '%s', 'valid-processing-request')
+                    """.formatted(keyHash, fingerprint));
+            executeUpdate(connection, """
+                    INSERT INTO order_purchase_intent (
+                        user_id, idempotency_key_hash, request_fingerprint,
+                        order_id, request_id, status
+                    ) VALUES (9201, '%s', '%s', 'valid-order-created',
+                              'valid-created-request', 'ORDER_CREATED')
+                    """.formatted("6".repeat(64), "7".repeat(64)));
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                    INSERT INTO order_purchase_intent (
+                        user_id, idempotency_key_hash, request_fingerprint
+                    ) VALUES (0, '%s', '%s')
+                    """.formatted(keyHash, fingerprint)));
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                    INSERT INTO order_purchase_intent (
+                        user_id, idempotency_key_hash, request_fingerprint, order_id, status
+                    ) VALUES (9101, '%s', '%s', 'order-processing', 'PROCESSING')
+                    """.formatted("e".repeat(64), fingerprint)));
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                    INSERT INTO order_purchase_intent (
+                        user_id, idempotency_key_hash, request_fingerprint, status
+                    ) VALUES (9102, '%s', '%s', 'ORDER_CREATED')
+                    """.formatted("f".repeat(64), fingerprint)));
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                    INSERT INTO order_purchase_intent (
+                        user_id, idempotency_key_hash, request_fingerprint, request_id
+                    ) VALUES (9103, '%s', '%s', 'contains whitespace')
+                    """.formatted("1".repeat(64), fingerprint)));
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                    INSERT INTO order_purchase_intent (
+                        user_id, idempotency_key_hash, request_fingerprint
+                    ) VALUES (9104, '%s', '%s')
+                    """.formatted("A".repeat(64), fingerprint)));
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                    INSERT INTO order_purchase_intent (
+                        user_id, idempotency_key_hash, request_fingerprint
+                    ) VALUES (9105, '%s', '%s')
+                    """.formatted("8".repeat(64), "B".repeat(64))));
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                    INSERT INTO order_purchase_intent (
+                        user_id, idempotency_key_hash, request_fingerprint, status
+                    ) VALUES (9106, '%s', '%s', 'INVALID')
+                    """.formatted("9".repeat(64), fingerprint)));
+
+            executeUpdate(connection, """
+                    INSERT INTO user_transaction_timeline (
+                        user_id, resource_type, resource_id, order_id, event_type,
+                        request_id, traceparent, detail_code
+                    ) VALUES (9200, 'ORDER', 'valid-order-timeline', 'valid-order-timeline',
+                              'ORDER_CREATED', 'valid-timeline-request',
+                              '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01',
+                              'VALID_ORDER')
+                    """);
+            executeUpdate(connection, """
+                    INSERT INTO user_transaction_timeline (
+                        user_id, resource_type, resource_id, reservation_no,
+                        event_type, detail_code
+                    ) VALUES (9200, 'RESERVATION', 'valid-reservation-timeline',
+                              'valid-reservation-timeline', 'RESERVED', 'VALID_RESERVATION')
+                    """);
+
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                    INSERT INTO user_transaction_timeline (
+                        user_id, resource_type, resource_id, order_id, event_type, detail_code
+                    ) VALUES (0, 'ORDER', 'order-zero', 'order-zero',
+                              'ORDER_CREATED', 'INVALID_USER')
+                    """));
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                    INSERT INTO user_transaction_timeline (
+                        user_id, resource_type, resource_id, order_id, event_type, detail_code
+                    ) VALUES (9101, 'ORDER', 'order-a', 'order-b',
+                              'ORDER_CREATED', 'MISMATCHED_ORDER')
+                    """));
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                    INSERT INTO user_transaction_timeline (
+                        user_id, resource_type, resource_id, reservation_no, event_type, detail_code
+                    ) VALUES (9101, 'RESERVATION', 'reservation-a', 'reservation-b',
+                              'RESERVED', 'MISMATCHED_RESERVATION')
+                    """));
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                    INSERT INTO user_transaction_timeline (
+                        user_id, resource_type, resource_id, reservation_no, event_type, detail_code
+                    ) VALUES (9101, 'RESERVATION', 'reservation-created', 'reservation-created',
+                              'ORDER_CREATED', 'MISSING_ORDER')
+                    """));
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                    INSERT INTO user_transaction_timeline (
+                        user_id, resource_type, resource_id, order_id, event_type,
+                        request_id, detail_code
+                    ) VALUES (9101, 'ORDER', 'order-request', 'order-request',
+                              'ORDER_CREATED', 'bad request', 'INVALID_REQUEST')
+                    """));
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                    INSERT INTO user_transaction_timeline (
+                        user_id, resource_type, resource_id, order_id, event_type,
+                        traceparent, detail_code
+                    ) VALUES (9101, 'ORDER', 'order-trace', 'order-trace',
+                              'ORDER_CREATED', 'not-a-traceparent', 'INVALID_TRACE')
+                    """));
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                    INSERT INTO user_transaction_timeline (
+                        user_id, resource_type, resource_id, order_id, event_type, detail_code
+                    ) VALUES (9101, 'ACCOUNT', 'bad-resource-type', 'bad-resource-type',
+                              'ORDER_CREATED', 'INVALID_RESOURCE_TYPE')
+                    """));
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                    INSERT INTO user_transaction_timeline (
+                        user_id, resource_type, resource_id, order_id, event_type, detail_code
+                    ) VALUES (9101, 'ORDER', 'bad-event-type', 'bad-event-type',
+                              'INVENTED', 'INVALID_EVENT_TYPE')
+                    """));
+            for (String invalidTraceparent : List.of(
+                    "00-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-bbbbbbbbbbbbbbbb-01",
+                    "ff-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01",
+                    "00-00000000000000000000000000000000-bbbbbbbbbbbbbbbb-01",
+                    "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-0000000000000000-01"
+            )) {
+                assertConstraintViolation(() -> executeUpdate(connection, """
+                        INSERT INTO user_transaction_timeline (
+                            user_id, resource_type, resource_id, order_id, event_type,
+                            traceparent, detail_code
+                        ) VALUES (9101, 'ORDER', 'invalid-trace-%s', 'invalid-trace-%s',
+                                  'ORDER_CREATED', '%s', 'INVALID_TRACE')
+                        """.formatted(
+                                Integer.toUnsignedString(invalidTraceparent.hashCode()),
+                                Integer.toUnsignedString(invalidTraceparent.hashCode()),
+                                invalidTraceparent
+                        )));
+            }
+        }
+    }
+
+    @Test
+    void userJourneyConstraintNamesAndStreamingIndexOrderAreStable() throws SQLException {
+        try (Connection connection = connection()) {
+            assertThat(checkConstraintNames(connection, "order_purchase_intent"))
+                    .containsExactlyInAnyOrder(
+                            "ck_order_purchase_intent_user_id",
+                            "ck_order_purchase_intent_key_hash",
+                            "ck_order_purchase_intent_fingerprint",
+                            "ck_order_purchase_intent_status",
+                            "ck_order_purchase_intent_state",
+                            "ck_order_purchase_intent_request_id"
+                    );
+            assertThat(checkConstraintNames(connection, "user_transaction_timeline"))
+                    .containsExactlyInAnyOrder(
+                            "ck_user_timeline_user_id",
+                            "ck_user_timeline_resource_type",
+                            "ck_user_timeline_event_type",
+                            "ck_user_timeline_resource_identity",
+                            "ck_user_timeline_order_created",
+                            "ck_user_timeline_request_id",
+                            "ck_user_timeline_traceparent"
+                    );
+            assertThat(indexDefinition(
+                    connection,
+                    "order_purchase_intent",
+                    "uk_order_purchase_intent_user_key"
+            )).isEqualTo(new IndexDefinition("user_id,idempotency_key_hash", false));
+            assertThat(indexDefinition(
+                    connection,
+                    "order_purchase_intent",
+                    "uk_order_purchase_intent_order"
+            )).isEqualTo(new IndexDefinition("order_id", false));
+            assertThat(indexDefinition(
+                    connection,
+                    "user_transaction_timeline",
+                    "uk_user_timeline_fact"
+            )).isEqualTo(new IndexDefinition("resource_type,resource_id,event_type", false));
+            assertThat(indexDefinition(
+                    connection,
+                    "user_transaction_timeline",
+                    "idx_user_timeline_resource_stream"
+            )).isEqualTo(new IndexDefinition(
+                    "user_id,resource_type,resource_id,event_id", true
+            ));
+        }
+    }
+
+    @Test
     void auditLogIsAppendOnlyAtTheDatabaseLayer() throws SQLException {
         try (Connection connection = connection()) {
             long auditId = insertAuditLog(connection);
@@ -503,9 +742,14 @@ class SchemaConstraintTest {
         }
     }
 
-    private static String indexColumns(Connection connection, String table, String index) throws SQLException {
+    private static IndexDefinition indexDefinition(
+            Connection connection,
+            String table,
+            String index
+    ) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',')
+                SELECT GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ','),
+                       MAX(non_unique)
                   FROM information_schema.statistics
                  WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?
                 """)) {
@@ -513,7 +757,33 @@ class SchemaConstraintTest {
             statement.setString(2, index);
             try (ResultSet resultSet = statement.executeQuery()) {
                 assertThat(resultSet.next()).isTrue();
-                return resultSet.getString(1);
+                return new IndexDefinition(resultSet.getString(1), resultSet.getInt(2) == 1);
+            }
+        }
+    }
+
+    private static String indexColumns(Connection connection, String table, String index)
+            throws SQLException {
+        return indexDefinition(connection, table, index).columns();
+    }
+
+    private record IndexDefinition(String columns, boolean nonUnique) { }
+
+    private static List<String> checkConstraintNames(Connection connection, String table) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT constraint_name
+                  FROM information_schema.table_constraints
+                 WHERE constraint_schema = DATABASE()
+                   AND table_name = ?
+                   AND constraint_type = 'CHECK'
+                """)) {
+            statement.setString(1, table);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                var names = new java.util.ArrayList<String>();
+                while (resultSet.next()) {
+                    names.add(resultSet.getString(1));
+                }
+                return names;
             }
         }
     }

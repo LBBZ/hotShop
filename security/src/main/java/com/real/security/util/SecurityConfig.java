@@ -62,6 +62,7 @@ public class SecurityConfig {
                                 "/admin/api/v1/auth/refresh",
                                 "/agent/api/v1/auth/token-exchange",
                                 "/provider-callbacks/v1/mock-payment",
+                                "/api/v1/flash-sale-activities",
                                 "/api/v1/products/**"
                         ).permitAll()
                         .requestMatchers("/api/v1/**").hasAuthority("ROLE_USER")

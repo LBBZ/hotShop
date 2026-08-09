@@ -211,9 +211,15 @@ public class AuthController {
             RefreshSessionTokens refresh
     ) {
         ResponseCookie refreshCookie = cookieService.refreshCookie(SessionType.USER, refresh.refreshToken());
+        ResponseCookie legacyCsrfCookie = cookieService.legacyCsrfCookie(SessionType.USER);
         ResponseCookie csrfCookie = cookieService.csrfCookie(SessionType.USER, refresh.csrfToken());
         return noStore(ResponseEntity.ok())
-                .header(HttpHeaders.SET_COOKIE, refreshCookie.toString(), csrfCookie.toString())
+                .header(
+                        HttpHeaders.SET_COOKIE,
+                        refreshCookie.toString(),
+                        csrfCookie.toString(),
+                        legacyCsrfCookie.toString()
+                )
                 .body(new AuthTokenResponse(
                         role,
                         userId,

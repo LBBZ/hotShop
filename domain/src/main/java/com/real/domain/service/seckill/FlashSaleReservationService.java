@@ -1,6 +1,7 @@
 package com.real.domain.service.seckill;
 
 import com.real.common.exception.SeckillServiceUnavailableException;
+import com.real.common.observability.AsyncTraceContext;
 import com.real.infrastructure.redis.SeckillRedisKeys;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -47,6 +48,8 @@ public class FlashSaleReservationService {
         String fingerprint = sha256("v1\n" + activityId + "\n" + quantity);
         String reservationNo = "rsv_" + compactUuid();
         String eventId = "evt_" + compactUuid();
+        String traceParent = AsyncTraceContext.currentTraceParent();
+        String traceState = AsyncTraceContext.currentTraceState();
         List<String> keys = List.of(
                 SeckillRedisKeys.activityMetadata(activityId),
                 SeckillRedisKeys.availableStock(activityId),
@@ -69,7 +72,9 @@ public class FlashSaleReservationService {
                     requestId,
                     Long.toString(reservationTtl.toSeconds()),
                     Long.toString(idempotencyTtl.toSeconds()),
-                    keyHash
+                    keyHash,
+                    traceParent,
+                    traceState
             );
         } catch (DataAccessException exception) {
             throw new SeckillServiceUnavailableException(exception);

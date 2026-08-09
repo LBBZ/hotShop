@@ -157,7 +157,8 @@ public class ReservationStreamConsumer {
                     exception.getClass().getSimpleName(), cause.getClass().getSimpleName(), exception);
         } catch (RuntimeException exception) {
             metrics.failures().increment();
-            log.error("Seckill Stream poll failed with category {}", exception.getClass().getSimpleName());
+            log.error("Seckill Stream poll failed with category {}",
+                    exception.getClass().getSimpleName(), exception);
         }
     }
 
@@ -229,7 +230,7 @@ public class ReservationStreamConsumer {
         return !page.records().isEmpty();
     }
 
-    private void process(
+    void process(
             String stream,
             String entryId,
             Map<Object, Object> values,
@@ -246,39 +247,28 @@ public class ReservationStreamConsumer {
         }
 
         ReservationAcceptedEvent event = parsed.event();
-        String storedTraceParent = redis.opsForValue().get(
-                AsyncTraceContext.redisKey(event.requestId())
-        );
-        AsyncTraceContext.Parsed parent = AsyncTraceContext.parse(storedTraceParent);
+        AsyncTraceContext.Parsed parent = AsyncTraceContext.parse(event.traceparent());
         String previousRequestId = MDC.get("requestId");
         String previousTraceId = MDC.get("traceId");
         String previousSpanId = MDC.get("spanId");
+        String previousTraceState = MDC.get(AsyncTraceContext.TRACE_STATE);
         MDC.put("requestId", event.requestId());
+        if (event.tracestate().isBlank()) {
+            MDC.remove(AsyncTraceContext.TRACE_STATE);
+        } else {
+            MDC.put(AsyncTraceContext.TRACE_STATE, event.tracestate());
+        }
         if (parent.valid()) {
             MDC.put("traceId", parent.traceId());
             MDC.put("spanId", parent.parentSpanId());
+        } else {
+            MDC.remove("traceId");
+            MDC.remove("spanId");
         }
-        TraceContext remote = parent.valid()
-                ? tracer.traceContextBuilder().traceId(parent.traceId())
-                        .spanId(parent.parentSpanId())
-                        .sampled((Integer.parseInt(parent.flags(), 16) & 1) == 1)
-                        .build()
-                : null;
-        Span.Builder spanBuilder = remote == null
-                ? tracer.spanBuilder().setNoParent()
-                : claimed
-                        ? tracer.spanBuilder().setNoParent().addLink(
-                                new Link(remote, Map.of("messaging.redelivery", true))
-                        )
-                        : tracer.spanBuilder().setParent(remote);
-        Span span = spanBuilder
-                .name("redis.stream.consume")
-                .kind(Span.Kind.CONSUMER)
-                .tag("messaging.system", "redis")
-                .tag("messaging.operation", claimed ? "claim" : "receive")
-                .start();
-        Timer.Sample sample = Timer.start();
-        try (Tracer.SpanInScope ignored = tracer.withSpan(span)) {
+        Span span = startObservationSpan(parent, claimed);
+        Timer.Sample sample = startObservationTimer();
+        Tracer.SpanInScope scope = openObservationScope(span);
+        try {
             SeckillRedisReservationGateway.ReservationProof proof =
                     reservationGateway.verify(event);
             if (!proof.valid()) {
@@ -356,7 +346,7 @@ public class ReservationStreamConsumer {
                 case RETRY_NOT_DUE -> metrics.retried().increment();
             }
         } catch (SeckillProcessingService.SafeInventoryFailure exception) {
-            span.error(exception);
+            observeError(span, exception);
             handleFailure(
                     stream,
                     entryId,
@@ -365,7 +355,7 @@ public class ReservationStreamConsumer {
                     exception.getMessage()
             );
         } catch (SeckillProcessingService.ManualFactFailure exception) {
-            span.error(exception);
+            observeError(span, exception);
             handleFailure(
                     stream,
                     entryId,
@@ -374,20 +364,107 @@ public class ReservationStreamConsumer {
                     exception.getMessage()
             );
         } catch (DataAccessException exception) {
-            span.error(exception);
+            observeError(span, exception);
             recordTransientBestEffort(stream, entryId, event, "DEPENDENCY_UNAVAILABLE");
             metrics.failures().increment();
         } catch (RuntimeException exception) {
-            span.error(exception);
+            observeError(span, exception);
             recordTransientBestEffort(stream, entryId, event, "UNEXPECTED_PROCESSING_FAILURE");
             metrics.failures().increment();
         } finally {
-            span.end();
-            sample.stop(metrics.conversionLatency());
+            closeObservationScope(scope);
+            endObservationSpan(span);
+            stopObservationTimer(sample);
             restoreMdc("requestId", previousRequestId);
             restoreMdc("traceId", previousTraceId);
             restoreMdc("spanId", previousSpanId);
+            restoreMdc(AsyncTraceContext.TRACE_STATE, previousTraceState);
         }
+    }
+
+    private Span startObservationSpan(AsyncTraceContext.Parsed parent, boolean claimed) {
+        try {
+            TraceContext remote = parent.valid()
+                    ? tracer.traceContextBuilder().traceId(parent.traceId())
+                            .spanId(parent.parentSpanId())
+                            .sampled((Integer.parseInt(parent.flags(), 16) & 1) == 1)
+                            .build()
+                    : null;
+            Span.Builder builder = remote == null
+                    ? tracer.spanBuilder().setNoParent()
+                    : claimed
+                            ? tracer.spanBuilder().setNoParent().addLink(
+                                    new Link(remote, Map.of("messaging.redelivery", true))
+                            )
+                            : tracer.spanBuilder().setParent(remote);
+            return builder.name("redis.stream.consume")
+                    .kind(Span.Kind.CONSUMER)
+                    .tag("messaging.system", "redis")
+                    .tag("messaging.operation", claimed ? "claim" : "receive")
+                    .start();
+        } catch (RuntimeException failure) {
+            observationFailure("span_start");
+            return null;
+        }
+    }
+
+    private Timer.Sample startObservationTimer() {
+        try {
+            return Timer.start();
+        } catch (RuntimeException failure) {
+            observationFailure("timer_start");
+            return null;
+        }
+    }
+
+    private Tracer.SpanInScope openObservationScope(Span span) {
+        if (span == null) return null;
+        try {
+            return tracer.withSpan(span);
+        } catch (RuntimeException failure) {
+            observationFailure("scope_open");
+            return null;
+        }
+    }
+
+    private void observeError(Span span, RuntimeException failure) {
+        if (span == null) return;
+        try {
+            span.error(failure);
+        } catch (RuntimeException observationFailure) {
+            observationFailure("span_error");
+        }
+    }
+
+    private void closeObservationScope(Tracer.SpanInScope scope) {
+        if (scope == null) return;
+        try {
+            scope.close();
+        } catch (RuntimeException failure) {
+            observationFailure("scope_close");
+        }
+    }
+
+    private void endObservationSpan(Span span) {
+        if (span == null) return;
+        try {
+            span.end();
+        } catch (RuntimeException failure) {
+            observationFailure("span_end");
+        }
+    }
+
+    private void stopObservationTimer(Timer.Sample sample) {
+        if (sample == null) return;
+        try {
+            sample.stop(metrics.conversionLatency());
+        } catch (RuntimeException failure) {
+            observationFailure("timer_stop");
+        }
+    }
+
+    private static void observationFailure(String stage) {
+        log.warn("Seckill consumer observation failure isolated stage={}", stage);
     }
 
     private long groupLag(String stream) {

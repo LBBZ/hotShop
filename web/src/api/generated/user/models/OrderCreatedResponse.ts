@@ -20,11 +20,23 @@ import { mapValues } from '../runtime';
  */
 export interface OrderCreatedResponse {
     /**
+     * True when this response replays a persisted Idempotency-Key result
+     * @type {boolean}
+     * @memberof OrderCreatedResponse
+     */
+    idempotencyReplayed: boolean;
+    /**
      *
      * @type {string}
      * @memberof OrderCreatedResponse
      */
     orderId: string;
+    /**
+     * Correlation ID retained by the durable purchase intent
+     * @type {string}
+     * @memberof OrderCreatedResponse
+     */
+    requestId: string;
     /**
      *
      * @type {string}
@@ -51,7 +63,9 @@ export type OrderCreatedResponseStatusEnum = typeof OrderCreatedResponseStatusEn
  * Check if a given object implements the OrderCreatedResponse interface.
  */
 export function instanceOfOrderCreatedResponse(value: object): value is OrderCreatedResponse {
+    if (!('idempotencyReplayed' in value) || value['idempotencyReplayed'] === undefined) return false;
     if (!('orderId' in value) || value['orderId'] === undefined) return false;
+    if (!('requestId' in value) || value['requestId'] === undefined) return false;
     if (!('status' in value) || value['status'] === undefined) return false;
     return true;
 }
@@ -66,7 +80,9 @@ export function OrderCreatedResponseFromJSONTyped(json: any, ignoreDiscriminator
     }
     return {
 
+        'idempotencyReplayed': json['idempotencyReplayed'],
         'orderId': json['orderId'],
+        'requestId': json['requestId'],
         'status': json['status'],
     };
 }
@@ -82,7 +98,9 @@ export function OrderCreatedResponseToJSONTyped(value?: OrderCreatedResponse | n
 
     return {
 
+        'idempotencyReplayed': value['idempotencyReplayed'],
         'orderId': value['orderId'],
+        'requestId': value['requestId'],
         'status': value['status'],
     };
 }

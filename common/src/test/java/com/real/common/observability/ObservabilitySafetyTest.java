@@ -35,8 +35,6 @@ class ObservabilitySafetyTest {
             );
             assertThat(parsed.valid()).isTrue();
             assertThat(parsed.traceId()).isEqualTo("4bf92f3577b34da6a3ce929d0e0e4736");
-            assertThat(AsyncTraceContext.redisKey("request-1"))
-                    .matches("hotshop:observability:v1:request:[0-9a-f]{64}");
         } finally {
             MDC.clear();
         }
@@ -48,6 +46,15 @@ class ObservabilitySafetyTest {
                 "00-00000000000000000000000000000000-00f067aa0ba902b7-01"
         ).valid()).isFalse();
         assertThat(AsyncTraceContext.parse("not-a-trace").valid()).isFalse();
+    }
+
+    @Test
+    void acceptsOnlyBoundedSingleLineTraceState() {
+        assertThat(AsyncTraceContext.sanitizeTraceState("vendor=value,tenant@vendor=value"))
+                .isEqualTo("vendor=value,tenant@vendor=value");
+        assertThat(AsyncTraceContext.sanitizeTraceState("vendor=value\r\nsecret=leak"))
+                .isEmpty();
+        assertThat(AsyncTraceContext.sanitizeTraceState("x".repeat(513))).isEmpty();
     }
 
     @Test

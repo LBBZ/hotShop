@@ -3,11 +3,16 @@ package com.real.task.outbox;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.real.domain.messaging.OutboxEvent;
 import com.real.domain.messaging.OutboxMapper;
+import com.real.task.observability.TaskObservabilityMetrics;
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.Tracer;
+import org.slf4j.MDC;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
+import org.springframework.amqp.core.MessagePostProcessor;
 import org.springframework.amqp.core.ReturnedMessage;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -21,6 +26,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -56,6 +62,174 @@ class OutboxPublisherTest {
 
         verify(mapper).published(event.outboxId(), event.leaseToken(), event.version(), now());
         verify(mapper, never()).recordFailure(anyLong(), anyString(), anyLong(), anyString(), any(), anyString());
+    }
+
+    @Test
+    void persistedTraceStateCrossesTheFinalRabbitMessageBoundary() {
+        String traceparent = "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01";
+        String tracestate = "hotshop=outbox-boundary";
+        OutboxEvent event = new OutboxEvent(10, UUID.randomUUID().toString(), "ORDER", "order-1",
+                "ORDER_CREATED", "{\"schemaVersion\":1,\"orderId\":\"order-1\","
+                + "\"requestId\":\"request-boundary\",\"traceparent\":\"" + traceparent
+                + "\",\"tracestate\":\"" + tracestate + "\"}", "PUBLISHING", 1, 1,
+                "lease-boundary", now().plusSeconds(30), 4, now().minusSeconds(1));
+        MessageProperties published = new MessageProperties();
+        doAnswer(invocation -> {
+            MessagePostProcessor processor = invocation.getArgument(3);
+            processor.postProcessMessage(new Message(new byte[0], published));
+            CorrelationData correlation = invocation.getArgument(4);
+            correlation.getFuture().complete(new CorrelationData.Confirm(true, null));
+            return null;
+        }).when(rabbit).convertAndSend(anyString(), anyString(), any(), any(),
+                any(CorrelationData.class));
+        when(mapper.published(event.outboxId(), event.leaseToken(), event.version(), now()))
+                .thenReturn(1);
+
+        publisher(8, new OutboxPublishFailpoint() { }).publish(event);
+
+        assertThat((String) published.getHeader("x-request-id"))
+                .isEqualTo("request-boundary");
+        assertThat((String) published.getHeader("traceparent")).isEqualTo(traceparent);
+        assertThat((String) published.getHeader("tracestate")).isEqualTo(tracestate);
+    }
+
+    @Test
+    void tracerAndMetricFailuresDoNotBlockPublishAndMdcIsRestored() {
+        OutboxEvent event = event("ORDER_CREATED", 1, "lease-observation", 4);
+        completeConfirm(true, false);
+        when(mapper.published(event.outboxId(), event.leaseToken(), event.version(), now()))
+                .thenReturn(1);
+        Tracer brokenTracer = mock(Tracer.class);
+        when(brokenTracer.spanBuilder()).thenThrow(new IllegalStateException("tracer unavailable"));
+        TaskObservabilityMetrics brokenMetrics = mock(TaskObservabilityMetrics.class);
+        doThrow(new IllegalStateException("metrics unavailable"))
+                .when(brokenMetrics).rabbit(anyString(), anyString());
+        doThrow(new IllegalStateException("timer unavailable"))
+                .when(brokenMetrics).outbox(anyString(), any());
+        Map<String, String> previous = Map.of(
+                "requestId", "outer-request",
+                "traceId", "a".repeat(32),
+                "spanId", "b".repeat(16),
+                "tracestate", "outer=value"
+        );
+        MDC.setContextMap(previous);
+        OutboxPublisherProperties properties = new OutboxPublisherProperties(
+                true, 50, Duration.ofMillis(250), Duration.ofSeconds(30),
+                Duration.ofSeconds(5), Duration.ofSeconds(1), Duration.ofMinutes(5), 2, 8);
+        OutboxPublisher publisher = new OutboxPublisher(mapper, rabbit, new ObjectMapper(),
+                transactions, properties, new OutboxPublishFailpoint() { }, clock,
+                UUID::randomUUID, brokenMetrics, brokenTracer);
+        try {
+            publisher.publish(event);
+            assertThat(MDC.getCopyOfContextMap()).containsAllEntriesOf(previous);
+        } finally {
+            MDC.clear();
+        }
+
+        verify(mapper).published(event.outboxId(), event.leaseToken(), event.version(), now());
+    }
+
+    @Test
+    void tracerFailurePublishesPersistedParentInsteadOfAmbientMdcAndRestoresMdc() {
+        String persistedParent =
+                "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01";
+        String persistedState = "hotshop=persisted-parent";
+        OutboxEvent event = new OutboxEvent(10, UUID.randomUUID().toString(), "ORDER", "order-1",
+                "ORDER_CREATED", "{\"schemaVersion\":1,\"orderId\":\"order-1\","
+                + "\"requestId\":\"persisted-request\",\"traceparent\":\"" + persistedParent
+                + "\",\"tracestate\":\"" + persistedState + "\"}", "PUBLISHING", 1, 1,
+                "lease-persisted-parent", now().plusSeconds(30), 4, now().minusSeconds(1));
+        MessageProperties published = new MessageProperties();
+        completeConfirm(published);
+        when(mapper.published(event.outboxId(), event.leaseToken(), event.version(), now()))
+                .thenReturn(1);
+        Tracer brokenTracer = mock(Tracer.class);
+        when(brokenTracer.traceContextBuilder()).thenThrow(
+                new IllegalStateException("trace context builder unavailable"));
+        when(brokenTracer.spanBuilder()).thenThrow(
+                new IllegalStateException("publisher span unavailable"));
+        Map<String, String> ambient = Map.of(
+                "requestId", "ambient-request",
+                "traceId", "a".repeat(32),
+                "spanId", "b".repeat(16),
+                "tracestate", "ambient=value");
+        MDC.setContextMap(ambient);
+        try {
+            publisherWithTracer(brokenTracer).publish(event);
+            assertThat(MDC.getCopyOfContextMap()).containsAllEntriesOf(ambient);
+        } finally {
+            MDC.clear();
+        }
+
+        assertThat((String) published.getHeader("traceparent")).isEqualTo(persistedParent);
+        assertThat((String) published.getHeader("tracestate")).isEqualTo(persistedState);
+        assertThat((String) published.getHeader("traceparent"))
+                .doesNotContain("a".repeat(32));
+        verify(mapper).published(event.outboxId(), event.leaseToken(), event.version(), now());
+    }
+
+    @Test
+    void scopeFailureAlsoPublishesPersistedParentInsteadOfAmbientMdc() {
+        String persistedParent =
+                "00-2234567890abcdef1234567890abcdef-2234567890abcdef-01";
+        String persistedState = "hotshop=scope-fallback";
+        OutboxEvent event = eventWithCarrier(
+                persistedParent, persistedState, "lease-scope-fallback");
+        MessageProperties published = new MessageProperties();
+        completeConfirm(published);
+        when(mapper.published(event.outboxId(), event.leaseToken(), event.version(), now()))
+                .thenReturn(1);
+        Tracer brokenScopeTracer = mock(Tracer.class);
+        when(brokenScopeTracer.traceContextBuilder()).thenThrow(
+                new IllegalStateException("parent builder unavailable"));
+        Span.Builder spanBuilder = mock(Span.Builder.class, RETURNS_SELF);
+        Span publisherSpan = mock(Span.class);
+        when(spanBuilder.start()).thenReturn(publisherSpan);
+        when(brokenScopeTracer.spanBuilder()).thenReturn(spanBuilder);
+        when(brokenScopeTracer.withSpan(publisherSpan)).thenThrow(
+                new IllegalStateException("publisher scope unavailable"));
+        Map<String, String> ambient = Map.of(
+                "traceId", "e".repeat(32),
+                "spanId", "f".repeat(16),
+                "tracestate", "ambient=value");
+        MDC.setContextMap(ambient);
+        try {
+            publisherWithTracer(brokenScopeTracer).publish(event);
+            assertThat(MDC.getCopyOfContextMap()).containsAllEntriesOf(ambient);
+        } finally {
+            MDC.clear();
+        }
+
+        assertThat((String) published.getHeader("traceparent")).isEqualTo(persistedParent);
+        assertThat((String) published.getHeader("tracestate")).isEqualTo(persistedState);
+        verify(mapper).published(event.outboxId(), event.leaseToken(), event.version(), now());
+    }
+
+    @Test
+    void emptyPersistedCarrierDoesNotLeakAmbientMdcWhenTracerFails() {
+        OutboxEvent event = event("ORDER_CREATED", 1, "lease-empty-carrier", 4);
+        MessageProperties published = new MessageProperties();
+        completeConfirm(published);
+        when(mapper.published(event.outboxId(), event.leaseToken(), event.version(), now()))
+                .thenReturn(1);
+        Tracer brokenTracer = mock(Tracer.class);
+        when(brokenTracer.spanBuilder()).thenThrow(
+                new IllegalStateException("publisher span unavailable"));
+        Map<String, String> ambient = Map.of(
+                "traceId", "c".repeat(32),
+                "spanId", "d".repeat(16),
+                "tracestate", "ambient=value");
+        MDC.setContextMap(ambient);
+        try {
+            publisherWithTracer(brokenTracer).publish(event);
+            assertThat(MDC.getCopyOfContextMap()).containsAllEntriesOf(ambient);
+        } finally {
+            MDC.clear();
+        }
+
+        assertThat((Object) published.getHeader("traceparent")).isNull();
+        assertThat((Object) published.getHeader("tracestate")).isNull();
+        verify(mapper).published(event.outboxId(), event.leaseToken(), event.version(), now());
     }
 
     @Test
@@ -246,6 +420,25 @@ class OutboxPublisherTest {
         }).when(rabbit).convertAndSend(anyString(), anyString(), any(), any(), any(CorrelationData.class));
     }
 
+    private void completeConfirm(MessageProperties published) {
+        doAnswer(invocation -> {
+            MessagePostProcessor processor = invocation.getArgument(3);
+            processor.postProcessMessage(new Message(new byte[0], published));
+            CorrelationData correlation = invocation.getArgument(4);
+            correlation.getFuture().complete(new CorrelationData.Confirm(true, null));
+            return null;
+        }).when(rabbit).convertAndSend(anyString(), anyString(), any(), any(),
+                any(CorrelationData.class));
+    }
+
+    private OutboxPublisher publisherWithTracer(Tracer tracer) {
+        OutboxPublisherProperties properties = new OutboxPublisherProperties(
+                true, 50, Duration.ofMillis(250), Duration.ofSeconds(30),
+                Duration.ofSeconds(5), Duration.ofSeconds(1), Duration.ofMinutes(5), 2, 8);
+        return new OutboxPublisher(mapper, rabbit, new ObjectMapper(), transactions, properties,
+                new OutboxPublishFailpoint() { }, clock, UUID::randomUUID, null, tracer);
+    }
+
     private OutboxPublisher publisher(int maxAttempts, OutboxPublishFailpoint failpoint) {
         return publisher(maxAttempts, Duration.ofSeconds(5), failpoint);
     }
@@ -265,6 +458,14 @@ class OutboxPublisherTest {
                 "{\"schemaVersion\":1,\"orderId\":\"order-1\",\"expiresAtMs\":1785543300000}",
                 "PUBLISHING", consecutiveAttempts, consecutiveAttempts, lease,
                 now().plusSeconds(30), version, now().minusSeconds(1));
+    }
+
+    private OutboxEvent eventWithCarrier(String traceparent, String tracestate, String lease) {
+        return new OutboxEvent(10, UUID.randomUUID().toString(), "ORDER", "order-1",
+                "ORDER_CREATED", "{\"schemaVersion\":1,\"orderId\":\"order-1\","
+                + "\"traceparent\":\"" + traceparent + "\",\"tracestate\":\"" + tracestate
+                + "\"}", "PUBLISHING", 1, 1, lease, now().plusSeconds(30), 4,
+                now().minusSeconds(1));
     }
 
     private LocalDateTime now() {

@@ -40,9 +40,14 @@ public class ObservabilityRequestFilter extends OncePerRequestFilter {
         String requestId = RequestContext.requestId(request);
         String traceId = span == null ? RequestContext.traceId(request) : span.context().traceId();
         String spanId = span == null ? "" : span.context().spanId();
+        String previousTraceState = MDC.get(AsyncTraceContext.TRACE_STATE);
+        String traceState = AsyncTraceContext.sanitizeTraceState(
+                request.getHeader(AsyncTraceContext.TRACE_STATE)
+        );
         request.setAttribute(RequestContext.TRACE_ID_ATTRIBUTE, traceId);
         response.setHeader(RequestContext.TRACE_ID_HEADER, traceId);
         putMdc(requestId, traceId, spanId);
+        putTraceState(traceState);
         try (Tracer.SpanInScope ignored = span == null ? null : tracer.withSpan(span)) {
             chain.doFilter(request, response);
         } catch (ServletException | IOException | RuntimeException failure) {
@@ -57,6 +62,7 @@ public class ObservabilityRequestFilter extends OncePerRequestFilter {
             MDC.remove("event");
             MDC.remove("outcome");
             MDC.remove("spanId");
+            putTraceState(previousTraceState);
             if (span != null) span.end();
         }
     }
@@ -83,5 +89,13 @@ public class ObservabilityRequestFilter extends OncePerRequestFilter {
     private static void putMdc(String requestId, String traceId, String spanId) {
         RequestContext.putMdc(requestId, traceId);
         if (!spanId.isBlank()) MDC.put("spanId", spanId);
+    }
+
+    private static void putTraceState(String traceState) {
+        if (traceState == null || traceState.isBlank()) {
+            MDC.remove(AsyncTraceContext.TRACE_STATE);
+        } else {
+            MDC.put(AsyncTraceContext.TRACE_STATE, traceState);
+        }
     }
 }

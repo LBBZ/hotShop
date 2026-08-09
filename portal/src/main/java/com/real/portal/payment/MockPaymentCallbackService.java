@@ -6,6 +6,7 @@ import com.real.common.api.dto.MockPaymentCallbackResponse;
 import com.real.domain.payment.MockPaymentProperties;
 import com.real.domain.payment.PaymentProvider;
 import com.real.common.observability.AsyncTraceContext;
+import com.real.domain.userjourney.TransactionTimelineWriter;
 import org.slf4j.MDC;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.dao.DuplicateKeyException;
@@ -87,8 +88,10 @@ public class MockPaymentCallbackService {
         }
         String payloadHash = sha256(body);
         String nonceHash = sha256(nonce.getBytes(StandardCharsets.US_ASCII));
+        CallbackTraceContext traceContext = safeCallbackTraceContext(request);
         reserveNonce(nonceHash, callback);
-        return Objects.requireNonNull(tx.execute(ignored -> process(callback, payloadHash, request)));
+        return Objects.requireNonNull(tx.execute(
+                ignored -> process(callback, payloadHash, traceContext, request)));
     }
 
     public void auditRejected(CallbackRejectedException rejected, HttpServletRequest request) {
@@ -106,7 +109,7 @@ public class MockPaymentCallbackService {
     }
 
     private MockPaymentCallbackResponse process(Callback c, String payloadHash,
-            HttpServletRequest request) {
+            CallbackTraceContext traceContext, HttpServletRequest request) {
         Ledger existing = jdbc.query("""
             SELECT payload_hash,business_result FROM payment_callback_ledger
              WHERE callback_id=? FOR UPDATE
@@ -154,7 +157,8 @@ public class MockPaymentCallbackService {
                 requireOne(jdbc.update("UPDATE payment_order SET status='FAILED',version=version+1 WHERE payment_no=? AND status='PENDING'", c.paymentNo()));
                 next = "FAILED";
                 result = "PAYMENT_FAILED";
-                insertOutbox(c, result, order.orderId());
+                insertOutbox(c, result, order.orderId(), traceContext);
+                recordTimeline(order.orderId(), result, c.occurredAt(), traceContext);
             } else {
                 result = "IDEMPOTENT";
             }
@@ -166,7 +170,8 @@ public class MockPaymentCallbackService {
                     """, c.providerTransactionNo(), Timestamp.from(c.occurredAt()), c.paymentNo()));
                 next = "LATE_SUCCEEDED";
                 result = "PAYMENT_LATE_SUCCEEDED";
-                insertOutbox(c, result, order.orderId());
+                insertOutbox(c, result, order.orderId(), traceContext);
+                recordTimeline(order.orderId(), "LATE_SUCCEEDED", c.occurredAt(), traceContext);
             } else result = "IDEMPOTENT";
         } else if ("PENDING".equals(order.status()) && Set.of("PENDING", "FAILED").contains(previous)) {
             requireOne(jdbc.update("UPDATE sales_order SET status='PAID',paid_at=?,version=version+1 WHERE order_id=? AND status='PENDING'",
@@ -177,7 +182,8 @@ public class MockPaymentCallbackService {
                 """, c.providerTransactionNo(), Timestamp.from(c.occurredAt()), c.paymentNo()));
             next = "SUCCEEDED";
             result = "PAYMENT_SUCCEEDED";
-            insertOutbox(c, result, order.orderId());
+            insertOutbox(c, result, order.orderId(), traceContext);
+            recordTimeline(order.orderId(), "PAID", c.occurredAt(), traceContext);
         } else if ("PAID".equals(order.status()) && "SUCCEEDED".equals(previous)) {
             result = "IDEMPOTENT";
         } else {
@@ -195,7 +201,8 @@ public class MockPaymentCallbackService {
         return new MockPaymentCallbackResponse(c.callbackId(), result, true);
     }
 
-    private void insertOutbox(Callback c, String type, String orderId) {
+    private void insertOutbox(Callback c, String type, String orderId,
+            CallbackTraceContext traceContext) {
         try {
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("schemaVersion", 1);
@@ -205,7 +212,8 @@ public class MockPaymentCallbackService {
             payload.put("outcome", c.outcome());
             payload.put("occurredAt", c.occurredAt().toString());
             payload.put("requestId", safeRequestId());
-            payload.put("traceparent", AsyncTraceContext.currentTraceParent());
+            payload.put("traceparent", traceContext.traceparent());
+            payload.put("tracestate", traceContext.tracestate());
             String eventId = UUID.nameUUIDFromBytes(("hotshop/outbox/v1/" + type + "/" + c.paymentNo())
                     .getBytes(StandardCharsets.UTF_8)).toString();
             jdbc.update("""
@@ -215,6 +223,56 @@ public class MockPaymentCallbackService {
         } catch (IOException exception) {
             throw new IllegalStateException("Payment event serialization failed", exception);
         }
+    }
+
+    private void recordTimeline(String orderId, String eventType, Instant occurredAt,
+            CallbackTraceContext traceContext) {
+        Long userId = jdbc.queryForObject(
+                "SELECT user_id FROM sales_order WHERE order_id = ?", Long.class, orderId);
+        if (userId == null) {
+            throw new IllegalStateException("Payment Order owner is unavailable");
+        }
+        TransactionTimelineWriter.order(jdbc, userId, orderId, eventType, occurredAt,
+                safeRequestId(), traceContext.traceparent(), traceContext.tracestate(),
+                switch (eventType) {
+                    case "PAYMENT_FAILED" -> "MOCK_PAYMENT_FAILED";
+                    case "PAID" -> "MOCK_PAYMENT_CONFIRMED";
+                    case "LATE_SUCCEEDED" -> "PAYMENT_ARRIVED_AFTER_CLOSE";
+                    default -> "PAYMENT_STATE_CHANGED";
+                });
+    }
+
+    private CallbackTraceContext safeCallbackTraceContext(HttpServletRequest request) {
+        String traceparent;
+        try {
+            traceparent = AsyncTraceContext.currentTraceParent();
+        } catch (RuntimeException observationFailure) {
+            traceparent = "";
+        }
+        if (traceparent.isBlank() && request != null) {
+            try {
+                String raw = request.getHeader(AsyncTraceContext.TRACE_PARENT);
+                traceparent = AsyncTraceContext.parse(raw).valid() ? raw : "";
+            } catch (RuntimeException observationFailure) {
+                traceparent = "";
+            }
+        }
+
+        String tracestate;
+        try {
+            tracestate = AsyncTraceContext.currentTraceState();
+        } catch (RuntimeException observationFailure) {
+            tracestate = "";
+        }
+        if (tracestate.isBlank() && request != null) {
+            try {
+                tracestate = AsyncTraceContext.sanitizeTraceState(
+                        request.getHeader(AsyncTraceContext.TRACE_STATE));
+            } catch (RuntimeException observationFailure) {
+                tracestate = "";
+            }
+        }
+        return new CallbackTraceContext(traceparent, tracestate);
     }
 
     private Callback parse(byte[] body) {
@@ -271,4 +329,6 @@ public class MockPaymentCallbackService {
     private record OrderFact(String orderId, BigDecimal amount, String currency, String status) { }
     private record PaymentFact(String paymentNo, String orderId, String provider, BigDecimal amount,
                                String currency, String status, String providerTransactionNo) { }
+    private record CallbackTraceContext(String traceparent, String tracestate) {
+    }
 }

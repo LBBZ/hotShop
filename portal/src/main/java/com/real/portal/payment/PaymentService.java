@@ -8,6 +8,7 @@ import com.real.common.api.dto.MockPaymentActionResponse;
 import com.real.common.api.dto.PaymentResponse;
 import com.real.domain.payment.MockPaymentProperties;
 import com.real.common.observability.AsyncTraceContext;
+import com.real.domain.userjourney.TransactionTimelineWriter;
 import org.slf4j.MDC;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -58,6 +59,9 @@ public class PaymentService {
         if (inserted != 1) throw new IllegalStateException("Payment Order insert failed");
         PaymentFact complete = findByOrder(orderId);
         if (complete == null) throw new IllegalStateException("Payment Order cannot be reloaded");
+        TransactionTimelineWriter.order(jdbc, userId, orderId, "PENDING_PAYMENT", Instant.now(),
+                safeRequestId(), AsyncTraceContext.currentTraceParent(),
+                AsyncTraceContext.currentTraceState(), "AWAITING_MOCK_PAYMENT");
         return response(complete);
     }
 
@@ -99,6 +103,7 @@ public class PaymentService {
         payload.put("duplicateCount", request.duplicateCount());
         payload.put("requestId", safeRequestId());
         payload.put("traceparent", AsyncTraceContext.currentTraceParent());
+        payload.put("tracestate", AsyncTraceContext.currentTraceState());
         try {
             jdbc.update("""
                 INSERT INTO outbox_event(event_id,aggregate_type,aggregate_id,event_type,payload,available_at)

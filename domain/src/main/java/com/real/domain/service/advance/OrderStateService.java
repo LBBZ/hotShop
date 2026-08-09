@@ -50,17 +50,28 @@ public class OrderStateService {
 
     @Transactional
     public boolean tryCreateOrder(Order order) {
-        persistOrdinaryOrder(order);
+        persistOrdinaryOrder(order, null, null, null);
         return true;
     }
 
     @Transactional
     public String createOrder(Order order) {
-        persistOrdinaryOrder(order);
+        persistOrdinaryOrder(order, null, null, null);
         return order.getOrderId();
     }
 
-    private void persistOrdinaryOrder(Order order) {
+    @Transactional
+    public String createOrder(Order order, String requestId, String traceparent, String tracestate) {
+        persistOrdinaryOrder(order, requestId, traceparent, tracestate);
+        return order.getOrderId();
+    }
+
+    private void persistOrdinaryOrder(
+            Order order,
+            String requestId,
+            String traceparent,
+            String tracestate
+    ) {
         if (order.getOrderId() == null) {
             order.setOrderId(UUID.randomUUID().toString());
             order.setStatus(OrderStatus.PENDING);
@@ -84,7 +95,7 @@ public class OrderStateService {
             item.setOrderId(order.getOrderId());
             orders.insertOrderItem(item);
         }
-        writeEvents(order);
+        writeEvents(order, requestId, traceparent, tracestate);
     }
 
     @Transactional public void payOrder(String id) { transition(id,OrderStatus.PAID,false); }
@@ -97,10 +108,13 @@ public class OrderStateService {
         order.setStatus(target); orders.updateOrder(order); if(restore) releaseStock(order);
     }
     private void releaseStock(Order order) { order.getItems().forEach(i->products.increaseStock(i.getProductId(),i.getQuantity())); }
-    private void writeEvents(Order order) {
+    private void writeEvents(Order order, String requestId, String traceparent, String tracestate) {
         Map<String,Object> p=new LinkedHashMap<>(); p.put("schemaVersion",1); p.put("orderId",order.getOrderId());
         p.put("userId",order.getUserId()); p.put("amount",order.getTotalAmount().toPlainString()); p.put("currency","CNY");
         p.put("expiresAtMs",order.getExpiresAt().toInstant(ZoneOffset.UTC).toEpochMilli());
+        if (requestId != null && !requestId.isBlank()) p.put("requestId", requestId);
+        if (traceparent != null && !traceparent.isBlank()) p.put("traceparent", traceparent);
+        if (tracestate != null && !tracestate.isBlank()) p.put("tracestate", tracestate);
         try { String body=json.writeValueAsString(p);
             outbox.insert(eventId("ORDER_CREATED",order.getOrderId()),"ORDER",order.getOrderId(),"ORDER_CREATED",body);
             outbox.insert(eventId("LEGACY_ORDER_TIMEOUT_REQUESTED",order.getOrderId()),"ORDER",order.getOrderId(),"LEGACY_ORDER_TIMEOUT_REQUESTED",body);

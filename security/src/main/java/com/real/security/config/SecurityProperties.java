@@ -336,6 +336,10 @@ public class SecurityProperties {
         private Policy administratorRefresh = new Policy(20, 60);
         @Valid
         private Policy agentExchange = new Policy(20, 60);
+        @Valid
+        private Policy userOrderTransaction = new Policy(8, 60);
+        @Valid
+        private Policy userReservationTransaction = new Policy(8, 60);
 
         public boolean isTrustForwardedHeaders() {
             return trustForwardedHeaders;
@@ -423,6 +427,22 @@ public class SecurityProperties {
 
         public void setAgentExchange(Policy agentExchange) {
             this.agentExchange = agentExchange;
+        }
+
+        public Policy getUserOrderTransaction() {
+            return userOrderTransaction;
+        }
+
+        public void setUserOrderTransaction(Policy userOrderTransaction) {
+            this.userOrderTransaction = userOrderTransaction;
+        }
+
+        public Policy getUserReservationTransaction() {
+            return userReservationTransaction;
+        }
+
+        public void setUserReservationTransaction(Policy userReservationTransaction) {
+            this.userReservationTransaction = userReservationTransaction;
         }
     }
 

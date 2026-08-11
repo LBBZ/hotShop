@@ -317,3 +317,26 @@ flowchart LR
 # Local Mock Payment (not real payment)
 
 HotShop includes an opt-in Mock Payment flow solely for local demonstrations. It does not connect to any public payment service and transfers no funds. Set `HOTSHOP_MOCK_PAYMENT_ENABLED=true` and inject the same external `HOTSHOP_MOCK_PAYMENT_SECRET` (at least 32 UTF-8 bytes) into Portal and Task. See [docs/architecture/mock-payment.md](docs/architecture/mock-payment.md) for HMAC, replay protection, persistent delay, terminal races, and late-success handling.
+
+## Agent static knowledge RAG
+
+The Agent uses a closed `fake | deepseek | qwen` ModelProvider registry. FakeModel remains the
+default for local tests and CI. DeepSeek is the recommended real provider (`deepseek-v4-flash` by
+default, with `deepseek-v4-pro` selectable through trusted configuration); Qwen remains supported.
+Set exactly one `AGENT_MODEL_PROVIDER` per process and inject only that provider's Key. There is no
+automatic cross-provider fallback. Chat-model and embedding-provider configuration are independent.
+
+The Python Agent can retrieve versioned FAQ, after-sales policy, and static campaign rules from a
+pinned Qdrant container. Qdrant never stores product prices, inventory, Order, Reservation, or
+payment state; those facts use the authenticated TASK-16 Java tools. Offline tests and evaluations
+use FakeModel plus deterministic embeddings and require no paid key.
+
+```powershell
+docker compose --env-file .env.example --profile agent up -d --build
+docker compose --env-file .env.example --profile agent exec -T agent-service python -m hotshop_agent.index_cli rebuild
+.\script\verify-task17-compose.ps1
+```
+
+See [Agent RAG architecture](docs/architecture/agent-rag.md) and
+[Agent RAG runbook](docs/runbooks/agent-rag.md) for visibility/tenant filtering, atomic rebuild,
+citations, refusal behavior, injection defenses, evaluation thresholds, and outage handling.

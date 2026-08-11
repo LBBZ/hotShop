@@ -34,6 +34,7 @@ packages = ["src/hotshop_agent"]
 addopts = "-q"
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = ["qdrant: requires a real Qdrant container"]
 
 [tool.ruff]
 target-version = "py312"

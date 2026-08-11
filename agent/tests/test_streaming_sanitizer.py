@@ -11,7 +11,7 @@ from hotshop_agent.config import Settings
 from hotshop_agent.container import build_container
 from hotshop_agent.domain import IdentityKind
 from hotshop_agent.events import REDACTION, StreamingSanitizer
-from hotshop_agent.providers.base import ModelChunk, ModelDelta, ModelUsage
+from hotshop_agent.providers.base import ModelCapabilities, ModelChunk, ModelDelta, ModelUsage
 from hotshop_agent.security import JwtVerifier
 
 
@@ -185,6 +185,8 @@ def test_discard_never_flushes_unresolved_sensitive_candidate() -> None:
 
 class ChunkModel:
     name = "chunk-test"
+    model_name = "chunk-test"
+    capabilities = ModelCapabilities("fake", "fake", True, True, "not_provided")
 
     def __init__(self, chunks: tuple[str, ...], *, wait_after_chunks: bool = False) -> None:
         self.chunks = chunks

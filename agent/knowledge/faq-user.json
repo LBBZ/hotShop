@@ -1,0 +1,13 @@
+{
+  "tenantId": "hotshop",
+  "documentId": "faq-user-support",
+  "documentVersion": "1.0.0",
+  "documentType": "FAQ",
+  "visibility": "USER",
+  "title": "登录用户支持渠道",
+  "source": "https://docs.hotshop.local/faq/user-support",
+  "locale": "zh-CN",
+  "effectiveFrom": null,
+  "effectiveUntil": null,
+  "content": "登录用户可以在帮助中心提交问题描述和相关业务编号。请只提交排查所需信息，不要上传密码、Token、Cookie 或私钥。"
+}

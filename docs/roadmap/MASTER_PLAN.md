@@ -31,8 +31,9 @@
 - Java 21、Spring Boot 最新稳定的 3.5.x、MyBatis 3.0.x、Maven Wrapper。
 - React + TypeScript + Vite；使用 React Router、Tailwind CSS、shadcn/ui、TanStack Query、
   Zustand、Recharts、Vitest、Testing Library、Playwright、pnpm。
-- Agent 使用 Python FastAPI + LangGraph；模型通过 provider 抽象接入百炼 Qwen，测试和 CI 使用
-  FakeModel，OpenAI 仅保留可选适配能力。
+- Agent 使用 Python FastAPI + LangGraph；模型通过只读 Provider Registry 选择单个活动 Provider，
+  推荐真实模型为 DeepSeek，同时保留百炼 Qwen；测试和 CI 固定使用 FakeModel，不做自动跨 Provider
+  fallback。ModelProvider 与 EmbeddingProvider 必须保持独立。
 
 ### 2.2 数据与消息
 

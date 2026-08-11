@@ -14,22 +14,35 @@ RUN groupadd --system --gid 10001 hotshop \
 COPY requirements.lock ./
 RUN python -m pip install --requirement requirements.lock
 
-COPY src ./src
-
-FROM base AS test
+FROM base AS test-dependencies
 
 ENV MYPY_CACHE_DIR=/tmp/mypy-cache \
     RUFF_CACHE_DIR=/tmp/ruff-cache
 
 COPY requirements-dev.lock pyproject.toml ./
 RUN python -m pip install --requirement requirements-dev.lock
+
+FROM test-dependencies AS test
+
+COPY src ./src
+COPY knowledge ./knowledge
+COPY evals ./evals
 COPY --chown=10001:10001 tests ./tests
 
 USER 10001:10001
 CMD ["python", "-m", "pytest", "-p", "no:cacheprovider"]
 
+FROM docker:28.3.3-cli AS docker-cli
+
+FROM test AS security-test
+
+COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
+
 FROM base AS runtime
 
+COPY src ./src
+COPY knowledge ./knowledge
+COPY evals ./evals
 COPY --chmod=0555 docker-entrypoint.sh /usr/local/bin/hotshop-agent-entrypoint
 
 USER 0:0

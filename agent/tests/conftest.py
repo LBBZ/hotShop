@@ -44,7 +44,7 @@ def key_material(tmp_path: Path) -> dict[str, tuple[Path, Path, bytes]]:
 def settings(key_material: dict[str, tuple[Path, Path, bytes]]) -> Settings:
     return Settings(
         environment="test",
-        provider="fake",
+        model_provider="fake",
         state_backend="memory",
         assertion_private_key_path=key_material["assertion"][0],
         user_public_keys={"user-kid": key_material["user"][1]},

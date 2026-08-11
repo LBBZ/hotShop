@@ -1,0 +1,13 @@
+{
+  "tenantId": "hotshop",
+  "documentId": "faq-account-security",
+  "documentVersion": "1.0.0",
+  "documentType": "FAQ",
+  "visibility": "PUBLIC",
+  "title": "账户与登录常见问题",
+  "source": "https://docs.hotshop.local/faq/account-security",
+  "locale": "zh-CN",
+  "effectiveFrom": null,
+  "effectiveUntil": null,
+  "content": "如何保护 HotShop 账户？请勿向他人透露访问令牌、短信验证码或密码。遇到登录异常时，应退出其他设备并通过官方入口重新登录。客服不会索要密码、完整令牌或私钥。"
+}

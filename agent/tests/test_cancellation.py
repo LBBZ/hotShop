@@ -12,7 +12,7 @@ from hotshop_agent.api import create_app
 from hotshop_agent.config import Settings
 from hotshop_agent.container import build_container
 from hotshop_agent.domain import Credential, IdentityKind, RunState
-from hotshop_agent.providers.base import ModelChunk, ModelDelta
+from hotshop_agent.providers.base import ModelCapabilities, ModelChunk, ModelDelta
 from hotshop_agent.providers.fake import FakeModel
 from hotshop_agent.security import JwtVerifier
 from hotshop_agent.service import RunHandle
@@ -20,6 +20,8 @@ from hotshop_agent.service import RunHandle
 
 class FloodModel:
     name = "flood"
+    model_name = "flood"
+    capabilities = ModelCapabilities("fake", "fake", True, True, "not_provided")
 
     def __init__(self) -> None:
         self.active_calls = 0
@@ -113,7 +115,7 @@ async def test_client_disconnect_closes_stream_and_cancels_model(
         },
         receive=receive,
     )
-    response = await route.endpoint(  # type: ignore[attr-defined,no-untyped-call]
+    response = await route.endpoint(  # type: ignore[attr-defined]
         uuid.UUID(run.id),
         request,
         container,
@@ -229,7 +231,7 @@ async def test_full_queue_sse_disconnect_is_bounded_and_releases_provider(
     )
     token = issue_token(IdentityKind.USER)
     credential = Credential(token=token, principal=principal)
-    response = await route.endpoint(  # type: ignore[attr-defined,no-untyped-call]
+    response = await route.endpoint(  # type: ignore[attr-defined]
         uuid.UUID(run.id),
         request,
         container,

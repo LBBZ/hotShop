@@ -41,8 +41,18 @@ def test_json_formatter_never_serializes_secret_or_body() -> None:
     parsed = json.loads(formatter.format(record))
     assert sentinel not in json.dumps(parsed)
     assert {
-        "timestamp", "level", "service", "environment", "event", "name",
-        "requestId", "traceId", "spanId", "outcome", "errorType", "message",
+        "timestamp",
+        "level",
+        "service",
+        "environment",
+        "event",
+        "name",
+        "requestId",
+        "traceId",
+        "spanId",
+        "outcome",
+        "errorType",
+        "message",
     }.issubset(parsed)
 
 

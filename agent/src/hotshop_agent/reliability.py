@@ -13,6 +13,7 @@ from hotshop_agent.providers.base import (
     ModelPermanentError,
     ModelProvider,
     ModelTemporaryError,
+    validate_model_capabilities,
 )
 
 
@@ -114,6 +115,7 @@ class ReliableModel:
         breaker: CircuitBreaker,
         limiter: ConcurrencyLimiter,
     ) -> None:
+        validate_model_capabilities(provider.capabilities)
         self.provider = provider
         self.timeout_seconds = timeout_seconds
         self.max_retries = max_retries

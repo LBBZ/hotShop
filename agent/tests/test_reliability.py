@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 import pytest
 
 from hotshop_agent.providers.base import (
+    ModelCapabilities,
     ModelChunk,
     ModelDelta,
     ModelPermanentError,
@@ -24,6 +25,8 @@ from hotshop_agent.reliability import (
 
 class FlakyModel:
     name = "flaky"
+    model_name = "flaky"
+    capabilities = ModelCapabilities("fake", "fake", True, True, "not_provided")
 
     def __init__(self, failures: int, *, permanent: bool = False) -> None:
         self.failures = failures
@@ -100,6 +103,8 @@ async def test_circuit_opens_after_threshold() -> None:
 
 class BlockingModel:
     name = "blocking"
+    model_name = "blocking"
+    capabilities = ModelCapabilities("fake", "fake", True, True, "not_provided")
 
     def __init__(self) -> None:
         self.entered = asyncio.Event()
@@ -113,6 +118,8 @@ class BlockingModel:
 
 class PartialFailureModel:
     name = "partial-failure"
+    model_name = "partial-failure"
+    capabilities = ModelCapabilities("fake", "fake", True, True, "not_provided")
 
     def __init__(self) -> None:
         self.calls = 0

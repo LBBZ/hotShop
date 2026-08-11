@@ -208,9 +208,10 @@ def test_runtime_private_key_permissions_and_process_identity(
         "-w",
         "/run/public-keys/verification-public.pem",
     )
-    assert volume_metadata(
-        runtime_container["private_volume"], "agent-service-private.pem"
-    ) == runtime_container["source_before"]
+    assert (
+        volume_metadata(runtime_container["private_volume"], "agent-service-private.pem")
+        == runtime_container["source_before"]
+    )
 
 
 def test_runtime_logs_and_api_do_not_expose_private_key(

@@ -388,7 +388,7 @@ def create_app(
         if not await actual_container.store.ready():
             response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
             return {"status": "NOT_READY"}
-        return {"status": "READY", "provider": actual_settings.provider}
+        return {"status": "READY", "provider": actual_settings.model_provider}
 
     @app.get("/metrics", include_in_schema=False)
     async def metrics() -> Response:

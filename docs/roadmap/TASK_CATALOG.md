@@ -418,7 +418,8 @@
 ### 工作范围
 
 - FastAPI + LangGraph 工程、依赖锁定、配置分层、健康检查和 Dockerfile。
-- 定义 Model Provider；实现 FakeModel 和百炼 Qwen 适配器，真实 Key 仅从环境读取。
+- 定义厂商无关 ModelProvider 与只读 Registry；实现 FakeModel、推荐的 DeepSeek 和百炼 Qwen
+  适配器，真实 Key 仅从活动 Provider 的环境变量读取，不做自动 fallback。
 - 建立会话、消息、结构化 SSE 事件和取消机制。
 - 用户端与管理端使用不同入口、audience 校验、工具注册表和系统策略。
 - 超时、重试、熔断、并发限制和 token/费用指标。
@@ -472,6 +473,8 @@
 ### 工作范围
 
 - Docker 集成 Qdrant；使用百炼 Embedding Provider 抽象和测试替身。
+- ModelProvider 与 EmbeddingProvider 独立；Fake/DeepSeek/Qwen 共享 Provider contract，CI 仅用
+  FakeModel，真实模型适配器只使用 MockTransport 验证。
 - 构建 FAQ、售后政策、活动规则的切分、版本、元数据和索引流程。
 - 以租户/可见性/文档类型等元数据过滤，删除或更新文档时可重建。
 - 回答提供文档引用；低置信度时明确不知道或转实时工具。
@@ -483,6 +486,7 @@
 - 无真实 Embedding Key 时可用固定测试向量完成 CI。
 - 恶意文档中的“指令”不会改变工具权限。
 - 评测结果可机器读取，有明确阈值并纳入 CI 的快速子集。
+- 动态事实的中英文和口语改写路由 100%，无法安全分类时拒答而不是退回 RAG。
 
 ---
 

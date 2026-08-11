@@ -12,9 +12,12 @@ flowchart LR
     A -->|"User Access + one-time client assertion"| P["Java portal token exchange"]
     P -->|"Agent Delegation (≤5 min)"| A
     A -->|"short-lived session state"| R["redis-cache DB 0"]
-    A -->|"provider abstraction"| F["FakeModel (default)"]
-    A -. "explicit qwen mode" .-> Q["Bailian Qwen"]
+    A -->|"static FAQ / policy / rule only"| V["Qdrant versioned alias"]
+    A -->|"read-only provider factory"| F["FakeModel (test/CI default)"]
+    A -. "recommended real provider" .-> D["DeepSeek"]
+    A -. "supported optional provider" .-> Q["Bailian Qwen"]
     J["Java transaction/query paths"] -. "no Agent dependency" .-> A
+    J -. "no Qdrant dependency" .-> V
 ```
 
 ## 身份域
@@ -59,6 +62,12 @@ SSE 队列写入而不是 provider 内部，provider 的 `finally` 和并发 lim
 LangGraph 负责在 User/Administrator 两条边界施加不同静态策略，再将模型输入交给
 `ModelProvider`。TASK-15 的两套 `ToolRegistry` 均为空，不接受 URL、SQL、Shell 或动态工具名。
 
+进程只从可信启动配置 `AGENT_MODEL_PROVIDER=fake|deepseek|qwen` 选择一个 Provider，不按请求切换，
+也不自动跨厂商 fallback。Container 只调用只读 factory；AgentService、LangGraph、RAG 和
+ToolRegistry 不包含厂商 URL、模型名、Key 或厂商条件分支。DeepSeek 与 Qwen 共享
+OpenAI-compatible Chat Completions/SSE transport，adapter 只声明默认配置、扩展字段和 capability。
+DeepSeek 显式关闭 thinking，任何 `reasoning_content` 都在 transport 层忽略。
+
 运行 SSE 只允许：
 
 `session.created`、`message.started`、`message.delta`、`message.completed`、`usage`、`error`、`done`。
@@ -69,8 +78,14 @@ LangGraph 负责在 User/Administrator 两条边界施加不同静态策略，�
 对应结束标记。正常完成显式 flush；取消和异常直接丢弃未决候选，禁止把尚未判定安全的 carry 输出。
 因此敏感值即使跨任意模型 chunk，也不能由客户端重组出来。
 
-系统策略、隐藏推理、凭据和完整模型请求不进入事件或日志。Prometheus 记录 provider 维度的输入/
-输出 token、估算费用、活跃运行数和最终状态，不记录 prompt 或响应正文。
+系统策略、隐藏推理、凭据和完整模型请求不进入事件或日志。Prometheus 只使用代码 allowlist 的
+provider/model 维度记录输入/输出 token、估算费用、活跃运行数和最终状态，不记录 prompt 或响应正文。
+
+TASK-17 在模型之前增加代码拥有的事实路由。FAQ、售后政策、静态活动规则才进入 Qdrant；价格、
+实时库存、当前可售性、本人订单和预约状态强制进入 TASK-16 工具。检索 filter 的 tenant、visibility、
+documentType、有效期和 limit 全由服务端根据已验证身份构造。检索正文作为“不可信证据”放在固定策略
+之后，RAG 分支禁止工具调用；`rag.completed` 只返回结构化引用。无命中、低分或 Qdrant 故障时明确
+拒答/降级，不用静态知识猜动态事实。完整设计见 `docs/architecture/agent-rag.md`。
 
 ## 可用性保护
 

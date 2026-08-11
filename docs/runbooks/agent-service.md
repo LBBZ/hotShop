@@ -3,12 +3,21 @@
 ## 1. 边界与默认模式
 
 Agent 是独立 Python 进程，不是交易核心的一部分。它只依赖 `redis-cache` 保存可淘汰的短期会话状态，
-不访问 MySQL、`redis-seckill`、RabbitMQ，也不加入服务注册、配置中心或消息总线。Agent、Qwen 或
+不访问 MySQL、`redis-seckill`、RabbitMQ，也不加入服务注册、配置中心或消息总线。Agent、模型 Provider 或
 `redis-cache` 故障时，停止或降级的是 Agent 入口；Java 的普通交易和查询入口不依赖该进程。
 
-默认 `AGENT_PROVIDER=fake`。FakeModel 不读取付费模型 Key，输出固定且可重复，适用于本地、测试和 CI。
-只有显式设置 `AGENT_PROVIDER=qwen` 时才要求从进程环境读取 `AGENT_QWEN_API_KEY`。Key 不得写入仓库、
-镜像、日志或请求。
+Qdrant 是仅用于 FAQ、售后政策和静态活动规则的可选 Agent 依赖。动态价格、库存、可售性、订单、
+预约和支付事实始终走固定 Java 工具。Qdrant 故障只让静态问题明确降级，动态工具仍可运行；详见
+`docs/runbooks/agent-rag.md`。
+
+默认 `AGENT_MODEL_PROVIDER=fake`。FakeModel 不读取付费模型 Key，输出固定且可重复，适用于本地、测试
+和 CI。推荐的真实 Provider 是 DeepSeek：设置 `AGENT_MODEL_PROVIDER=deepseek` 并从进程环境注入
+`AGENT_DEEPSEEK_API_KEY`；模型默认 `deepseek-v4-flash`，可信配置可改为 `deepseek-v4-pro`。Qwen 仍受
+支持：设置 `AGENT_MODEL_PROVIDER=qwen` 并注入独立的 `AGENT_QWEN_API_KEY`。只校验活动 Provider 的
+Key，不按请求切换，也不自动 fallback。Key 不得写入仓库、镜像、日志或请求。
+
+DeepSeek 请求显式携带 `thinking={"type":"disabled"}`，返回中的 `reasoning_content` 被丢弃。Qwen
+请求不携带该字段。模型 Provider 与 `AGENT_EMBEDDING_PROVIDER=deterministic|bailian` 完全独立。
 
 ## 2. 本地启动
 
@@ -28,6 +37,13 @@ docker compose --env-file .env.example --profile app --profile agent up -d --bui
 
 ```powershell
 docker compose --env-file .env.example --profile agent up -d --build redis-cache agent-service
+```
+
+首次启动或知识变更后执行原子索引：
+
+```powershell
+docker compose --env-file .env.example --profile agent exec -T agent-service python -m hotshop_agent.index_cli validate
+docker compose --env-file .env.example --profile agent exec -T agent-service python -m hotshop_agent.index_cli rebuild
 ```
 
 健康检查：
@@ -92,17 +108,14 @@ thinking/analysis/system 标签。候选最多 4096 个 Unicode 字符；超限 
 ## 6. 验证命令
 
 ```powershell
-Set-Location agent
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements-dev.lock -e .
-.\.venv\Scripts\ruff.exe check .
-.\.venv\Scripts\ruff.exe format --check .
-.\.venv\Scripts\mypy.exe src
-.\.venv\Scripts\pytest.exe
-Set-Location ..
-docker build -f agent/Dockerfile agent
+docker build --target test -t hotshop-agent:test -f agent/Dockerfile agent
+docker run --rm --entrypoint python hotshop-agent:test -m ruff check .
+docker run --rm --entrypoint python hotshop-agent:test -m ruff format --check .
+docker run --rm --entrypoint python hotshop-agent:test -m mypy --no-incremental src tests
+docker run --rm --entrypoint python hotshop-agent:test -m pytest -p no:cacheprovider
 docker compose --env-file .env.example config --quiet
 docker compose --env-file .env.example --profile agent config --quiet
 ```
 
-CI 必须保持 `AGENT_PROVIDER=fake`；Qwen 测试只使用 `httpx.MockTransport`，不得配置真实 Key。
+CI 必须保持 `AGENT_MODEL_PROVIDER=fake`；DeepSeek、Qwen 和 Bailian 测试只使用
+`httpx.MockTransport`，不得配置真实 Key。

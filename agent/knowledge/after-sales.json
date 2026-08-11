@@ -1,0 +1,13 @@
+{
+  "tenantId": "hotshop",
+  "documentId": "after-sales-general",
+  "documentVersion": "1.0.0",
+  "documentType": "AFTER_SALES_POLICY",
+  "visibility": "PUBLIC",
+  "title": "通用售后申请政策",
+  "source": "https://docs.hotshop.local/policies/after-sales",
+  "locale": "zh-CN",
+  "effectiveFrom": null,
+  "effectiveUntil": null,
+  "content": "售后申请应从订单详情页发起，并按页面要求说明原因。是否支持退换、所需凭证和处理期限以商品类别及下单时展示的有效政策为准。提交前请保护个人隐私，不要在说明中填写密码或完整支付凭据。After-sales return policy requests start from the Order details page."
+}

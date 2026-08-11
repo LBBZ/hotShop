@@ -55,7 +55,7 @@ $environmentOverrides = [ordered]@{
     AGENT_IMAGE = $ownedImages[2]
     HOTSHOP_KEY_DIR = $keyRoot
     HOTSHOP_SECURE_COOKIES = "false"
-    AGENT_PROVIDER = "fake"
+    AGENT_MODEL_PROVIDER = "fake"
     AGENT_QWEN_API_KEY = ""
     HOTSHOP_TRACE_SAMPLING_PROBABILITY = "1.0"
 }

@@ -12,7 +12,7 @@ from hotshop_agent.providers import (
     ModelUsage,
     QwenModel,
 )
-from hotshop_agent.providers.qwen import MAX_TOOL_CALL_BYTES
+from hotshop_agent.providers.openai_compatible import MAX_TOOL_CALL_BYTES
 
 
 def sse(*contents: str, usage: bool = True) -> str:

@@ -83,9 +83,7 @@ class TraceState:
 
 
 class Telemetry:
-    def __init__(
-        self, settings: Settings, client: httpx.AsyncClient | None = None
-    ) -> None:
+    def __init__(self, settings: Settings, client: httpx.AsyncClient | None = None) -> None:
         self._settings = settings
         self._client = client or httpx.AsyncClient()
         self._owns_client = client is None
@@ -106,19 +104,13 @@ class Telemetry:
         tags: dict[str, str] | None = None,
         remote_parent: TraceState | None = None,
     ) -> AsyncIterator[TraceState]:
-        sampled = secrets.randbelow(1_000_000) < int(
-            self._settings.trace_sample_ratio * 1_000_000
-        )
+        sampled = secrets.randbelow(1_000_000) < int(self._settings.trace_sample_ratio * 1_000_000)
         current_trace = TRACE_ID.get()
         current_span = SPAN_ID.get()
         trace_id = (
-            remote_parent.trace_id
-            if remote_parent
-            else current_trace or secrets.token_hex(16)
+            remote_parent.trace_id if remote_parent else current_trace or secrets.token_hex(16)
         )
-        parent_id = (
-            remote_parent.span_id if remote_parent else current_span or None
-        )
+        parent_id = remote_parent.span_id if remote_parent else current_span or None
         span_id = secrets.token_hex(8)
         flags = remote_parent.flags if remote_parent else ("01" if sampled else "00")
         trace_token = TRACE_ID.set(trace_id)

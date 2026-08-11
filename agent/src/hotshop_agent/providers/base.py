@@ -3,7 +3,34 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
+
+ReasoningContentHandling = Literal["not_provided", "ignored"]
+ALLOWED_MODEL_METADATA = frozenset(
+    {
+        ("fake", "fake"),
+        ("deepseek", "deepseek-v4-flash"),
+        ("deepseek", "deepseek-v4-pro"),
+        ("qwen", "qwen-plus"),
+        ("qwen", "qwen-max"),
+    }
+)
+
+
+@dataclass(frozen=True)
+class ModelCapabilities:
+    provider_name: str
+    model_name: str
+    streaming: bool
+    custom_json_tool_selection: bool
+    reasoning_content_handling: ReasoningContentHandling
+
+
+def validate_model_capabilities(capabilities: ModelCapabilities) -> None:
+    if (capabilities.provider_name, capabilities.model_name) not in ALLOWED_MODEL_METADATA:
+        raise ValueError("model provider metadata is not allowlisted")
+    if not capabilities.streaming or not capabilities.custom_json_tool_selection:
+        raise ValueError("model provider lacks required capabilities")
 
 
 @dataclass(frozen=True)
@@ -56,6 +83,8 @@ class ModelPermanentError(ModelError):
 
 class ModelProvider(Protocol):
     name: str
+    model_name: str
+    capabilities: ModelCapabilities
 
     def stream(self, prompt: str) -> AsyncIterator[ModelChunk]:
         """Stream final answer deltas and one usage item."""

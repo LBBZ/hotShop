@@ -28,7 +28,7 @@ def context(token: str, verifier: JwtVerifier, kind: IdentityKind) -> ToolContex
 
 def user_registry(
     settings: Any,
-    transport: httpx.BaseTransport,
+    transport: httpx.AsyncBaseTransport,
 ) -> tuple[ToolRegistry, httpx.AsyncClient]:
     client = httpx.AsyncClient(transport=transport)
     return (
@@ -41,6 +41,18 @@ def user_registry(
         ),
         client,
     )
+
+
+def record_request(
+    request: httpx.Request,
+    calls: list[httpx.Request],
+    *,
+    json_body: dict[str, Any] | None = None,
+) -> httpx.Response:
+    calls.append(request)
+    if json_body is None:
+        return httpx.Response(200)
+    return httpx.Response(200, json=json_body)
 
 
 @pytest.mark.asyncio
@@ -111,7 +123,7 @@ async def test_unknown_dynamic_and_high_risk_tools_never_reach_http(
     calls: list[httpx.Request] = []
     registry, client = user_registry(
         settings,
-        httpx.MockTransport(lambda request: calls.append(request) or httpx.Response(200)),
+        httpx.MockTransport(lambda request: record_request(request, calls)),
     )
     token = issue_token(
         IdentityKind.DELEGATION,
@@ -160,7 +172,7 @@ async def test_strict_schema_rejects_extra_type_confusion_limits_and_illegal_ids
     calls: list[httpx.Request] = []
     registry, client = user_registry(
         settings,
-        httpx.MockTransport(lambda request: calls.append(request) or httpx.Response(200)),
+        httpx.MockTransport(lambda request: record_request(request, calls)),
     )
     token = issue_token(
         IdentityKind.DELEGATION,
@@ -201,7 +213,7 @@ async def test_each_call_revalidates_scope_audience_azp_type_and_delegated_user(
     calls: list[httpx.Request] = []
     registry, client = user_registry(
         settings,
-        httpx.MockTransport(lambda request: calls.append(request) or httpx.Response(200)),
+        httpx.MockTransport(lambda request: record_request(request, calls)),
     )
     valid_token = issue_token(IdentityKind.DELEGATION)
     principal = JwtVerifier(settings).verify(valid_token, IdentityKind.DELEGATION)
@@ -229,7 +241,7 @@ async def test_administrator_token_cannot_call_user_tool(
     calls: list[httpx.Request] = []
     registry, client = user_registry(
         settings,
-        httpx.MockTransport(lambda request: calls.append(request) or httpx.Response(200)),
+        httpx.MockTransport(lambda request: record_request(request, calls)),
     )
     admin = issue_token(IdentityKind.ADMINISTRATOR)
     try:
@@ -302,7 +314,7 @@ async def test_all_administrator_tools_are_low_risk_and_fixed(
     calls: list[httpx.Request] = []
     client = httpx.AsyncClient(
         transport=httpx.MockTransport(
-            lambda request: calls.append(request) or httpx.Response(200, json={"ok": True})
+            lambda request: record_request(request, calls, json_body={"ok": True})
         )
     )
     registry = ToolRegistry(

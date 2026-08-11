@@ -1,0 +1,13 @@
+{
+  "tenantId": "hotshop",
+  "documentId": "campaign-general-rules",
+  "documentVersion": "1.0.0",
+  "documentType": "CAMPAIGN_RULE",
+  "visibility": "PUBLIC",
+  "title": "秒杀活动通用规则",
+  "source": "https://docs.hotshop.local/campaigns/general-rules",
+  "locale": "zh-CN",
+  "effectiveFrom": null,
+  "effectiveUntil": null,
+  "content": "秒杀活动采用一人一单限制，提交成功仅表示获得处理资格，不等于订单已经创建。活动说明属于静态规则；具体商品是否可售、实时库存和预约处理结果必须以系统实时查询为准。"
+}

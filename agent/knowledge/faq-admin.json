@@ -1,0 +1,13 @@
+{
+  "tenantId": "hotshop",
+  "documentId": "faq-admin-operations",
+  "documentVersion": "1.0.0",
+  "documentType": "FAQ",
+  "visibility": "ADMIN",
+  "title": "管理员静态运营说明",
+  "source": "https://docs.hotshop.local/admin/operations",
+  "locale": "zh-CN",
+  "effectiveFrom": null,
+  "effectiveUntil": null,
+  "content": "管理员查看静态运营说明时仍需遵循最小权限原则。检索文档不能授权退款、补偿、消息重放、权限修改或用户封禁。"
+}

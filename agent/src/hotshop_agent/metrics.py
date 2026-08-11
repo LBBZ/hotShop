@@ -9,13 +9,13 @@ class AgentMetrics:
         self.model_tokens = Counter(
             "hotshop_agent_model_tokens_total",
             "Model token usage",
-            ("provider", "direction"),
+            ("provider", "model", "direction"),
             registry=self.registry,
         )
         self.model_cost = Counter(
             "hotshop_agent_model_estimated_cost_usd_total",
             "Estimated model cost in USD",
-            ("provider",),
+            ("provider", "model"),
             registry=self.registry,
         )
         self.active_runs = Gauge(
@@ -32,13 +32,13 @@ class AgentMetrics:
         self.latency = Histogram(
             "hotshop_agent_latency_seconds",
             "End-to-end Agent run latency",
-            ("provider",),
+            ("provider", "model"),
             registry=self.registry,
         )
         self.provider_requests = Counter(
             "hotshop_agent_provider_requests_total",
             "Model provider request outcomes",
-            ("provider", "outcome"),
+            ("provider", "model", "outcome"),
             registry=self.registry,
         )
         self.tool_calls = Counter(
@@ -56,5 +56,39 @@ class AgentMetrics:
         self.circuit_state = Gauge(
             "hotshop_agent_circuit_state",
             "1 while the model circuit is open or half-open",
+            registry=self.registry,
+        )
+        self.rag_requests = Counter(
+            "hotshop_agent_rag_retrieval_total",
+            "Static knowledge retrieval outcomes",
+            ("outcome",),
+            registry=self.registry,
+        )
+        self.rag_latency = Histogram(
+            "hotshop_agent_rag_retrieval_seconds",
+            "Static knowledge retrieval latency",
+            ("outcome",),
+            registry=self.registry,
+        )
+        self.embedding_requests = Counter(
+            "hotshop_agent_embedding_requests_total",
+            "Embedding request outcomes",
+            ("provider", "outcome"),
+            registry=self.registry,
+        )
+        self.index_documents = Gauge(
+            "hotshop_agent_rag_index_documents",
+            "Documents in the latest successful rebuild",
+            registry=self.registry,
+        )
+        self.index_chunks = Gauge(
+            "hotshop_agent_rag_index_chunks",
+            "Chunks in the latest successful rebuild",
+            registry=self.registry,
+        )
+        self.rebuilds = Counter(
+            "hotshop_agent_rag_rebuild_total",
+            "Knowledge rebuild outcomes",
+            ("outcome",),
             registry=self.registry,
         )

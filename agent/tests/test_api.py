@@ -16,7 +16,8 @@ from hotshop_agent.api import create_app
 from hotshop_agent.config import Settings
 from hotshop_agent.container import Container, build_container
 from hotshop_agent.domain import IdentityKind
-from hotshop_agent.providers.base import ModelChunk, ModelDelta, ModelUsage
+from hotshop_agent.providers.base import ModelCapabilities, ModelChunk, ModelDelta, ModelUsage
+from hotshop_agent.providers.fake import FakeModel
 from hotshop_agent.security import ADMIN_AUTHORITIES
 
 
@@ -26,6 +27,54 @@ def auth(token: str) -> dict[str, str]:
 
 def parse_sse(body: str) -> list[dict[str, Any]]:
     return [json.loads(line[6:]) for line in body.splitlines() if line.startswith("data: ")]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("provider_name", "model_name", "reasoning"),
+    (
+        ("fake", "fake", "not_provided"),
+        ("deepseek", "deepseek-v4-flash", "ignored"),
+        ("qwen", "qwen-plus", "not_provided"),
+    ),
+)
+async def test_provider_switch_does_not_change_auth_scope_or_resource_ownership(
+    provider_name: str,
+    model_name: str,
+    reasoning: Any,
+    settings: Settings,
+    issue_token: Any,
+    key_material: dict[str, tuple[Any, Any, bytes]],
+) -> None:
+    provider = FakeModel()
+    provider.capabilities = ModelCapabilities(provider_name, model_name, True, True, reasoning)
+    calls: list[dict[str, Any]] = []
+    client, container = await make_client(
+        settings, issue_token, key_material, calls, provider=provider
+    )
+    try:
+        owner = issue_token(IdentityKind.USER)
+        other = issue_token(IdentityKind.USER, claim_overrides={"sub": "43"})
+        session = await client.post("/api/v1/agent/sessions", json={}, headers=auth(owner))
+        assert session.status_code == 201
+        assert session.json()["scopes"] == [
+            "catalog:read",
+            "orders:self:read",
+            "purchase-drafts:create",
+            "reservations:self:read",
+        ]
+        denied = await client.post(
+            f"/api/v1/agent/sessions/{session.json()['id']}/messages",
+            json={"content": "my order"},
+            headers=auth(other),
+        )
+        assert denied.status_code == 403
+        assert (
+            await client.post("/admin/api/v1/agent/sessions", json={}, headers=auth(owner))
+        ).status_code == 401
+    finally:
+        await client.aclose()
+        await container.close()
 
 
 def exchange_transport(
@@ -222,10 +271,7 @@ async def test_administrator_session_accepts_complete_authority_set_over_real_ht
 @pytest.mark.parametrize(
     "authorities",
     (
-        *(
-            sorted(ADMIN_AUTHORITIES - {missing})
-            for missing in sorted(ADMIN_AUTHORITIES)
-        ),
+        *(sorted(ADMIN_AUTHORITIES - {missing}) for missing in sorted(ADMIN_AUTHORITIES)),
         [],
         [*sorted(ADMIN_AUTHORITIES), "PERM_ADMIN_UNRECOGNIZED"],
         [
@@ -327,6 +373,8 @@ async def test_administrator_session_rejects_cryptographic_and_domain_drift_over
 
 class SensitiveModel:
     name = "sensitive-test"
+    model_name = "sensitive-test"
+    capabilities = ModelCapabilities("fake", "fake", True, True, "not_provided")
 
     async def stream(self, _prompt: str) -> AsyncIterator[ModelChunk]:
         yield ModelDelta(
@@ -596,11 +644,7 @@ async def test_fake_model_executes_real_http_tool_graph_without_sse_data_leak(
         assert headers["x-request-id"]
         assert headers["traceparent"]
         search_visible = json.loads(
-            "".join(
-                event["data"]["delta"]
-                for event in events
-                if event["type"] == "message.delta"
-            )
+            "".join(event["data"]["delta"] for event in events if event["type"] == "message.delta")
         )
         assert search_visible["tool"] == "search_products"
         assert search_visible["result"]["items"][0]["name"] == (
@@ -615,9 +659,7 @@ async def test_fake_model_executes_real_http_tool_graph_without_sse_data_leak(
                     "content": json.dumps(
                         {
                             "tool": "create_purchase_draft",
-                            "arguments": {
-                                "items": [{"productId": "1", "quantity": 2}]
-                            },
+                            "arguments": {"items": [{"productId": "1", "quantity": 2}]},
                         }
                     )
                 },
@@ -639,9 +681,7 @@ async def test_fake_model_executes_real_http_tool_graph_without_sse_data_leak(
         ).text
         draft_events = parse_sse(draft_body)
         visible = "".join(
-            event["data"]["delta"]
-            for event in draft_events
-            if event["type"] == "message.delta"
+            event["data"]["delta"] for event in draft_events if event["type"] == "message.delta"
         )
         visible_draft = json.loads(visible)
         assert visible_draft == {

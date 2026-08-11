@@ -33,9 +33,20 @@ def test_redis_namespace_is_fixed() -> None:
         Settings(environment="test", redis_key_prefix="other:")
 
 
-def test_user_and_admin_tool_registries_are_empty_and_static() -> None:
-    assert USER_TOOLS.tools == ()
-    assert ADMIN_TOOLS.tools == ()
+def test_user_and_admin_tool_registries_are_fixed_and_static() -> None:
+    assert USER_TOOLS.tools == (
+        "search_products",
+        "get_product",
+        "compare_products",
+        "list_my_orders",
+        "list_my_reservations",
+        "create_purchase_draft",
+    )
+    assert ADMIN_TOOLS.tools == (
+        "read_statistics",
+        "read_anomaly_summary",
+        "create_configuration_draft",
+    )
     with pytest.raises(LookupError):
         USER_TOOLS.resolve("shell")
     with pytest.raises(LookupError):

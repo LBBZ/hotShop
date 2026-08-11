@@ -15,30 +15,34 @@
 
 import * as runtime from '../runtime';
 import type {
+  AdminOperationReasonRequest,
+  AdminProductMutationRequest,
   ApiProblem,
   CursorPageResponseProductResponse,
   ProductResponse,
-  ProductWriteRequest,
 } from '../models/index';
 import {
+    AdminOperationReasonRequestFromJSON,
+    AdminOperationReasonRequestToJSON,
+    AdminProductMutationRequestFromJSON,
+    AdminProductMutationRequestToJSON,
     ApiProblemFromJSON,
     ApiProblemToJSON,
     CursorPageResponseProductResponseFromJSON,
     CursorPageResponseProductResponseToJSON,
     ProductResponseFromJSON,
     ProductResponseToJSON,
-    ProductWriteRequestFromJSON,
-    ProductWriteRequestToJSON,
 } from '../models/index';
 
 export interface AddProductRequest {
-    productWriteRequest: ProductWriteRequest;
+    adminProductMutationRequest: AdminProductMutationRequest;
     xRequestId?: string;
     traceparent?: string;
 }
 
 export interface DeleteProductRequest {
     productId: string;
+    adminOperationReasonRequest: AdminOperationReasonRequest;
     xRequestId?: string;
     traceparent?: string;
 }
@@ -62,7 +66,7 @@ export interface SearchProductsRequest {
 
 export interface UpdateProductRequest {
     productId: string;
-    productWriteRequest: ProductWriteRequest;
+    adminProductMutationRequest: AdminProductMutationRequest;
     xRequestId?: string;
     traceparent?: string;
 }
@@ -77,7 +81,7 @@ export interface AdminProductsApiInterface {
     /**
      *
      * @summary Create a Catalog Product
-     * @param {ProductWriteRequest} productWriteRequest
+     * @param {AdminProductMutationRequest} adminProductMutationRequest
      * @param {string} [xRequestId] Caller-supplied correlation ID. Invalid values are replaced by the server.
      * @param {string} [traceparent] W3C trace context. Its trace ID is distinct from X-Request-Id.
      * @param {*} [options] Override http request option.
@@ -95,6 +99,7 @@ export interface AdminProductsApiInterface {
      *
      * @summary Soft-delete a Catalog Product
      * @param {string} productId
+     * @param {AdminOperationReasonRequest} adminOperationReasonRequest
      * @param {string} [xRequestId] Caller-supplied correlation ID. Invalid values are replaced by the server.
      * @param {string} [traceparent] W3C trace context. Its trace ID is distinct from X-Request-Id.
      * @param {*} [options] Override http request option.
@@ -152,7 +157,7 @@ export interface AdminProductsApiInterface {
      *
      * @summary Replace a Catalog Product
      * @param {string} productId
-     * @param {ProductWriteRequest} productWriteRequest
+     * @param {AdminProductMutationRequest} adminProductMutationRequest
      * @param {string} [xRequestId] Caller-supplied correlation ID. Invalid values are replaced by the server.
      * @param {string} [traceparent] W3C trace context. Its trace ID is distinct from X-Request-Id.
      * @param {*} [options] Override http request option.
@@ -177,10 +182,10 @@ export class AdminProductsApi extends runtime.BaseAPI implements AdminProductsAp
      * Create a Catalog Product
      */
     async addProductRaw(requestParameters: AddProductRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProductResponse>> {
-        if (requestParameters['productWriteRequest'] == null) {
+        if (requestParameters['adminProductMutationRequest'] == null) {
             throw new runtime.RequiredError(
-                'productWriteRequest',
-                'Required parameter "productWriteRequest" was null or undefined when calling addProduct().'
+                'adminProductMutationRequest',
+                'Required parameter "adminProductMutationRequest" was null or undefined when calling addProduct().'
             );
         }
 
@@ -214,7 +219,7 @@ export class AdminProductsApi extends runtime.BaseAPI implements AdminProductsAp
             method: 'POST',
             headers: headerParameters,
             query: queryParameters,
-            body: ProductWriteRequestToJSON(requestParameters['productWriteRequest']),
+            body: AdminProductMutationRequestToJSON(requestParameters['adminProductMutationRequest']),
         }, initOverrides);
 
         return new runtime.JSONApiResponse(response, (jsonValue) => ProductResponseFromJSON(jsonValue));
@@ -239,9 +244,18 @@ export class AdminProductsApi extends runtime.BaseAPI implements AdminProductsAp
             );
         }
 
+        if (requestParameters['adminOperationReasonRequest'] == null) {
+            throw new runtime.RequiredError(
+                'adminOperationReasonRequest',
+                'Required parameter "adminOperationReasonRequest" was null or undefined when calling deleteProduct().'
+            );
+        }
+
         const queryParameters: any = {};
 
         const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
 
         if (requestParameters['xRequestId'] != null) {
             headerParameters['X-Request-Id'] = String(requestParameters['xRequestId']);
@@ -268,6 +282,7 @@ export class AdminProductsApi extends runtime.BaseAPI implements AdminProductsAp
             method: 'DELETE',
             headers: headerParameters,
             query: queryParameters,
+            body: AdminOperationReasonRequestToJSON(requestParameters['adminOperationReasonRequest']),
         }, initOverrides);
 
         return new runtime.VoidApiResponse(response);
@@ -415,10 +430,10 @@ export class AdminProductsApi extends runtime.BaseAPI implements AdminProductsAp
             );
         }
 
-        if (requestParameters['productWriteRequest'] == null) {
+        if (requestParameters['adminProductMutationRequest'] == null) {
             throw new runtime.RequiredError(
-                'productWriteRequest',
-                'Required parameter "productWriteRequest" was null or undefined when calling updateProduct().'
+                'adminProductMutationRequest',
+                'Required parameter "adminProductMutationRequest" was null or undefined when calling updateProduct().'
             );
         }
 
@@ -453,7 +468,7 @@ export class AdminProductsApi extends runtime.BaseAPI implements AdminProductsAp
             method: 'PUT',
             headers: headerParameters,
             query: queryParameters,
-            body: ProductWriteRequestToJSON(requestParameters['productWriteRequest']),
+            body: AdminProductMutationRequestToJSON(requestParameters['adminProductMutationRequest']),
         }, initOverrides);
 
         return new runtime.JSONApiResponse(response, (jsonValue) => ProductResponseFromJSON(jsonValue));

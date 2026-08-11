@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     run_ttl_seconds: int = Field(default=900, ge=60, le=86400)
 
     portal_base_url: str = "http://localhost:8080"
+    administrator_base_url: str = "http://localhost:8088"
+    tool_timeout_seconds: float = Field(default=3.0, gt=0, le=30)
     token_exchange_path: str = "/agent/api/v1/auth/token-exchange"  # noqa: S105
     token_exchange_timeout_seconds: float = Field(default=3.0, gt=0, le=30)
     assertion_issuer: str = "https://agent.hotshop.local/service"
@@ -71,7 +73,12 @@ class Settings(BaseSettings):
     zipkin_endpoint: str = "http://localhost:9411/api/v2/spans"
     trace_sample_ratio: float = Field(default=1.0, ge=0.0, le=1.0)
 
-    @field_validator("portal_base_url", "qwen_base_url", "zipkin_endpoint")
+    @field_validator(
+        "portal_base_url",
+        "administrator_base_url",
+        "qwen_base_url",
+        "zipkin_endpoint",
+    )
     @classmethod
     def validate_fixed_http_url(cls, value: str) -> str:
         if not (value.startswith("http://") or value.startswith("https://")):

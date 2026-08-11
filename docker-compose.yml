@@ -243,6 +243,8 @@ services:
       HOTSHOP_USER_ACCESS_TTL_SECONDS: ${HOTSHOP_USER_ACCESS_TTL_SECONDS:-900}
       HOTSHOP_AGENT_DELEGATION_TTL_SECONDS: ${HOTSHOP_AGENT_DELEGATION_TTL_SECONDS:-300}
       HOTSHOP_AGENT_ASSERTION_MAX_TTL_SECONDS: ${HOTSHOP_AGENT_ASSERTION_MAX_TTL_SECONDS:-60}
+      HOTSHOP_AGENT_PURCHASE_DRAFT_TTL: ${HOTSHOP_AGENT_PURCHASE_DRAFT_TTL:-10m}
+      HOTSHOP_AGENT_PURCHASE_CONFIRMATION_TTL: ${HOTSHOP_AGENT_PURCHASE_CONFIRMATION_TTL:-2m}
       HOTSHOP_REFRESH_TTL_SECONDS: ${HOTSHOP_REFRESH_TTL_SECONDS:-604800}
       HOTSHOP_TRUST_FORWARDED_HEADERS: ${HOTSHOP_TRUST_FORWARDED_HEADERS:-false}
       HOTSHOP_TRUSTED_PROXY_ADDRESSES: ${HOTSHOP_TRUSTED_PROXY_ADDRESSES:-}
@@ -371,8 +373,10 @@ services:
       AGENT_SESSION_TTL_SECONDS: ${AGENT_SESSION_TTL_SECONDS:-3600}
       AGENT_RUN_TTL_SECONDS: ${AGENT_RUN_TTL_SECONDS:-900}
       AGENT_PORTAL_BASE_URL: http://portal-service:8080
+      AGENT_ADMINISTRATOR_BASE_URL: http://admin-service:8088
+      AGENT_TOOL_TIMEOUT_SECONDS: ${AGENT_TOOL_TIMEOUT_SECONDS:-3}
       AGENT_TOKEN_EXCHANGE_TIMEOUT_SECONDS: ${AGENT_TOKEN_EXCHANGE_TIMEOUT_SECONDS:-3}
-      AGENT_ASSERTION_PRIVATE_KEY_PATH: /run/secrets/hotshop/agent-service-private.pem
+      AGENT_ASSERTION_PRIVATE_KEY_SOURCE_PATH: /run/secrets/hotshop/agent-service-private.pem
       AGENT_USER_PUBLIC_KEYS: '{"user-local-1":"/run/secrets/hotshop/user-public.pem"}'
       AGENT_ADMINISTRATOR_PUBLIC_KEYS: '{"administrator-local-1":"/run/secrets/hotshop/administrator-public.pem"}'
       AGENT_DELEGATION_PUBLIC_KEYS: '{"agent-delegation-local-1":"/run/secrets/hotshop/agent-delegation-public.pem"}'
@@ -395,6 +399,8 @@ services:
       - ${HOTSHOP_KEY_DIR:-./.local/keys/hotshop}/user-public.pem:/run/secrets/hotshop/user-public.pem:ro
       - ${HOTSHOP_KEY_DIR:-./.local/keys/hotshop}/administrator-public.pem:/run/secrets/hotshop/administrator-public.pem:ro
       - ${HOTSHOP_KEY_DIR:-./.local/keys/hotshop}/agent-delegation-public.pem:/run/secrets/hotshop/agent-delegation-public.pem:ro
+    tmpfs:
+      - /run/hotshop-agent:rw,noexec,nosuid,nodev,mode=0700
     ports:
       - "${AGENT_PORT:-8090}:8090"
     depends_on:

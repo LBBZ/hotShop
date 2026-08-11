@@ -43,6 +43,9 @@ logging:
     com.real.domain.mapper: WARN
 
 management:
+  health:
+    rabbit:
+      enabled: false
   endpoints:
     web:
       exposure:

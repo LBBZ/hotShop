@@ -114,6 +114,7 @@ def issue_token(
                 "ROLE_ADMIN",
                 "PERM_ADMIN_PRODUCT_READ",
                 "PERM_ADMIN_PRODUCT_WRITE",
+                "PERM_ADMIN_FLASH_SALE_LOAD",
                 "PERM_ADMIN_ORDER_READ",
                 "PERM_ADMIN_USER_READ",
             ]

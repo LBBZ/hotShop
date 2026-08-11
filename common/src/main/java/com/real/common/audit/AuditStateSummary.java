@@ -9,5 +9,10 @@ public sealed interface AuditStateSummary permits
         OutboxReplayAuditState,
         OperationFailureAuditState,
         InventoryCompensationAuditState,
-        PaymentCallbackAuditState {
+        PaymentCallbackAuditState,
+        AdminProductMutationAuditState,
+        AdminFlashSaleActivityLoadAuditState,
+        AdminOperationFailureAuditState {
+    // Administrator operation summaries are separate DTOs so reasons can be audited
+    // without broadening legacy summaries used by other identity domains.
 }

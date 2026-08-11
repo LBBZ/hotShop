@@ -7,6 +7,10 @@ import {
   ShieldCheck,
   Users,
   LogOut,
+  CalendarClock,
+  CircleAlert,
+  ScrollText,
+  Send,
 } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useStore } from "zustand";
@@ -16,12 +20,18 @@ import type { AuthDomain } from "@/auth/auth-domain";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { logoutUser } from "@/features/auth/logout-user";
+import { apiClients } from "@/api/clients";
+import { readCookie } from "@/api/core/cookies";
 
 const icons = {
   overview: Gauge,
   orders: ClipboardList,
   catalog: Boxes,
   users: Users,
+  activities: CalendarClock,
+  exceptions: CircleAlert,
+  outbox: Send,
+  audit: ScrollText,
 };
 
 interface WorkspaceShellProps {
@@ -72,6 +82,7 @@ export function WorkspaceShell({
               <NavLink
                 key={item.to}
                 to={item.to}
+                aria-label={item.label}
                 end={item.to.split("/").length === 2}
                 className={({ isActive }) =>
                   cn("workspace-nav-link", isActive && "is-active")
@@ -94,21 +105,27 @@ export function WorkspaceShell({
             <span>{session?.role}</span>
           </div>
           <Badge tone="healthy">内存会话</Badge>
-          {tone === "user" ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() =>
-                void logoutUser().finally(() => {
-                  void navigate("/");
-                })
-              }
-            >
-              <LogOut aria-hidden="true" />
-              退出登录
-            </Button>
-          ) : null}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              const logout =
+                tone === "user"
+                  ? logoutUser()
+                  : apiClients.admin.authentication
+                      .logout({
+                        xCSRFToken: readCookie("hotshop_admin_csrf"),
+                      })
+                      .finally(() => adminAuthCleanup(domain));
+              void logout.finally(() => {
+                void navigate(tone === "admin" ? "/admin/login" : "/");
+              });
+            }}
+          >
+            <LogOut aria-hidden="true" />
+            退出登录
+          </Button>
         </div>
       </aside>
       <div className="workspace-stage">
@@ -128,4 +145,8 @@ export function WorkspaceShell({
       </div>
     </div>
   );
+}
+
+function adminAuthCleanup(domain: AuthDomain) {
+  domain.store.getState().clearSession();
 }

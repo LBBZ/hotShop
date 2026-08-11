@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
+import com.real.common.api.dto.AgentTokenExchangeRequest;
 import com.real.security.entity.CustomUserDetails;
 import com.real.security.identity.IdentityType;
 import com.real.security.identity.IssuedAccessToken;
@@ -13,6 +14,7 @@ import com.real.security.util.JwtTokenUtil;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import jakarta.servlet.http.Cookie;
+import jakarta.validation.Validator;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -127,6 +129,8 @@ class IdentitySecurityTest {
     @Autowired
     JwtTokenUtil jwtTokenUtil;
     @Autowired
+    Validator validator;
+    @Autowired
     @Qualifier("cacheRedisConnectionFactory")
     LettuceConnectionFactory cacheRedisConnectionFactory;
     @Autowired
@@ -143,9 +147,10 @@ class IdentitySecurityTest {
                 .validateMigrationNaming(true)
                 .cleanDisabled(true)
                 .load();
-        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(8);
+        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(9);
         assertThat(flyway.migrate().migrationsExecuted).isZero();
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1.8");
 
         String passwordHash = new BCryptPasswordEncoder().encode(PASSWORD);
         jdbcTemplate.update(
@@ -428,6 +433,44 @@ class IdentitySecurityTest {
     @Order(6)
     void tokenExchangeRequiresServiceIdentityRejectsReplayAdminAndRiskyScopes() throws Exception {
         LoginResult userLogin = loginUser();
+        Set<String> allowedScopes = Set.of(
+                "catalog:read",
+                "orders:self:read",
+                "reservations:self:read",
+                "purchase-drafts:create"
+        );
+        assertThat(validator.validate(new AgentTokenExchangeRequest(
+                userLogin.accessToken(),
+                "client-assertion",
+                allowedScopes
+        ))).isEmpty();
+
+        List<String> invalidScopes = List.of(
+                "catalog::read",
+                "-catalog:read",
+                "catalog:read-",
+                "purchase--drafts:create",
+                "Catalog:read",
+                "catalog: read",
+                "catalog/read",
+                "catalog:read!"
+        );
+        for (String invalidScope : invalidScopes) {
+            assertThat(validator.validate(new AgentTokenExchangeRequest(
+                    userLogin.accessToken(),
+                    "client-assertion",
+                    Set.of(invalidScope)
+            ))).isNotEmpty();
+
+            mockMvc.perform(post("/agent/api/v1/auth/token-exchange")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(exchangeJson(
+                                    userLogin.accessToken(),
+                                    clientAssertion(UUID.randomUUID().toString(), Instant.now().plusSeconds(45)),
+                                    Set.of(invalidScope)
+                            )))
+                    .andExpect(status().isBadRequest());
+        }
 
         mockMvc.perform(post("/agent/api/v1/auth/token-exchange")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -446,15 +489,16 @@ class IdentitySecurityTest {
         MvcResult issued = mockMvc.perform(post("/agent/api/v1/auth/token-exchange")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(exchangeJson(userLogin.accessToken(), assertion,
-                                Set.of("catalog:read", "orders:self:read"))))
+                                allowedScopes)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.scopes.length()").value(2))
+                .andExpect(jsonPath("$.scopes.length()").value(4))
                 .andReturn();
         String delegation = objectMapper.readTree(issued.getResponse().getContentAsString())
                 .get("accessToken").asText();
         var validated = jwtTokenUtil.validate(delegation, IdentityType.AGENT_DELEGATION);
         assertThat(validated.authorizedParty()).isEqualTo("hotshop-agent-service");
         assertThat(validated.subjectUserId()).isEqualTo(userId);
+        assertThat(validated.scopes()).containsExactlyInAnyOrderElementsOf(allowedScopes);
 
         mockMvc.perform(post("/agent/api/v1/auth/token-exchange")
                         .contentType(MediaType.APPLICATION_JSON)

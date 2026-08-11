@@ -32,7 +32,10 @@ export default async function prepareRealCompose() {
     for (const activityId of [913001, 913002, 913003]) {
       const loaded = await context.post(
         `/admin/api/v1/flash-sales/${activityId}/load`,
-        { headers: { Authorization: `Bearer ${session.accessToken}` } },
+        {
+          data: { reason: "Prepare seeded activity for real Compose E2E" },
+          headers: { Authorization: `Bearer ${session.accessToken}` },
+        },
       );
       if (!loaded.ok()) {
         const problem = (await loaded.json()) as { code?: string };

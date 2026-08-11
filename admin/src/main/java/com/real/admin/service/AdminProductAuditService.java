@@ -10,8 +10,9 @@ import com.real.common.audit.AuditResource;
 import com.real.common.audit.AuditResourceType;
 import com.real.common.audit.AuditResult;
 import com.real.common.audit.AuditSource;
-import com.real.common.audit.OperationFailureAuditState;
-import com.real.common.audit.ProductMutationAuditState;
+import com.real.common.audit.AdminOperationFailureAuditState;
+import com.real.common.audit.AdminProductMutationAuditState;
+import com.real.domain.adminops.AdminProductMutationRepository;
 import com.real.domain.entity.Product;
 import com.real.domain.service.ProductService;
 import com.real.security.audit.AuditLogWriter;
@@ -28,15 +29,21 @@ public class AdminProductAuditService {
             List.of("name", "price", "stock", "category", "description");
 
     private final ProductService productService;
+    private final AdminProductMutationRepository mutationRepository;
     private final AuditLogWriter auditLogWriter;
 
-    public AdminProductAuditService(ProductService productService, AuditLogWriter auditLogWriter) {
+    public AdminProductAuditService(
+            ProductService productService,
+            AdminProductMutationRepository mutationRepository,
+            AuditLogWriter auditLogWriter
+    ) {
         this.productService = productService;
+        this.mutationRepository = mutationRepository;
         this.auditLogWriter = auditLogWriter;
     }
 
     @Transactional
-    public Product create(Product product, long administratorId, HttpServletRequest request) {
+    public Product create(Product product, long administratorId, String reason, HttpServletRequest request) {
         try {
             productService.addProduct(product);
             Product created = productService.getProductById(product.getProductId());
@@ -48,7 +55,7 @@ public class AdminProductAuditService {
                     AuditAction.CATALOG_PRODUCT_CREATED,
                     product.getProductId(),
                     AuditResult.SUCCESS,
-                    new ProductMutationAuditState(PRODUCT_FIELDS, "ACTIVE"),
+                    new AdminProductMutationAuditState(PRODUCT_FIELDS, "ACTIVE", reason),
                     request
             ));
             return created;
@@ -57,6 +64,7 @@ public class AdminProductAuditService {
                     administratorId,
                     AuditAction.CATALOG_PRODUCT_CREATED,
                     product.getProductId(),
+                    reason,
                     exception,
                     request
             );
@@ -69,10 +77,11 @@ public class AdminProductAuditService {
             long productId,
             Product product,
             long administratorId,
+            String reason,
             HttpServletRequest request
     ) {
         try {
-            requireProduct(productId);
+            lockProduct(productId);
             product.setProductId(productId);
             productService.updateProduct(product);
             Product updated = requireProduct(productId);
@@ -81,7 +90,7 @@ public class AdminProductAuditService {
                     AuditAction.CATALOG_PRODUCT_UPDATED,
                     productId,
                     AuditResult.SUCCESS,
-                    new ProductMutationAuditState(PRODUCT_FIELDS, "ACTIVE"),
+                    new AdminProductMutationAuditState(PRODUCT_FIELDS, "ACTIVE", reason),
                     request
             ));
             return updated;
@@ -90,6 +99,7 @@ public class AdminProductAuditService {
                     administratorId,
                     AuditAction.CATALOG_PRODUCT_UPDATED,
                     productId,
+                    reason,
                     exception,
                     request
             );
@@ -98,16 +108,16 @@ public class AdminProductAuditService {
     }
 
     @Transactional
-    public void delete(long productId, long administratorId, HttpServletRequest request) {
+    public void delete(long productId, long administratorId, String reason, HttpServletRequest request) {
         try {
-            requireProduct(productId);
+            lockProduct(productId);
             productService.deleteProduct(productId);
             auditLogWriter.append(event(
                     administratorId,
                     AuditAction.CATALOG_PRODUCT_DELETED,
                     productId,
                     AuditResult.SUCCESS,
-                    new ProductMutationAuditState(List.of("status", "deletedAt"), "INACTIVE"),
+                    new AdminProductMutationAuditState(List.of("status", "deletedAt"), "INACTIVE", reason),
                     request
             ));
         } catch (RuntimeException exception) {
@@ -115,6 +125,7 @@ public class AdminProductAuditService {
                     administratorId,
                     AuditAction.CATALOG_PRODUCT_DELETED,
                     productId,
+                    reason,
                     exception,
                     request
             );
@@ -130,10 +141,17 @@ public class AdminProductAuditService {
         return product;
     }
 
+    private void lockProduct(long productId) {
+        if (!mutationRepository.lockActiveProduct(productId)) {
+            throw ApiException.notFound("Catalog Product");
+        }
+    }
+
     private void appendFailure(
             long administratorId,
             AuditAction action,
             Long productId,
+            String administratorReason,
             RuntimeException exception,
             HttpServletRequest request
     ) {
@@ -142,7 +160,7 @@ public class AdminProductAuditService {
                 action,
                 productId,
                 AuditResult.FAILURE,
-                new OperationFailureAuditState(reasonCode(exception)),
+                new AdminOperationFailureAuditState(reasonCode(exception), administratorReason),
                 request
         ));
     }

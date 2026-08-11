@@ -4,6 +4,7 @@ import httpx
 from redis.asyncio import Redis
 
 from hotshop_agent.config import Settings
+from hotshop_agent.domain import IdentityKind
 from hotshop_agent.exchange import TokenExchangeClient
 from hotshop_agent.graph import build_graph
 from hotshop_agent.metrics import AgentMetrics
@@ -11,6 +12,7 @@ from hotshop_agent.observability import Telemetry
 from hotshop_agent.providers.base import ModelProvider
 from hotshop_agent.providers.fake import FakeModel
 from hotshop_agent.providers.qwen import QwenModel
+from hotshop_agent.registry import ADMIN_TOOL_SPECS, USER_TOOL_SPECS, ToolRegistry
 from hotshop_agent.reliability import CircuitBreaker, ConcurrencyLimiter, ReliableModel
 from hotshop_agent.security import ClientAssertionSigner, JwtVerifier
 from hotshop_agent.service import AgentService
@@ -73,7 +75,30 @@ def build_container(
     )
     metrics = AgentMetrics()
     telemetry = Telemetry(settings)
-    service = AgentService(settings, state_store, reliable, metrics, build_graph(), telemetry)
+    user_tools = ToolRegistry(
+        IdentityKind.USER,
+        USER_TOOL_SPECS,
+        client=client,
+        verifier=verifier,
+        base_url=settings.portal_base_url,
+        timeout_seconds=settings.tool_timeout_seconds,
+    )
+    administrator_tools = ToolRegistry(
+        IdentityKind.ADMINISTRATOR,
+        ADMIN_TOOL_SPECS,
+        client=client,
+        verifier=verifier,
+        base_url=settings.administrator_base_url,
+        timeout_seconds=settings.tool_timeout_seconds,
+    )
+    service = AgentService(
+        settings,
+        state_store,
+        reliable,
+        metrics,
+        build_graph(user_tools, administrator_tools),
+        telemetry,
+    )
     return Container(
         settings=settings,
         http_client=client,

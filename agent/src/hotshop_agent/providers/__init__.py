@@ -4,6 +4,7 @@ from hotshop_agent.providers.base import (
     ModelPermanentError,
     ModelProvider,
     ModelTemporaryError,
+    ModelToolCall,
     ModelUsage,
 )
 from hotshop_agent.providers.fake import FakeModel
@@ -16,6 +17,7 @@ __all__ = [
     "ModelPermanentError",
     "ModelProvider",
     "ModelTemporaryError",
+    "ModelToolCall",
     "ModelUsage",
     "QwenModel",
 ]

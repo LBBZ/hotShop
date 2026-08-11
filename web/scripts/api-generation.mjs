@@ -117,6 +117,11 @@ function generateDomain(domain, outputRoot) {
   normalizeGeneratedTypeScriptFiles(output);
 }
 
+export function generateAdmin(outputRoot = defaultOutputRoot) {
+  mkdirSync(outputRoot, { recursive: true });
+  generateDomain("admin", outputRoot);
+}
+
 export function generateAll(outputRoot = defaultOutputRoot) {
   mkdirSync(outputRoot, { recursive: true });
   for (const domain of generatedDomains) {

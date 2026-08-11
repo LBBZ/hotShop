@@ -19,7 +19,9 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "api:generate": "node ./scripts/generate-api-clients.mjs",
+    "api:generate:admin": "node ./scripts/generate-admin-api-client.mjs",
     "api:check": "node ./scripts/check-api-drift.mjs",
+    "api:check:admin": "node ./scripts/check-admin-api-drift.mjs",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm api:check"
   },
   "dependencies": {

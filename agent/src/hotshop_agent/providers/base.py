@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 
 @dataclass(frozen=True)
@@ -17,7 +18,28 @@ class ModelUsage:
     estimated_cost_usd: float
 
 
-type ModelChunk = ModelDelta | ModelUsage
+@dataclass(frozen=True)
+class ModelToolCall:
+    name: str
+    arguments: dict[str, Any]
+
+
+type ModelChunk = ModelDelta | ModelUsage | ModelToolCall
+
+
+def parse_tool_call(value: str) -> ModelToolCall | None:
+    try:
+        parsed: Any = json.loads(value)
+    except json.JSONDecodeError:
+        return None
+    if (
+        not isinstance(parsed, dict)
+        or set(parsed) != {"tool", "arguments"}
+        or not isinstance(parsed.get("tool"), str)
+        or not isinstance(parsed.get("arguments"), dict)
+    ):
+        return None
+    return ModelToolCall(name=parsed["tool"], arguments=parsed["arguments"])
 
 
 class ModelError(Exception):

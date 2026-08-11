@@ -10,8 +10,12 @@ from hotshop_agent.providers.base import (
     ModelDelta,
     ModelPermanentError,
     ModelTemporaryError,
+    ModelToolCall,
     ModelUsage,
+    parse_tool_call,
 )
+
+MAX_TOOL_CALL_BYTES = 65_536
 
 
 class QwenModel:
@@ -42,6 +46,10 @@ class QwenModel:
             "stream_options": {"include_usage": True},
             "messages": [{"role": "user", "content": prompt}],
         }
+        buffered: list[str] | None = None
+        buffered_bytes = 0
+        tool_candidate_possible = True
+        deferred_usage: ModelUsage | None = None
         try:
             async with self._client.stream(
                 "POST",
@@ -64,12 +72,25 @@ class QwenModel:
                     if choices:
                         text = choices[0].get("delta", {}).get("content")
                         if isinstance(text, str) and text:
-                            yield ModelDelta(text)
+                            if tool_candidate_possible and buffered is None:
+                                if text.startswith("{"):
+                                    buffered = []
+                                else:
+                                    tool_candidate_possible = False
+                            if buffered is not None:
+                                buffered.append(text)
+                                buffered_bytes += len(text.encode("utf-8"))
+                                if buffered_bytes > MAX_TOOL_CALL_BYTES:
+                                    yield ModelDelta("".join(buffered))
+                                    buffered = None
+                                    tool_candidate_possible = False
+                            else:
+                                yield ModelDelta(text)
                     usage = event.get("usage")
                     if isinstance(usage, dict):
                         input_tokens = int(usage.get("prompt_tokens", 0))
                         output_tokens = int(usage.get("completion_tokens", 0))
-                        yield ModelUsage(
+                        model_usage = ModelUsage(
                             input_tokens=input_tokens,
                             output_tokens=output_tokens,
                             estimated_cost_usd=(
@@ -77,6 +98,16 @@ class QwenModel:
                             )
                             / 1_000_000,
                         )
+                        if buffered is not None:
+                            deferred_usage = model_usage
+                        else:
+                            yield model_usage
+                if buffered is not None:
+                    completed = "".join(buffered)
+                    tool_call: ModelToolCall | None = parse_tool_call(completed)
+                    yield tool_call if tool_call is not None else ModelDelta(completed)
+                if deferred_usage is not None:
+                    yield deferred_usage
         except ModelPermanentError:
             raise
         except (httpx.TransportError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:

@@ -5,7 +5,13 @@ import { useStore } from "zustand";
 import { LoadingState } from "@/components/async-states";
 import type { AuthDomain } from "@/auth/auth-domain";
 
-export function ProtectedRoute({ domain }: { domain: AuthDomain }) {
+export function ProtectedRoute({
+  domain,
+  redirectTo,
+}: {
+  domain: AuthDomain;
+  redirectTo?: string;
+}) {
   const session = useStore(domain.store, (state) => state.session);
   const [checked, setChecked] = useState(Boolean(session));
   const location = useLocation();
@@ -41,7 +47,7 @@ export function ProtectedRoute({ domain }: { domain: AuthDomain }) {
   if (!session) {
     return (
       <Navigate
-        to={`/session-expired?domain=${domain.name}`}
+        to={redirectTo ?? `/session-expired?domain=${domain.name}`}
         replace
         state={{ from: location.pathname }}
       />

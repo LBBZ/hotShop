@@ -12,6 +12,8 @@ import com.real.common.audit.AuditResult;
 import com.real.common.audit.AuditSource;
 import com.real.common.audit.FlashSaleActivityLoadAuditState;
 import com.real.common.audit.OperationFailureAuditState;
+import com.real.common.audit.AdminFlashSaleActivityLoadAuditState;
+import com.real.common.audit.AdminOperationFailureAuditState;
 import com.real.domain.service.seckill.FlashSaleActivityLoader;
 import com.real.domain.service.seckill.FlashSaleLoadResult;
 import com.real.security.audit.AuditLogWriter;
@@ -37,6 +39,7 @@ public class AdminFlashSaleActivityLoadService {
     public FlashSaleLoadResult load(
             long activityId,
             long administratorId,
+            String reason,
             HttpServletRequest request
     ) {
         try {
@@ -44,14 +47,14 @@ public class AdminFlashSaleActivityLoadService {
             if (result.code() != com.real.domain.service.seckill.FlashSaleLoadCode.LOADED
                     && result.code() != com.real.domain.service.seckill.FlashSaleLoadCode.IDEMPOTENT) {
                 ApiException problem = problem(result);
-                appendFailure(administratorId, activityId, problem.getCode(), request);
+                appendFailure(administratorId, activityId, problem.getCode(), reason, request);
                 throw problem;
             }
             auditLogWriter.append(event(
                     administratorId,
                     activityId,
                     AuditResult.SUCCESS,
-                    new FlashSaleActivityLoadAuditState(
+                    new AdminFlashSaleActivityLoadAuditState(
                             result.code().name(),
                             result.databaseVersion(),
                             result.redisVersion(),
@@ -59,7 +62,8 @@ public class AdminFlashSaleActivityLoadService {
                             result.redisAvailableStock(),
                             result.streamEventCount(),
                             result.reservationRecordCount(),
-                            result.consistent()
+                            result.consistent(),
+                            reason
                     ),
                     request
             ));
@@ -67,7 +71,7 @@ public class AdminFlashSaleActivityLoadService {
         } catch (ApiException exception) {
             throw exception;
         } catch (RuntimeException exception) {
-            appendFailure(administratorId, activityId, "OPERATION_FAILED", request);
+            appendFailure(administratorId, activityId, "OPERATION_FAILED", reason, request);
             throw exception;
         }
     }
@@ -105,13 +109,14 @@ public class AdminFlashSaleActivityLoadService {
             long administratorId,
             long activityId,
             String reasonCode,
+            String administratorReason,
             HttpServletRequest request
     ) {
         auditLogWriter.appendFailure(event(
                 administratorId,
                 activityId,
                 AuditResult.FAILURE,
-                new OperationFailureAuditState(reasonCode),
+                new AdminOperationFailureAuditState(reasonCode, administratorReason),
                 request
         ));
     }

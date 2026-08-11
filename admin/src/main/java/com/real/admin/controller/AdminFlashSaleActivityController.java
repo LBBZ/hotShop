@@ -2,6 +2,7 @@ package com.real.admin.controller;
 
 import com.real.admin.service.AdminFlashSaleActivityLoadService;
 import com.real.common.api.dto.FlashSaleActivityLoadResponse;
+import com.real.common.api.dto.AdminOperationReasonRequest;
 import com.real.domain.service.seckill.FlashSaleLoadResult;
 import com.real.security.entity.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
@@ -9,6 +10,8 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -38,12 +41,14 @@ public class AdminFlashSaleActivityController {
     @PreAuthorize("hasAuthority('PERM_ADMIN_FLASH_SALE_LOAD')")
     public ResponseEntity<FlashSaleActivityLoadResponse> load(
             @PathVariable @Min(1) Long activityId,
+            @RequestBody @Valid AdminOperationReasonRequest operation,
             @AuthenticationPrincipal CustomUserDetails administrator,
             HttpServletRequest request
     ) {
         FlashSaleLoadResult result = loadService.load(
                 activityId,
                 administrator.getUserId(),
+                operation.reason(),
                 request
         );
         return ResponseEntity.ok(new FlashSaleActivityLoadResponse(

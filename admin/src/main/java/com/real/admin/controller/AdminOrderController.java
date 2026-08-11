@@ -5,6 +5,7 @@ import com.real.common.api.CursorSlice;
 import com.real.common.api.dto.CursorPageResponse;
 import com.real.common.api.dto.OrderResponse;
 import com.real.common.enums.OrderStatus;
+import com.real.admin.service.AdminOperationsService;
 import com.real.domain.api.ApiDtoMapper;
 import com.real.domain.entity.Order;
 import com.real.domain.service.OrderService;
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
+import java.time.Duration;
 
 @RestController
 @Validated
@@ -33,9 +35,11 @@ import java.time.Instant;
 @SecurityRequirement(name = "bearerAuth")
 public class AdminOrderController {
     private final OrderService orderService;
+    private final AdminOperationsService operationsService;
 
-    public AdminOrderController(OrderService orderService) {
+    public AdminOrderController(OrderService orderService, AdminOperationsService operationsService) {
         this.orderService = orderService;
+        this.operationsService = operationsService;
     }
 
     @Operation(summary = "Get an Order")
@@ -64,9 +68,9 @@ public class AdminOrderController {
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false) @Min(1) Long userId,
             @RequestParam(required = false) OrderStatus status,
-            @RequestParam(required = false)
+            @RequestParam
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant createdFrom,
-            @RequestParam(required = false)
+            @RequestParam
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant createdTo
     ) {
         if (createdFrom != null && createdTo != null && createdFrom.isAfter(createdTo)) {
@@ -75,18 +79,15 @@ public class AdminOrderController {
                     "createdFrom must be before or equal to createdTo"
             );
         }
-        CursorSlice<Order> slice = orderService.getAdminOrdersByCursor(
-                userId,
-                limit,
-                cursor,
-                status,
-                ApiDtoMapper.toUtcLocalDateTime(createdFrom),
-                ApiDtoMapper.toUtcLocalDateTime(createdTo)
+        if (Duration.between(createdFrom, createdTo).compareTo(Duration.ofDays(31)) > 0) {
+            throw ApiException.badRequest(
+                    "TIME_RANGE_TOO_LARGE",
+                    "Order query range cannot exceed 31 days"
+            );
+        }
+        CursorSlice<OrderResponse> slice = operationsService.orders(
+                limit, cursor, userId, status == null ? null : status.name(), createdFrom, createdTo
         );
-        return ResponseEntity.ok(new CursorPageResponse<>(
-                slice.items().stream().map(ApiDtoMapper::toOrderResponse).toList(),
-                slice.nextCursor(),
-                slice.hasMore()
-        ));
+        return ResponseEntity.ok(new CursorPageResponse<>(slice.items(), slice.nextCursor(), slice.hasMore()));
     }
 }

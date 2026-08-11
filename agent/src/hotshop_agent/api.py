@@ -148,11 +148,11 @@ def build_user_router() -> APIRouter:
         container: ContainerDependency,
     ) -> SessionResponse:
         delegation = await container.exchange.exchange(credential.token, body.scopes)
-        if delegation.subject_user_id != credential.principal.subject_user_id:
+        if delegation.principal.subject_user_id != credential.principal.subject_user_id:
             raise AuthenticationError
         session = await container.service.create_session(
             credential.principal,
-            scopes=delegation.scopes,
+            scopes=delegation.principal.scopes,
         )
         return SessionResponse.from_domain(session)
 
@@ -209,10 +209,17 @@ def add_conversation_routes(router: APIRouter, kind: IdentityKind) -> None:
         authorization: Annotated[str | None, Header()] = None,
     ) -> RunResponse:
         credential = bearer_credential(authorization, container.verifier, kind)
+        tool_credential = credential
+        if kind is IdentityKind.USER:
+            session = await container.service.get_session(str(session_id), credential.principal)
+            tool_credential = await container.exchange.exchange(credential.token, session.scopes)
+            if tool_credential.principal.subject_user_id != credential.principal.subject_user_id:
+                raise AuthenticationError
         run = await container.service.start_run(
             str(session_id),
             str(body.messageId),
             credential.principal,
+            tool_credential=tool_credential,
         )
         return RunResponse.from_domain(run)
 

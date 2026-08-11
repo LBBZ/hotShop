@@ -1,11 +1,13 @@
 package com.real.admin.controller;
 
 import com.real.admin.service.AdminProductAuditService;
+import com.real.admin.service.AdminOperationsService;
 import com.real.common.api.ApiException;
 import com.real.common.api.CursorSlice;
 import com.real.common.api.dto.CursorPageResponse;
 import com.real.common.api.dto.ProductResponse;
-import com.real.common.api.dto.ProductWriteRequest;
+import com.real.common.api.dto.AdminProductMutationRequest;
+import com.real.common.api.dto.AdminOperationReasonRequest;
 import com.real.domain.api.ApiDtoMapper;
 import com.real.domain.entity.Product;
 import com.real.domain.service.ProductService;
@@ -44,28 +46,31 @@ import java.math.BigDecimal;
 public class AdminProductController {
     private final ProductService productService;
     private final AdminProductAuditService productAuditService;
+    private final AdminOperationsService operationsService;
 
     public AdminProductController(
             ProductService productService,
-            AdminProductAuditService productAuditService
+            AdminProductAuditService productAuditService,
+            AdminOperationsService operationsService
     ) {
         this.productService = productService;
         this.productAuditService = productAuditService;
+        this.operationsService = operationsService;
     }
 
     @Operation(summary = "Create a Catalog Product")
     @PostMapping
     @PreAuthorize("hasAuthority('PERM_ADMIN_PRODUCT_WRITE')")
     public ResponseEntity<ProductResponse> addProduct(
-            @RequestBody @Valid ProductWriteRequest request,
+            @RequestBody @Valid AdminProductMutationRequest request,
             @AuthenticationPrincipal CustomUserDetails administrator,
             HttpServletRequest servletRequest
     ) {
-        Product product = ApiDtoMapper.toProduct(request);
+        Product product = ApiDtoMapper.toProduct(request.product());
         Product created = productAuditService.create(
                 product,
                 administrator.getUserId(),
-                servletRequest
+                request.reason(), servletRequest
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiDtoMapper.toProductResponse(created));
     }
@@ -75,16 +80,16 @@ public class AdminProductController {
     @PreAuthorize("hasAuthority('PERM_ADMIN_PRODUCT_WRITE')")
     public ResponseEntity<ProductResponse> updateProduct(
             @PathVariable @Min(1) Long productId,
-            @RequestBody @Valid ProductWriteRequest request,
+            @RequestBody @Valid AdminProductMutationRequest request,
             @AuthenticationPrincipal CustomUserDetails administrator,
             HttpServletRequest servletRequest
     ) {
-        Product product = ApiDtoMapper.toProduct(request);
+        Product product = ApiDtoMapper.toProduct(request.product());
         Product updated = productAuditService.update(
                 productId,
                 product,
                 administrator.getUserId(),
-                servletRequest
+                request.reason(), servletRequest
         );
         return ResponseEntity.ok(ApiDtoMapper.toProductResponse(updated));
     }
@@ -94,10 +99,11 @@ public class AdminProductController {
     @PreAuthorize("hasAuthority('PERM_ADMIN_PRODUCT_WRITE')")
     public ResponseEntity<Void> deleteProduct(
             @PathVariable @Min(1) Long productId,
+            @RequestBody @Valid AdminOperationReasonRequest request,
             @AuthenticationPrincipal CustomUserDetails administrator,
             HttpServletRequest servletRequest
     ) {
-        productAuditService.delete(productId, administrator.getUserId(), servletRequest);
+        productAuditService.delete(productId, administrator.getUserId(), request.reason(), servletRequest);
         return ResponseEntity.noContent().build();
     }
 
@@ -128,7 +134,7 @@ public class AdminProductController {
                     "minPrice must be less than or equal to maxPrice"
             );
         }
-        CursorSlice<Product> slice = productService.getProductsByCursor(
+        CursorSlice<ProductResponse> slice = operationsService.products(
                 limit,
                 cursor,
                 keyword,
@@ -136,11 +142,7 @@ public class AdminProductController {
                 minPrice,
                 maxPrice
         );
-        return ResponseEntity.ok(new CursorPageResponse<>(
-                slice.items().stream().map(ApiDtoMapper::toProductResponse).toList(),
-                slice.nextCursor(),
-                slice.hasMore()
-        ));
+        return ResponseEntity.ok(new CursorPageResponse<>(slice.items(), slice.nextCursor(), slice.hasMore()));
     }
 
     private Product requireProduct(Long productId) {

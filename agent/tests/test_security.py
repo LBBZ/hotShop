@@ -9,11 +9,25 @@ import pytest
 from hotshop_agent.config import Settings
 from hotshop_agent.domain import IdentityKind
 from hotshop_agent.security import (
+    ADMIN_AUTHORITIES,
     AuthenticationError,
     ClientAssertionSigner,
     JwtVerifier,
     bearer_credential,
 )
+
+
+def test_administrator_authorities_match_java_token_contract() -> None:
+    assert ADMIN_AUTHORITIES == frozenset(
+        {
+            "ROLE_ADMIN",
+            "PERM_ADMIN_PRODUCT_READ",
+            "PERM_ADMIN_PRODUCT_WRITE",
+            "PERM_ADMIN_FLASH_SALE_LOAD",
+            "PERM_ADMIN_ORDER_READ",
+            "PERM_ADMIN_USER_READ",
+        }
+    )
 
 
 @pytest.mark.parametrize(

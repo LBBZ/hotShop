@@ -23,6 +23,9 @@ rabbitmq:
   enabled: false
 
 hotshop:
+  agent:
+    purchase-draft-ttl: ${HOTSHOP_AGENT_PURCHASE_DRAFT_TTL:10m}
+    purchase-confirmation-ttl: ${HOTSHOP_AGENT_PURCHASE_CONFIRMATION_TTL:2m}
   order:
     legacy-payment-timeout: ${HOTSHOP_LEGACY_ORDER_TIMEOUT:15m}
   mock-payment:

@@ -35,12 +35,12 @@ export interface GetOrderRequest {
 }
 
 export interface GetOrdersRequest {
+    createdFrom: Date;
+    createdTo: Date;
     limit?: number;
     cursor?: string;
     userId?: string;
     status?: GetOrdersStatusEnum;
-    createdFrom?: Date;
-    createdTo?: Date;
     xRequestId?: string;
     traceparent?: string;
 }
@@ -72,12 +72,12 @@ export interface AdminOrdersApiInterface {
     /**
      * Stable keyset pagination ordered by createdAt descending, then orderId descending
      * @summary List Orders
+     * @param {Date} createdFrom
+     * @param {Date} createdTo
      * @param {number} [limit]
      * @param {string} [cursor]
      * @param {string} [userId]
      * @param {'PENDING' | 'PAID' | 'SHIPPED' | 'COMPLETED' | 'CANCELED'} [status]
-     * @param {Date} [createdFrom]
-     * @param {Date} [createdTo]
      * @param {string} [xRequestId] Caller-supplied correlation ID. Invalid values are replaced by the server.
      * @param {string} [traceparent] W3C trace context. Its trace ID is distinct from X-Request-Id.
      * @param {*} [options] Override http request option.
@@ -157,6 +157,20 @@ export class AdminOrdersApi extends runtime.BaseAPI implements AdminOrdersApiInt
      * List Orders
      */
     async getOrdersRaw(requestParameters: GetOrdersRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<CursorPageResponseOrderResponse>> {
+        if (requestParameters['createdFrom'] == null) {
+            throw new runtime.RequiredError(
+                'createdFrom',
+                'Required parameter "createdFrom" was null or undefined when calling getOrders().'
+            );
+        }
+
+        if (requestParameters['createdTo'] == null) {
+            throw new runtime.RequiredError(
+                'createdTo',
+                'Required parameter "createdTo" was null or undefined when calling getOrders().'
+            );
+        }
+
         const queryParameters: any = {};
 
         if (requestParameters['limit'] != null) {
@@ -218,7 +232,7 @@ export class AdminOrdersApi extends runtime.BaseAPI implements AdminOrdersApiInt
      * Stable keyset pagination ordered by createdAt descending, then orderId descending
      * List Orders
      */
-    async getOrders(requestParameters: GetOrdersRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<CursorPageResponseOrderResponse> {
+    async getOrders(requestParameters: GetOrdersRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<CursorPageResponseOrderResponse> {
         const response = await this.getOrdersRaw(requestParameters, initOverrides);
         return await response.value();
     }

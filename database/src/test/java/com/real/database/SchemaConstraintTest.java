@@ -58,8 +58,8 @@ class SchemaConstraintTest {
 
     @Test
     void emptyDatabaseMigratesToLatestAndValidates() {
-        assertThat(initialMigrationCount).isEqualTo(8);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1.7");
+        assertThat(initialMigrationCount).isEqualTo(9);
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1.8");
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
     }
 
@@ -338,6 +338,190 @@ class SchemaConstraintTest {
                         'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
                         '00000000-0000-0000-0000-000000000001', 1, 'USER', 9000000,
                         'hotshop', 'hotshop', DATE_ADD(CURRENT_TIMESTAMP(6), INTERVAL 1 DAY)
+                    )
+                    """));
+        }
+    }
+
+    @Test
+    void purchaseDraftPersistsOnlySnapshotsWithoutChangingInventoryOrOrders() throws SQLException {
+        String draftId = UUID.randomUUID().toString();
+        try (Connection connection = connection()) {
+            executeUpdate(connection, """
+                    INSERT INTO catalog_product (product_id, sku, name, price, stock, status)
+                    VALUES (980001, 'AGENT-DRAFT-SNAPSHOT', 'Agent draft product', 12.50, 17, 'ACTIVE')
+                    """);
+            executeUpdate(connection, """
+                    INSERT INTO purchase_draft (
+                        draft_id, user_id, action_type, parameter_digest, valid_until
+                    ) VALUES (
+                        '%s', 880001, 'CREATE_ORDER', '%s',
+                        DATE_ADD(UTC_TIMESTAMP(6), INTERVAL 5 MINUTE)
+                    )
+                    """.formatted(draftId, "a".repeat(64)));
+            executeUpdate(connection, """
+                    INSERT INTO purchase_draft_item (
+                        draft_id, product_id, quantity, product_name_snapshot,
+                        unit_price_snapshot, line_amount_snapshot
+                    ) VALUES ('%s', 980001, 2, 'Agent draft product', 12.50, 25.00)
+                    """.formatted(draftId));
+
+            assertThat(singleInt(connection,
+                    "SELECT stock FROM catalog_product WHERE product_id = 980001"))
+                    .isEqualTo(17);
+            assertThat(singleInt(connection,
+                    "SELECT COUNT(*) FROM sales_order WHERE user_id = 880001"))
+                    .isZero();
+            assertThat(singleInt(connection,
+                    "SELECT COUNT(*) FROM sale_reservation WHERE user_id = 880001"))
+                    .isZero();
+
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                    INSERT INTO purchase_draft_item (
+                        draft_id, product_id, quantity, product_name_snapshot,
+                        unit_price_snapshot, line_amount_snapshot
+                    ) VALUES ('%s', 980002, 101, 'Too many', 1.00, 101.00)
+                    """.formatted(draftId)));
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                    INSERT INTO purchase_draft_item (
+                        draft_id, product_id, quantity, product_name_snapshot,
+                        unit_price_snapshot, line_amount_snapshot
+                    ) VALUES ('%s', 980003, 2, 'Bad total', 12.50, 24.99)
+                    """.formatted(draftId)));
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                    INSERT INTO purchase_draft (
+                        draft_id, user_id, action_type, parameter_digest, valid_until
+                    ) VALUES (
+                        UUID(), 880001, 'REFUND', '%s',
+                        DATE_ADD(UTC_TIMESTAMP(6), INTERVAL 5 MINUTE)
+                    )
+                    """.formatted("b".repeat(64))));
+        }
+    }
+
+    @Test
+    void confirmationStoresOnlyOpaqueHashAndEnforcesBindingsAndState() throws SQLException {
+        String draftId = UUID.randomUUID().toString();
+        String confirmationId = UUID.randomUUID().toString();
+        String nonce = UUID.randomUUID().toString();
+        String tokenHash = "c".repeat(64);
+        String digest = "d".repeat(64);
+        try (Connection connection = connection()) {
+            insertPurchaseDraft(connection, draftId, 880002, digest);
+            insertPurchaseConfirmation(
+                    connection,
+                    confirmationId,
+                    tokenHash,
+                    draftId,
+                    880002,
+                    digest,
+                    nonce,
+                    "{\"items\":[{\"productId\":980001,\"quantity\":2}]}"
+            );
+
+            assertThat(columnNames(connection, "purchase_confirmation"))
+                    .contains("token_hash", "parameter_digest", "parameters_json", "nonce")
+                    .doesNotContain("token", "confirmation_token", "plaintext_token");
+            assertThat(indexColumns(
+                    connection,
+                    "purchase_confirmation",
+                    "uk_purchase_confirmation_token_hash"
+            )).isEqualTo("token_hash");
+            assertThat(indexColumns(
+                    connection,
+                    "purchase_confirmation",
+                    "idx_purchase_confirmation_user_status_expiry"
+            )).isEqualTo("user_id,status,expires_at,confirmation_id");
+
+            assertConstraintViolation(() -> insertPurchaseConfirmation(
+                    connection,
+                    UUID.randomUUID().toString(),
+                    tokenHash,
+                    UUID.randomUUID().toString(),
+                    880002,
+                    digest,
+                    UUID.randomUUID().toString(),
+                    "{\"items\":[{\"productId\":1,\"quantity\":1}]}"
+            ));
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                    UPDATE purchase_confirmation
+                       SET status = 'CONSUMED'
+                     WHERE confirmation_id = '%s'
+                    """.formatted(confirmationId)));
+            executeUpdate(connection, """
+                    UPDATE purchase_confirmation
+                       SET status = 'CONSUMED', consumed_at = UTC_TIMESTAMP(6), order_id = 'agent-order-1'
+                     WHERE confirmation_id = '%s'
+                    """.formatted(confirmationId));
+            assertThat(singleString(connection, """
+                    SELECT status FROM purchase_confirmation
+                     WHERE confirmation_id = '%s'
+                    """.formatted(confirmationId))).isEqualTo("CONSUMED");
+        }
+    }
+
+    @Test
+    void confirmationRejectsMalformedOrOversizedCanonicalParameters() throws SQLException {
+        try (Connection connection = connection()) {
+            assertInvalidConfirmationParameters(
+                    connection,
+                    "{\"items\":[{\"productId\":1,\"quantity\":\"2\"}]}"
+            );
+            assertInvalidConfirmationParameters(
+                    connection,
+                    "{\"items\":[{\"productId\":1,\"quantity\":1,\"sql\":\"SELECT 1\"}]}"
+            );
+            assertInvalidConfirmationParameters(connection, purchaseParametersJson(51));
+            assertInvalidConfirmationParameters(connection, "{\"items\":[]}");
+        }
+    }
+
+    @Test
+    void agentConfigurationDraftAcceptsOnlyLowRiskAllowlistedValues() throws SQLException {
+        try (Connection connection = connection()) {
+            executeUpdate(connection, """
+                    INSERT INTO agent_configuration_draft (
+                        configuration_draft_id, administrator_id, configuration_key,
+                        proposed_value, reason
+                    ) VALUES (
+                        UUID(), 770001, 'AGENT_RESPONSE_STYLE', JSON_QUOTE('CONCISE'),
+                        'Prefer compact answers'
+                    )
+                    """);
+            executeUpdate(connection, """
+                    INSERT INTO agent_configuration_draft (
+                        configuration_draft_id, administrator_id, configuration_key,
+                        proposed_value, reason
+                    ) VALUES (
+                        UUID(), 770001, 'AGENT_TOOL_RESULT_LIMIT', CAST(25 AS JSON),
+                        'Limit low-risk result size'
+                    )
+                    """);
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                    INSERT INTO agent_configuration_draft (
+                        configuration_draft_id, administrator_id, configuration_key,
+                        proposed_value, reason
+                    ) VALUES (
+                        UUID(), 770001, 'AGENT_CAN_REFUND', JSON_QUOTE('CONCISE'),
+                        'Escalate privileges'
+                    )
+                    """));
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                    INSERT INTO agent_configuration_draft (
+                        configuration_draft_id, administrator_id, configuration_key,
+                        proposed_value, reason, risk_level
+                    ) VALUES (
+                        UUID(), 770001, 'AGENT_RESPONSE_STYLE', JSON_QUOTE('CONCISE'),
+                        'High risk must not be represented', 'HIGH'
+                    )
+                    """));
+            assertConstraintViolation(() -> executeUpdate(connection, """
+                    INSERT INTO agent_configuration_draft (
+                        configuration_draft_id, administrator_id, configuration_key,
+                        proposed_value, reason
+                    ) VALUES (
+                        UUID(), 770001, 'AGENT_TOOL_RESULT_LIMIT', CAST(101 AS JSON),
+                        'Too many results'
                     )
                     """));
         }
@@ -654,6 +838,118 @@ class SchemaConstraintTest {
 
     private static Connection connection() throws SQLException {
         return DriverManager.getConnection(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword());
+    }
+
+    private static void insertPurchaseDraft(
+            Connection connection,
+            String draftId,
+            long userId,
+            String digest
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO purchase_draft (
+                    draft_id, user_id, action_type, parameter_digest, valid_until
+                ) VALUES (?, ?, 'CREATE_ORDER', ?, DATE_ADD(UTC_TIMESTAMP(6), INTERVAL 5 MINUTE))
+                """)) {
+            statement.setString(1, draftId);
+            statement.setLong(2, userId);
+            statement.setString(3, digest);
+            statement.executeUpdate();
+        }
+    }
+
+    private static void insertPurchaseConfirmation(
+            Connection connection,
+            String confirmationId,
+            String tokenHash,
+            String draftId,
+            long userId,
+            String digest,
+            String nonce,
+            String parametersJson
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO purchase_confirmation (
+                    confirmation_id, token_hash, draft_id, user_id, action_type,
+                    parameter_digest, parameters_json, nonce, expires_at
+                ) VALUES (?, ?, ?, ?, 'CREATE_ORDER', ?, ?, ?,
+                          DATE_ADD(UTC_TIMESTAMP(6), INTERVAL 2 MINUTE))
+                """)) {
+            statement.setString(1, confirmationId);
+            statement.setString(2, tokenHash);
+            statement.setString(3, draftId);
+            statement.setLong(4, userId);
+            statement.setString(5, digest);
+            statement.setString(6, parametersJson);
+            statement.setString(7, nonce);
+            statement.executeUpdate();
+        }
+    }
+
+    private static void assertInvalidConfirmationParameters(Connection connection, String parametersJson)
+            throws SQLException {
+        String draftId = UUID.randomUUID().toString();
+        String digest = UUID.randomUUID().toString().replace("-", "")
+                + UUID.randomUUID().toString().replace("-", "");
+        insertPurchaseDraft(connection, draftId, 880003, digest);
+        assertConstraintViolation(() -> insertPurchaseConfirmation(
+                connection,
+                UUID.randomUUID().toString(),
+                UUID.randomUUID().toString().replace("-", "")
+                        + UUID.randomUUID().toString().replace("-", ""),
+                draftId,
+                880003,
+                digest,
+                UUID.randomUUID().toString(),
+                parametersJson
+        ));
+    }
+
+    private static String purchaseParametersJson(int itemCount) {
+        StringBuilder json = new StringBuilder("{\"items\":[");
+        for (int index = 1; index <= itemCount; index++) {
+            if (index > 1) {
+                json.append(',');
+            }
+            json.append("{\"productId\":")
+                    .append(index)
+                    .append(",\"quantity\":1}");
+        }
+        return json.append("]}").toString();
+    }
+
+    private static int singleInt(Connection connection, String sql) throws SQLException {
+        try (Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery(sql)) {
+            assertThat(resultSet.next()).isTrue();
+            return resultSet.getInt(1);
+        }
+    }
+
+    private static String singleString(Connection connection, String sql) throws SQLException {
+        try (Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery(sql)) {
+            assertThat(resultSet.next()).isTrue();
+            return resultSet.getString(1);
+        }
+    }
+
+    private static List<String> columnNames(Connection connection, String table) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT column_name
+                  FROM information_schema.columns
+                 WHERE table_schema = DATABASE() AND table_name = ?
+                 ORDER BY ordinal_position
+                """)) {
+            statement.setString(1, table);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                var columns = new java.util.ArrayList<String>();
+                while (resultSet.next()) {
+                    columns.add(resultSet.getString(1));
+                }
+                return columns;
+            }
+        }
     }
 
     private static void insertUser(Connection connection, String username, String email) throws SQLException {

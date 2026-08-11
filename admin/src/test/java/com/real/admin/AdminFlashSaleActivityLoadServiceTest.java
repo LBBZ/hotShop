@@ -19,6 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AdminFlashSaleActivityLoadServiceTest {
     private FlashSaleActivityLoader loader;
@@ -55,7 +56,7 @@ class AdminFlashSaleActivityLoadServiceTest {
                 "loaded"
         ));
 
-        FlashSaleLoadResult result = service.load(7001L, 99L, request);
+        FlashSaleLoadResult result = service.load(7001L, 99L, "scheduled campaign load", request);
 
         assertThat(result.consistent()).isTrue();
         ArgumentCaptor<AuditEvent> event = ArgumentCaptor.forClass(AuditEvent.class);
@@ -66,5 +67,30 @@ class AdminFlashSaleActivityLoadServiceTest {
                 .isEqualTo(AuditResourceType.FLASH_SALE_ACTIVITY);
         assertThat(event.getValue().resource().id()).isEqualTo("7001");
         assertThat(event.getValue().result()).isEqualTo(AuditResult.SUCCESS);
+    }
+
+    @Test
+    void invalidActivityWindowOrStockIsRejectedAndFailureIsAudited() {
+        when(loader.load(7002L)).thenReturn(new FlashSaleLoadResult(
+                FlashSaleLoadCode.ACTIVITY_INVALID,
+                7002L,
+                1,
+                null,
+                -1,
+                null,
+                0,
+                0,
+                0,
+                false,
+                "Activity time window or inventory facts are invalid"
+        ));
+
+        assertThatThrownBy(() -> service.load(
+                7002L, 99L, "validate scheduled activity facts", request))
+                .hasMessageContaining("Activity time window or inventory facts are invalid");
+        ArgumentCaptor<AuditEvent> event = ArgumentCaptor.forClass(AuditEvent.class);
+        verify(writer).appendFailure(event.capture());
+        assertThat(event.getValue().result()).isEqualTo(AuditResult.FAILURE);
+        assertThat(event.getValue().resource().id()).isEqualTo("7002");
     }
 }

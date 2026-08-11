@@ -1,6 +1,5 @@
 package com.real.admin.service;
 
-import com.real.common.api.CursorCodec;
 import com.real.common.api.RequestContext;
 import com.real.common.api.dto.OutboxFailedEventResponse;
 import com.real.common.api.dto.OutboxFailedPageResponse;
@@ -20,14 +19,18 @@ public class AdminOutboxService {
     private static final String CURSOR_SCOPE = "admin-failed-outbox";
     private final JdbcTemplate jdbc;
     private final AuditLogWriter auditLogWriter;
+    private final AdminCursorCodec cursors;
 
-    public AdminOutboxService(JdbcTemplate jdbc, AuditLogWriter auditLogWriter) {
+    public AdminOutboxService(
+            JdbcTemplate jdbc, AuditLogWriter auditLogWriter, AdminCursorCodec cursors
+    ) {
         this.jdbc = jdbc;
         this.auditLogWriter = auditLogWriter;
+        this.cursors = cursors;
     }
 
     public OutboxFailedPageResponse failed(int limit, String cursor) {
-        CursorCodec.LongCursor decoded = CursorCodec.decodeLong(cursor, CURSOR_SCOPE);
+        AdminCursorCodec.LongCursor decoded = cursors.decodeLong(cursor, CURSOR_SCOPE);
         Long before = decoded == null ? null : decoded.id();
         List<FailedRow> rows = jdbc.query("""
             SELECT outbox_id,event_id,event_type,aggregate_type,aggregate_id,publish_attempts,
@@ -46,7 +49,7 @@ public class AdminOutboxService {
                 )), before, before, limit + 1);
         boolean hasMore = rows.size() > limit;
         List<FailedRow> page = hasMore ? rows.subList(0, limit) : rows;
-        String next = hasMore ? CursorCodec.encodeLong(CURSOR_SCOPE, page.getLast().outboxId()) : null;
+        String next = hasMore ? cursors.encodeLong(CURSOR_SCOPE, page.getLast().outboxId()) : null;
         return new OutboxFailedPageResponse(page.stream().map(FailedRow::response).toList(), next, hasMore);
     }
 

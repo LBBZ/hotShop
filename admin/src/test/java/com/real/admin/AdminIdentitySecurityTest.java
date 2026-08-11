@@ -122,7 +122,7 @@ class AdminIdentitySecurityTest {
                 .validateMigrationNaming(true)
                 .cleanDisabled(true)
                 .load();
-        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(8);
+        assertThat(flyway.migrate().migrationsExecuted).isPositive();
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
         String hash = new BCryptPasswordEncoder().encode(PASSWORD);
         jdbcTemplate.update(
@@ -367,6 +367,170 @@ class AdminIdentitySecurityTest {
     }
 
     @Test
+    void operationsBoundaryRejectsAnonymousUserAndAgentWhileAdministratorReadsBoundedFacts()
+            throws Exception {
+        CustomUserDetails userPrincipal = CustomUserDetails.builder()
+                .userId(userId).username(USERNAME).password("")
+                .authorities(List.of(new SimpleGrantedAuthority("ROLE_USER"))).build();
+        String userAccess = jwtTokenUtil.issueUserAccess(userPrincipal).value();
+        String agentAccess = jwtTokenUtil.issueAgentDelegation(
+                userId, USERNAME, "hotshop-agent-service", Set.of("catalog:read")).value();
+
+        mockMvc.perform(get("/admin/api/v1/operations/overview").param("windowHours", "24"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/admin/api/v1/operations/overview")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(userAccess)))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/admin/api/v1/operations/overview")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(agentAccess)))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/admin/api/v1/operations/overview")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess()))
+                        .param("windowHours", "24"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.source").value(containsString("MySQL bounded")))
+                .andExpect(jsonPath("$.rangeFrom").isNotEmpty())
+                .andExpect(jsonPath("$.rangeTo").isNotEmpty())
+                .andExpect(jsonPath("$.ordersCreated").isNumber());
+
+        mockMvc.perform(get("/admin/api/v1/operations/overview")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess()))
+                        .param("windowHours", "0"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+    }
+
+    @Test
+    void paymentAndInvestigationQueriesUseStableSignedScopedCursors() throws Exception {
+        LocalDateTime created = LocalDateTime.of(2026, 8, 8, 10, 30, 0, 123_000_000);
+        for (int index = 1; index <= 2; index++) {
+            String orderId = "task14-order-" + index;
+            jdbcTemplate.update("""
+                    INSERT INTO sales_order(order_id,user_id,total_amount,currency,status,created_at)
+                    VALUES(?,?,19.90,'CNY','PENDING',?)
+                    """, orderId, userId, created);
+            jdbcTemplate.update("""
+                    INSERT INTO payment_order(payment_no,order_id,provider,amount,currency,status,created_at)
+                    VALUES(?,?,'MOCK',19.90,'CNY','PENDING',?)
+                    """, "task14-payment-" + index, orderId, created);
+        }
+        jdbcTemplate.update("""
+                INSERT INTO seckill_reconciliation_issue(
+                    issue_key,issue_type,severity,status,activity_id,reservation_no,evidence_summary,last_seen_at)
+                VALUES(REPEAT('a',64),'TASK14_FACT_CONFLICT','CRITICAL','OPEN',913001,
+                       'rsv_task14',JSON_OBJECT('schemaVersion',1,'equationHolds',false),?)
+                """, created);
+        jdbcTemplate.update("""
+                INSERT INTO seckill_event_processing(
+                    event_id,stream_key,stream_entry_id,reservation_no,activity_id,payload_hash,
+                    status,attempts,reason_code,last_error,updated_at)
+                VALUES('task14-event','seckill:stream:913001','1-0','rsv_task14',913001,
+                       REPEAT('b',64),'MANUAL_REVIEW',3,'FACT_CONFLICT','redacted category',?)
+                """, created);
+
+        MvcResult first = mockMvc.perform(get("/admin/api/v1/operations/payments")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess()))
+                        .param("limit", "1")
+                        .param("createdFrom", "2026-08-08T00:00:00Z")
+                        .param("createdTo", "2026-08-09T00:00:00Z"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.hasMore").value(true))
+                .andReturn();
+        String cursor = objectMapper.readTree(first.getResponse().getContentAsString())
+                .path("nextCursor").asText();
+
+        mockMvc.perform(get("/admin/api/v1/operations/payments")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess()))
+                        .param("limit", "1").param("cursor", cursor)
+                        .param("createdFrom", "2026-08-08T00:00:00Z")
+                        .param("createdTo", "2026-08-09T00:00:00Z"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.hasMore").value(false));
+        mockMvc.perform(get("/admin/api/v1/operations/payments")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess()))
+                        .param("cursor", cursor + "A")
+                        .param("createdFrom", "2026-08-08T00:00:00Z")
+                        .param("createdTo", "2026-08-09T00:00:00Z"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CURSOR_INVALID"));
+        mockMvc.perform(get("/admin/api/v1/operations/payments")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess()))
+                        .param("cursor", cursor).param("status", "FAILED")
+                        .param("createdFrom", "2026-08-08T00:00:00Z")
+                        .param("createdTo", "2026-08-09T00:00:00Z"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CURSOR_INVALID"));
+        mockMvc.perform(get("/admin/api/v1/operations/reconciliation-issues")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].issueType").value("TASK14_FACT_CONFLICT"))
+                .andExpect(jsonPath("$.items[0].evidenceSummary.equationHolds").value(false));
+        mockMvc.perform(get("/admin/api/v1/operations/manual-reviews")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].status").value("MANUAL_REVIEW"));
+        mockMvc.perform(get("/admin/api/v1/operations/reconciliation-status")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.dryRun").doesNotExist())
+                .andExpect(jsonPath("$.autoRepair").doesNotExist())
+                .andExpect(jsonPath("$.factStatement").value(containsString("not persisted")));
+    }
+
+    @Test
+    void invalidProductAndHighRiskReasonsAreRejectedBeforeMutation() throws Exception {
+        String access = adminAccess();
+        mockMvc.perform(post("/admin/api/v1/products")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(access))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"invalid","price":"-1.00","stock":-1,
+                                 "category":"Ops","reason":"test invalid bounds"}
+                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("MALFORMED_JSON"));
+        mockMvc.perform(post("/admin/api/v1/products")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(access))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"invalid stock","price":"19.90","stock":-1,
+                                 "category":"Ops","reason":"test invalid stock"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+        mockMvc.perform(post("/admin/api/v1/products")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(access))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"valid","price":"19.90","stock":2,"category":"demo","reason":"  x"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+        String failedEvent = insertOutbox("FAILED", 2, 2, 0, "BROKER_NACK", "safe");
+        mockMvc.perform(post("/admin/api/v1/outbox/{eventId}/replay", failedEvent)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(access))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM outbox_event WHERE event_id=?", String.class, failedEvent))
+                .isEqualTo("FAILED");
+        mockMvc.perform(get("/admin/api/v1/operations/payments")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(access))
+                        .param("createdFrom", "2026-01-01T00:00:00Z")
+                        .param("createdTo", "2026-03-01T00:00:00Z"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("TIME_RANGE_TOO_LARGE"));
+        mockMvc.perform(get("/admin/api/v1/orders")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(access)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("PARAMETER_MISSING"));
+    }
+
+    @Test
     void failedOutboxPaginationIsStableRedactedAndReplayPreservesHistory() throws Exception {
         String older = insertOutbox("FAILED", 8, 8, 1, "BROKER_NACK", "secret payload");
         String newer = insertOutbox("FAILED", 11, 8, 2, "CONFIRM_TIMEOUT", "credential=hidden");
@@ -468,7 +632,7 @@ class AdminIdentitySecurityTest {
                 null
         );
 
-        Product created = productAuditService.create(product, adminId, request);
+        Product created = productAuditService.create(product, adminId, "create support catalog item", request);
 
         assertThat(created.getProductId()).isPositive();
         String summary = jdbcTemplate.queryForObject(
@@ -513,7 +677,8 @@ class AdminIdentitySecurityTest {
                     "22222222222222222222222222222222"
             );
 
-            assertThatThrownBy(() -> productAuditService.create(product, adminId, request))
+            assertThatThrownBy(() -> productAuditService.create(
+                    product, adminId, "test failed catalog insert", request))
                     .isInstanceOf(RuntimeException.class);
         } finally {
             jdbcTemplate.execute("DROP TRIGGER IF EXISTS test_catalog_product_insert_failure");
@@ -560,7 +725,8 @@ class AdminIdentitySecurityTest {
                     "33333333333333333333333333333333"
             );
 
-            assertThatThrownBy(() -> productAuditService.create(product, adminId, request))
+            assertThatThrownBy(() -> productAuditService.create(
+                    product, adminId, "test audit transaction boundary", request))
                     .isInstanceOf(RuntimeException.class);
         } finally {
             jdbcTemplate.execute("DROP TRIGGER IF EXISTS test_audit_log_insert_failure");

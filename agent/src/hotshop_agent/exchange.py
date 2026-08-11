@@ -6,7 +6,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from hotshop_agent.config import Settings
-from hotshop_agent.domain import IdentityKind, Principal
+from hotshop_agent.domain import Credential, IdentityKind
 from hotshop_agent.security import AuthenticationError, ClientAssertionSigner, JwtVerifier
 
 
@@ -36,7 +36,7 @@ class TokenExchangeClient:
         self._signer = signer
         self._verifier = verifier
 
-    async def exchange(self, user_access_token: str, scopes: frozenset[str]) -> Principal:
+    async def exchange(self, user_access_token: str, scopes: frozenset[str]) -> Credential:
         try:
             assertion = self._signer.issue()
             response = await self._client.post(
@@ -57,7 +57,7 @@ class TokenExchangeClient:
             principal = self._verifier.verify(body.access_token, IdentityKind.DELEGATION)
             if principal.scopes != scopes:
                 raise TokenExchangeError
-            return principal
+            return Credential(token=body.access_token, principal=principal)
         except (
             httpx.HTTPError,
             AuthenticationError,

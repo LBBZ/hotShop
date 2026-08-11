@@ -20,7 +20,7 @@ public record AgentTokenExchangeRequest(
         @NotEmpty
         @Size(max = 8)
         Set<
-                @Pattern(regexp = "^[a-z][a-z0-9]*(?::[a-z][a-z0-9]*){1,3}$")
+                @Pattern(regexp = "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?::[a-z][a-z0-9]*(?:-[a-z0-9]+)*){1,3}$")
                 @Size(max = 64)
                 String
                 > scopes

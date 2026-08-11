@@ -50,11 +50,16 @@ class JsonFormatter(logging.Formatter):
             "environment": self._environment,
             "event": sanitize(str(getattr(record, "event", "application.log"))),
             "name": sanitize(record.name),
-            "requestId": REQUEST_ID.get(),
-            "traceId": TRACE_ID.get(),
+            "requestId": sanitize(str(getattr(record, "requestId", REQUEST_ID.get()))),
+            "traceId": sanitize(str(getattr(record, "traceId", TRACE_ID.get()))),
             "spanId": SPAN_ID.get(),
             "outcome": sanitize(str(getattr(record, "outcome", "unknown"))),
             "errorType": sanitize(str(getattr(record, "errorType", ""))),
+            "identityKind": sanitize(str(getattr(record, "identityKind", ""))),
+            "subject": sanitize(str(getattr(record, "subject", ""))),
+            "tool": sanitize(str(getattr(record, "tool", ""))),
+            "resourceType": sanitize(str(getattr(record, "resourceType", ""))),
+            "parameterSummary": sanitize(str(getattr(record, "parameterSummary", ""))),
             "message": sanitize(record.getMessage()),
         }
         return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))

@@ -42,6 +42,22 @@ const adminConfiguration = new AdminConfiguration({
   fetchApi: adminAuth.fetch,
 });
 
+const adminAuthenticationConfiguration = new AdminConfiguration({
+  basePath: apiEnvironment.baseUrl,
+  credentials: "include",
+  fetchApi: (input, init) => {
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+    return url.endsWith("/admin/api/v1/auth/login")
+      ? publicFetch(input, init)
+      : adminAuth.fetch(input, init);
+  },
+});
+
 export const apiClients = Object.freeze({
   public: Object.freeze({
     activities: new PublicFlashSaleActivitiesApi(publicConfiguration),
@@ -57,7 +73,9 @@ export const apiClients = Object.freeze({
   }),
   admin: Object.freeze({
     auditLogs: new AdminAuditLogsApi(adminConfiguration),
-    authentication: new AdminAuthenticationApi(adminConfiguration),
+    authentication: new AdminAuthenticationApi(
+      adminAuthenticationConfiguration,
+    ),
     orders: new AdminOrdersApi(adminConfiguration),
     products: new AdminProductsApi(adminConfiguration),
     users: new AdminUsersApi(adminConfiguration),

@@ -1,6 +1,7 @@
 package com.real.admin;
 
 import com.real.admin.service.AdminFlashSaleActivityLoadService;
+import com.real.admin.service.AdminOperationsService;
 import com.real.domain.entity.Product;
 import com.real.domain.service.OrderService;
 import com.real.domain.service.ProductService;
@@ -50,12 +51,15 @@ class AdminApiContractTest {
     private TokenBlacklistService tokenBlacklistService;
     @MockitoBean
     private AdminFlashSaleActivityLoadService flashSaleActivityLoadService;
+    @MockitoBean
+    private AdminOperationsService adminOperationsService;
 
     @Test
     void onlyAdministratorCanLoadAndVerifyFlashSaleActivity() throws Exception {
         when(flashSaleActivityLoadService.load(
                 org.mockito.ArgumentMatchers.eq(7001L),
                 org.mockito.ArgumentMatchers.eq(100L),
+                org.mockito.ArgumentMatchers.eq("planned demo load"),
                 org.mockito.ArgumentMatchers.any()
         )).thenReturn(new FlashSaleLoadResult(
                 FlashSaleLoadCode.LOADED,
@@ -72,14 +76,18 @@ class AdminApiContractTest {
         ));
 
         mockMvc.perform(post("/admin/api/v1/flash-sales/{activityId}/load", 7001)
-                        .with(user(adminPrincipal())))
+                        .with(user(adminPrincipal()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"planned demo load\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.activityId").value("7001"))
                 .andExpect(jsonPath("$.result").value("LOADED"))
                 .andExpect(jsonPath("$.consistent").value(true));
 
         mockMvc.perform(post("/admin/api/v1/flash-sales/{activityId}/load", 7001)
-                        .with(user(userPrincipal())))
+                        .with(user(userPrincipal()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"planned demo load\"}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
     }
@@ -184,7 +192,8 @@ class AdminApiContractTest {
                                   "name": "Unsafe numeric amount",
                                   "price": 88.00,
                                   "stock": 1,
-                                  "category": "Contract"
+                                  "category": "Contract",
+                                  "reason": "verify amount contract"
                                 }
                                 """))
                 .andExpect(status().isBadRequest())

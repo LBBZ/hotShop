@@ -47,6 +47,41 @@ const AdminDashboard = lazy(() =>
     default: module.AdminDashboard,
   })),
 );
+const AdminLoginPage = lazy(() =>
+  import("@/pages/admin-login-page").then((module) => ({
+    default: module.AdminLoginPage,
+  })),
+);
+const AdminProductsPage = lazy(() =>
+  import("@/pages/admin-products-page").then((module) => ({
+    default: module.AdminProductsPage,
+  })),
+);
+const AdminActivitiesPage = lazy(() =>
+  import("@/pages/admin-activities-page").then((module) => ({
+    default: module.AdminActivitiesPage,
+  })),
+);
+const AdminOrdersPage = lazy(() =>
+  import("@/pages/admin-orders-page").then((module) => ({
+    default: module.AdminOrdersPage,
+  })),
+);
+const AdminExceptionsPage = lazy(() =>
+  import("@/pages/admin-exceptions-page").then((module) => ({
+    default: module.AdminExceptionsPage,
+  })),
+);
+const AdminOutboxPage = lazy(() =>
+  import("@/pages/admin-outbox-page").then((module) => ({
+    default: module.AdminOutboxPage,
+  })),
+);
+const AdminAuditPage = lazy(() =>
+  import("@/pages/admin-audit-page").then((module) => ({
+    default: module.AdminAuditPage,
+  })),
+);
 const ForbiddenPage = lazy(() =>
   import("@/pages/status-pages").then((module) => ({
     default: module.ForbiddenPage,
@@ -108,7 +143,13 @@ export function AppRouter() {
             </Route>
           </Route>
 
-          <Route element={<ProtectedRoute domain={adminAuth} />}>
+          <Route path="/admin/login" element={<AdminLoginPage />} />
+
+          <Route
+            element={
+              <ProtectedRoute domain={adminAuth} redirectTo="/admin/login" />
+            }
+          >
             <Route
               path="/admin"
               element={
@@ -119,17 +160,31 @@ export function AppRouter() {
                   tone="admin"
                   items={[
                     { label: "交易总览", to: "/admin", icon: "overview" },
-                    { label: "商品", to: "/admin/catalog", icon: "catalog" },
+                    { label: "商品", to: "/admin/products", icon: "catalog" },
+                    {
+                      label: "活动",
+                      to: "/admin/activities",
+                      icon: "activities",
+                    },
                     { label: "订单", to: "/admin/orders", icon: "orders" },
-                    { label: "Users", to: "/admin/users", icon: "users" },
+                    {
+                      label: "异常",
+                      to: "/admin/exceptions",
+                      icon: "exceptions",
+                    },
+                    { label: "Outbox", to: "/admin/outbox", icon: "outbox" },
+                    { label: "审计", to: "/admin/audit", icon: "audit" },
                   ]}
                 />
               }
             >
               <Route index element={<AdminDashboard />} />
-              <Route path="catalog" element={<AdminDashboard />} />
-              <Route path="orders" element={<AdminDashboard />} />
-              <Route path="users" element={<AdminDashboard />} />
+              <Route path="products" element={<AdminProductsPage />} />
+              <Route path="activities" element={<AdminActivitiesPage />} />
+              <Route path="orders" element={<AdminOrdersPage />} />
+              <Route path="exceptions" element={<AdminExceptionsPage />} />
+              <Route path="outbox" element={<AdminOutboxPage />} />
+              <Route path="audit" element={<AdminAuditPage />} />
             </Route>
           </Route>
 

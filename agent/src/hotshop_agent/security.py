@@ -20,13 +20,19 @@ ADMIN_AUTHORITIES = frozenset(
         "ROLE_ADMIN",
         "PERM_ADMIN_PRODUCT_READ",
         "PERM_ADMIN_PRODUCT_WRITE",
+        "PERM_ADMIN_FLASH_SALE_LOAD",
         "PERM_ADMIN_ORDER_READ",
         "PERM_ADMIN_USER_READ",
     }
 )
 USER_AUTHORITIES = frozenset({"ROLE_USER"})
 ALLOWED_DELEGATION_SCOPES = frozenset(
-    {"catalog:read", "orders:self:read", "reservations:self:read"}
+    {
+        "catalog:read",
+        "orders:self:read",
+        "reservations:self:read",
+        "purchase-drafts:create",
+    }
 )
 BEARER_RE = re.compile(r"^Bearer ([^\s]+)$")
 

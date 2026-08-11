@@ -15,10 +15,13 @@
 
 import * as runtime from '../runtime';
 import type {
+  AdminOperationReasonRequest,
   ApiProblem,
   FlashSaleActivityLoadResponse,
 } from '../models/index';
 import {
+    AdminOperationReasonRequestFromJSON,
+    AdminOperationReasonRequestToJSON,
     ApiProblemFromJSON,
     ApiProblemToJSON,
     FlashSaleActivityLoadResponseFromJSON,
@@ -27,6 +30,7 @@ import {
 
 export interface LoadRequest {
     activityId: string;
+    adminOperationReasonRequest: AdminOperationReasonRequest;
     xRequestId?: string;
     traceparent?: string;
 }
@@ -42,6 +46,7 @@ export interface AdminFlashSaleActivitiesApiInterface {
      * Loads validated MySQL facts by version and returns Redis/MySQL reconciliation.
      * @summary Load a Flash Sale Activity into redis-seckill
      * @param {string} activityId
+     * @param {AdminOperationReasonRequest} adminOperationReasonRequest
      * @param {string} [xRequestId] Caller-supplied correlation ID. Invalid values are replaced by the server.
      * @param {string} [traceparent] W3C trace context. Its trace ID is distinct from X-Request-Id.
      * @param {*} [options] Override http request option.
@@ -75,9 +80,18 @@ export class AdminFlashSaleActivitiesApi extends runtime.BaseAPI implements Admi
             );
         }
 
+        if (requestParameters['adminOperationReasonRequest'] == null) {
+            throw new runtime.RequiredError(
+                'adminOperationReasonRequest',
+                'Required parameter "adminOperationReasonRequest" was null or undefined when calling load().'
+            );
+        }
+
         const queryParameters: any = {};
 
         const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
 
         if (requestParameters['xRequestId'] != null) {
             headerParameters['X-Request-Id'] = String(requestParameters['xRequestId']);
@@ -104,6 +118,7 @@ export class AdminFlashSaleActivitiesApi extends runtime.BaseAPI implements Admi
             method: 'POST',
             headers: headerParameters,
             query: queryParameters,
+            body: AdminOperationReasonRequestToJSON(requestParameters['adminOperationReasonRequest']),
         }, initOverrides);
 
         return new runtime.JSONApiResponse(response, (jsonValue) => FlashSaleActivityLoadResponseFromJSON(jsonValue));

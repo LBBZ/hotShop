@@ -21,7 +21,8 @@ public class AgentTokenExchangeService {
     public static final Set<String> ALLOWED_SCOPES = Set.of(
             "catalog:read",
             "orders:self:read",
-            "reservations:self:read"
+            "reservations:self:read",
+            "purchase-drafts:create"
     );
 
     private final JwtTokenUtil jwtTokenUtil;

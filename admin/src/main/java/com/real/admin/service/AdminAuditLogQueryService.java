@@ -3,7 +3,6 @@ package com.real.admin.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.real.common.api.CursorCodec;
 import com.real.common.api.CursorSlice;
 import com.real.common.audit.AuditAction;
 import com.real.common.audit.AuditActorType;
@@ -32,10 +31,14 @@ import java.util.Map;
 public class AdminAuditLogQueryService {
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    private final AdminCursorCodec cursors;
 
-    public AdminAuditLogQueryService(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
+    public AdminAuditLogQueryService(
+            JdbcTemplate jdbcTemplate, ObjectMapper objectMapper, AdminCursorCodec cursors
+    ) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
+        this.cursors = cursors;
     }
 
     public CursorSlice<AuditLogResponse> query(
@@ -60,7 +63,7 @@ public class AdminAuditLogQueryService {
                 resourceId,
                 result
         );
-        CursorCodec.TimeLongCursor decoded = CursorCodec.decodeTimeAndLong(cursor, scope);
+        AdminCursorCodec.TimeLongCursor decoded = cursors.decodeTimeLong(cursor, scope);
         StringBuilder sql = new StringBuilder("""
                 SELECT
                     audit_id, actor_type, actor_id, delegated_actor_type, delegated_actor_id,
@@ -96,7 +99,7 @@ public class AdminAuditLogQueryService {
         List<AuditLogResponse> items =
                 hasMore ? List.copyOf(fetched.subList(0, limit)) : List.copyOf(fetched);
         String nextCursor = hasMore
-                ? CursorCodec.encodeTimeAndLong(
+                ? cursors.encodeTimeLong(
                         scope,
                         LocalDateTime.ofInstant(items.getLast().occurredAt(), ZoneOffset.UTC),
                         items.getLast().auditId()

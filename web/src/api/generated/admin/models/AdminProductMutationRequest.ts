@@ -16,57 +16,64 @@ import { mapValues } from '../runtime';
 /**
  *
  * @export
- * @interface ProductWriteRequest
+ * @interface AdminProductMutationRequest
  */
-export interface ProductWriteRequest {
+export interface AdminProductMutationRequest {
     /**
      *
      * @type {string}
-     * @memberof ProductWriteRequest
+     * @memberof AdminProductMutationRequest
      */
     category: string;
     /**
      *
      * @type {string}
-     * @memberof ProductWriteRequest
+     * @memberof AdminProductMutationRequest
      */
     description?: string;
     /**
      *
      * @type {string}
-     * @memberof ProductWriteRequest
+     * @memberof AdminProductMutationRequest
      */
     name: string;
     /**
      *
      * @type {string}
-     * @memberof ProductWriteRequest
+     * @memberof AdminProductMutationRequest
      */
     price: string;
     /**
      *
+     * @type {string}
+     * @memberof AdminProductMutationRequest
+     */
+    reason: string;
+    /**
+     *
      * @type {number}
-     * @memberof ProductWriteRequest
+     * @memberof AdminProductMutationRequest
      */
     stock: number;
 }
 
 /**
- * Check if a given object implements the ProductWriteRequest interface.
+ * Check if a given object implements the AdminProductMutationRequest interface.
  */
-export function instanceOfProductWriteRequest(value: object): value is ProductWriteRequest {
+export function instanceOfAdminProductMutationRequest(value: object): value is AdminProductMutationRequest {
     if (!('category' in value) || value['category'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
     if (!('price' in value) || value['price'] === undefined) return false;
+    if (!('reason' in value) || value['reason'] === undefined) return false;
     if (!('stock' in value) || value['stock'] === undefined) return false;
     return true;
 }
 
-export function ProductWriteRequestFromJSON(json: any): ProductWriteRequest {
-    return ProductWriteRequestFromJSONTyped(json, false);
+export function AdminProductMutationRequestFromJSON(json: any): AdminProductMutationRequest {
+    return AdminProductMutationRequestFromJSONTyped(json, false);
 }
 
-export function ProductWriteRequestFromJSONTyped(json: any, ignoreDiscriminator: boolean): ProductWriteRequest {
+export function AdminProductMutationRequestFromJSONTyped(json: any, ignoreDiscriminator: boolean): AdminProductMutationRequest {
     if (json == null) {
         return json;
     }
@@ -76,15 +83,16 @@ export function ProductWriteRequestFromJSONTyped(json: any, ignoreDiscriminator:
         'description': json['description'] == null ? undefined : json['description'],
         'name': json['name'],
         'price': json['price'],
+        'reason': json['reason'],
         'stock': json['stock'],
     };
 }
 
-export function ProductWriteRequestToJSON(json: any): ProductWriteRequest {
-    return ProductWriteRequestToJSONTyped(json, false);
+export function AdminProductMutationRequestToJSON(json: any): AdminProductMutationRequest {
+    return AdminProductMutationRequestToJSONTyped(json, false);
 }
 
-export function ProductWriteRequestToJSONTyped(value?: ProductWriteRequest | null, ignoreDiscriminator: boolean = false): any {
+export function AdminProductMutationRequestToJSONTyped(value?: AdminProductMutationRequest | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }
@@ -95,6 +103,7 @@ export function ProductWriteRequestToJSONTyped(value?: ProductWriteRequest | nul
         'description': value['description'],
         'name': value['name'],
         'price': value['price'],
+        'reason': value['reason'],
         'stock': value['stock'],
     };
 }

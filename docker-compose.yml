@@ -142,7 +142,7 @@ services:
       context: .
       dockerfile: docker/rabbitmq/Dockerfile
       args:
-        RABBITMQ_IMAGE: ${RABBITMQ_IMAGE:-rabbitmq:4.0.7-management-alpine}
+        RABBITMQ_IMAGE: ${RABBITMQ_IMAGE:-rabbitmq:4.0.7-management-alpine@sha256:011e8d48c9d4e9e0bc94d709e2b1b68fccf51de6680bcda302566dff0465764f}
     image: ${RABBITMQ_PROJECT_IMAGE:-hotshop-rabbitmq:4.0.7}
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-hotshop}
@@ -167,6 +167,32 @@ services:
     mem_limit: ${RABBITMQ_MEMORY_LIMIT:-768m}
     stop_grace_period: 1m
     restart: unless-stopped
+
+  java-key-material-init:
+    profiles: [app]
+    image: alpine:3.22.1@sha256:4bcff63911fcb4448bd4fdacec207030997caf25e9bea4045fa6c8c44de311d1
+    user: "0:0"
+    command:
+      - sh
+      - -euc
+      - |
+        umask 077
+        rm -f /portal/* /admin/*
+        install -d -o 10001 -g 10001 -m 0700 /portal /admin
+        for key in user-private.pem user-public.pem agent-delegation-private.pem agent-delegation-public.pem agent-service-public.pem; do
+          test -s "/source/$${key}"
+          install -o 10001 -g 10001 -m 0400 "/source/$${key}" "/portal/$${key}"
+        done
+        for key in administrator-private.pem administrator-public.pem; do
+          test -s "/source/$${key}"
+          install -o 10001 -g 10001 -m 0400 "/source/$${key}" "/admin/$${key}"
+        done
+    volumes:
+      - ${HOTSHOP_KEY_DIR:-./.local/keys/hotshop}:/source:ro
+      - portal_key_material:/portal
+      - admin_key_material:/admin
+    network_mode: none
+    restart: "no"
 
   admin-service:
     profiles: [app]
@@ -204,11 +230,12 @@ services:
       OTEL_RESOURCE_ATTRIBUTES: service.name=admin,deployment.environment=${HOTSHOP_DEPLOYMENT_ENVIRONMENT:-local}
       TZ: ${TZ:-UTC}
     volumes:
-      - ${HOTSHOP_KEY_DIR:-./.local/keys/hotshop}/administrator-private.pem:/run/secrets/hotshop/administrator-private.pem:ro
-      - ${HOTSHOP_KEY_DIR:-./.local/keys/hotshop}/administrator-public.pem:/run/secrets/hotshop/administrator-public.pem:ro
+      - admin_key_material:/run/secrets/hotshop:ro
     ports:
       - "${ADMIN_PORT:-8088}:8088"
     depends_on:
+      java-key-material-init:
+        condition: service_completed_successfully
       database-migrator:
         condition: service_completed_successfully
       redis-cache:
@@ -274,14 +301,12 @@ services:
       OTEL_RESOURCE_ATTRIBUTES: service.name=portal,deployment.environment=${HOTSHOP_DEPLOYMENT_ENVIRONMENT:-local}
       TZ: ${TZ:-UTC}
     volumes:
-      - ${HOTSHOP_KEY_DIR:-./.local/keys/hotshop}/user-private.pem:/run/secrets/hotshop/user-private.pem:ro
-      - ${HOTSHOP_KEY_DIR:-./.local/keys/hotshop}/user-public.pem:/run/secrets/hotshop/user-public.pem:ro
-      - ${HOTSHOP_KEY_DIR:-./.local/keys/hotshop}/agent-delegation-private.pem:/run/secrets/hotshop/agent-delegation-private.pem:ro
-      - ${HOTSHOP_KEY_DIR:-./.local/keys/hotshop}/agent-delegation-public.pem:/run/secrets/hotshop/agent-delegation-public.pem:ro
-      - ${HOTSHOP_KEY_DIR:-./.local/keys/hotshop}/agent-service-public.pem:/run/secrets/hotshop/agent-service-public.pem:ro
+      - portal_key_material:/run/secrets/hotshop:ro
     ports:
       - "${PORTAL_PORT:-8080}:8080"
     depends_on:
+      java-key-material-init:
+        condition: service_completed_successfully
       database-migrator:
         condition: service_completed_successfully
       redis-cache:
@@ -596,6 +621,8 @@ services:
     restart: unless-stopped
 
 volumes:
+  portal_key_material:
+  admin_key_material:
   mysql_data:
   redis_cache_data:
   redis_seckill_data:

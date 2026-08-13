@@ -27,7 +27,7 @@ try {
             --mount "type=bind,source=$repositoryRoot,target=/workspace" `
             --mount "type=volume,source=hotshop-task04-m2,target=/root/.m2" `
             --workdir /workspace `
-            eclipse-temurin:21-jdk `
+            eclipse-temurin:21-jdk@sha256:efd34b940f2d5a621605c8531c2afb7759c936b6c2ef637a69aa3bf3e1e789d1 `
             ./mvnw -B -pl portal,admin -am package
         if ($LASTEXITCODE -ne 0) {
             throw 'Java package build failed; runtime OpenAPI was not generated'
@@ -56,7 +56,7 @@ try {
             --label 'com.hotshop.task=task04-openapi' `
             -p '127.0.0.1::8080' `
             --mount "type=bind,source=$($application.Jar),target=/app/app.jar,readonly" `
-            eclipse-temurin:21-jdk `
+            eclipse-temurin:21-jdk@sha256:efd34b940f2d5a621605c8531c2afb7759c936b6c2ef637a69aa3bf3e1e789d1 `
             java -jar /app/app.jar `
             --server.port=8080 `
             --springdoc.swagger-ui.enabled=false `

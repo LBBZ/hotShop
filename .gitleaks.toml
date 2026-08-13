@@ -1,0 +1,39 @@
+title = "HotShop gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "private-key"
+
+  [[rules.allowlists]]
+  description = "Exact adjacent PEM recognizer literals; no key body is present."
+  regexTarget = "match"
+  regexes = [
+    '''-----BEGIN PRIVATE KEY-----",\s+"-----BEGIN PKCS#8 PRIVATE KEY-----",\s+"-----BEGIN RSA PRIVATE KEY-----''',
+    '''-----BEGIN EC PRIVATE KEY-----",\s+"-----BEGIN OPENSSH PRIVATE KEY-----",\s+"-----BEGIN ENCRYPTED PRIVATE KEY-----''',
+  ]
+
+  [[rules.allowlists]]
+  description = "Known streaming-sanitizer PEM fixtures with non-key placeholder bodies."
+  condition = "AND"
+  regexTarget = "match"
+  regexes = ['''(?:PKCS8|EC)-SECRET''']
+  paths = ['''^agent/tests/test_streaming_sanitizer\.py$''']
+
+[[rules]]
+id = "jwt"
+
+  [[rules.allowlists]]
+  description = "Known streaming-sanitizer JWT fixture with a literal fake signature."
+  condition = "AND"
+  regexTarget = "match"
+  regexes = ['''signatureABCDEFG''']
+  paths = ['''^agent/tests/test_streaming_sanitizer\.py$''']
+
+  [[rules.allowlists]]
+  description = "Known observability redaction test JWT with a literal fake signature."
+  condition = "AND"
+  regexTarget = "match"
+  regexes = ['''signature123456''']
+  paths = ['''^common/src/test/java/com/real/common/observability/ObservabilitySafetyTest\.java$''']

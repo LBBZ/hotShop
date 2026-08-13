@@ -6,5 +6,11 @@
 !.env.example
 .local
 **/target
+**/node_modules
+**/.pnpm-store
+**/coverage
+**/dist
+**/playwright-report
+**/test-results
 *.log
 docker/observability/data

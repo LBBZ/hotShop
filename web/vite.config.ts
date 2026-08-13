@@ -42,7 +42,9 @@ export default defineConfig({
     exclude: [...configDefaults.exclude, "e2e/**"],
     css: true,
     coverage: {
-      reporter: ["text", "html"],
+      provider: "v8",
+      reportsDirectory: "coverage",
+      reporter: ["text", "html", "json-summary", "lcov"],
     },
   },
 });

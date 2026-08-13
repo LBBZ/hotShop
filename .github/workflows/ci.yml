@@ -1,0 +1,421 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  AGENT_MODEL_PROVIDER: fake
+  AGENT_EMBEDDING_PROVIDER: deterministic
+
+jobs:
+  changes:
+    name: Change detection
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      java: ${{ steps.detect.outputs.java }}
+      agent: ${{ steps.detect.outputs.agent }}
+      web: ${{ steps.detect.outputs.web }}
+      openapi: ${{ steps.detect.outputs.openapi }}
+      docker: ${{ steps.detect.outputs.docker }}
+      ci_security: ${{ steps.detect.outputs.ci_security }}
+      docs_only: ${{ steps.detect.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - id: detect
+        name: Classify changed paths
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          python3 script/ci/detect_changes.py \
+            --base "$BASE_SHA" --head "$HEAD_SHA" \
+            --output "$GITHUB_OUTPUT" --report target/ci/change-detection.json
+          cat target/ci/change-detection.json >> "$GITHUB_STEP_SUMMARY"
+
+  ci-security:
+    name: CI and security policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Run CI policy tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s script/ci/tests -v
+          python3 script/ci/check_ci_policy.py .
+      - name: Verify Compose cleanup ownership boundaries
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          & ./script/ci/tests/test_native_cleanup.ps1
+          & ./script/ci/tests/test_compose_cleanup_ownership.ps1
+      - name: Validate workflow syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "$PWD:/repo:ro" -w /repo \
+            rhysd/actionlint@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9
+      - name: Scan repository and introduced history for secrets
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$BASE_SHA" && ! "$BASE_SHA" =~ ^0+$ ]]; then
+            LOG_OPTS="$BASE_SHA..$HEAD_SHA"
+          else
+            LOG_OPTS="$HEAD_SHA"
+          fi
+          docker run --rm -v "$PWD:/repo:ro" -w /repo \
+            zricethezav/gitleaks@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854 \
+            git --redact --config .gitleaks.toml --log-opts="$LOG_OPTS" --no-banner
+          docker run --rm -v "$PWD:/repo:ro" -w /repo \
+            zricethezav/gitleaks@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854 \
+            dir --redact --config .gitleaks.toml --no-banner .
+          docker run --rm --entrypoint sh -v "$PWD:/repo:ro" -w /repo \
+            zricethezav/gitleaks@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854 \
+            script/ci/test_gitleaks.sh
+          printf 'CI policy, actionlint, and redacted secret scan passed.\n' >> "$GITHUB_STEP_SUMMARY"
+
+  java:
+    name: Java 21 verify
+    needs: changes
+    if: needs.changes.outputs.java == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: Verify reactor
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./mvnw
+          ./mvnw -B -ntp clean verify
+      - name: Assert required JaCoCo reports
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s portal/target/site/jacoco/jacoco.xml
+          test -s admin/target/site/jacoco/jacoco.xml
+          test -s task/target/site/jacoco/jacoco.xml
+      - name: Upload Java reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: java-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            **/target/surefire-reports/*.xml
+            **/target/failsafe-reports/*.xml
+            **/target/site/jacoco/**
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Summarize Java artifacts
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'Java report artifact: java-reports-%s-%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_STEP_SUMMARY"
+
+  agent:
+    name: Agent deterministic gate
+    needs: changes
+    if: needs.changes.outputs.agent == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - name: Build pinned Python test image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: agent
+          file: agent/Dockerfile
+          target: test
+          load: true
+          push: false
+          tags: hotshop-agent:ci-test
+          cache-from: type=gha,scope=ci-agent-test-gate
+          cache-to: type=gha,mode=max,scope=ci-agent-test-gate
+      - name: Ruff, format, and strict mypy
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --network none --entrypoint python hotshop-agent:ci-test -m ruff check .
+          docker run --rm --network none --entrypoint python hotshop-agent:ci-test -m ruff format --check .
+          docker run --rm --network none --entrypoint python hotshop-agent:ci-test -m mypy --no-incremental src tests
+      - name: Non-Qdrant pytest with coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -d -m 0777 target/ci/agent
+          docker run --rm --network none \
+            -e PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+            -e AGENT_MODEL_PROVIDER=fake -e AGENT_EMBEDDING_PROVIDER=deterministic \
+            -v "$PWD/target/ci/agent:/reports" \
+            --entrypoint python hotshop-agent:ci-test \
+            -m pytest -m 'not qdrant' -p pytest_asyncio.plugin -p no:cacheprovider \
+            --junitxml=/reports/junit.xml
+          docker run --rm --network none \
+            -e PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+            -e COVERAGE_CORE=sysmon -e COVERAGE_FILE=/reports/.coverage \
+            -e AGENT_MODEL_PROVIDER=fake -e AGENT_EMBEDDING_PROVIDER=deterministic \
+            -v "$PWD/target/ci/agent:/reports" \
+            --entrypoint python hotshop-agent:ci-test \
+            -m pytest tests/test_embeddings.py tests/test_knowledge_rag.py \
+            tests/test_pytest_plugin_isolation.py -m 'not qdrant' \
+            -p pytest_asyncio.plugin -p pytest_cov.plugin -p no:cacheprovider \
+            --cov=hotshop_agent --cov-report=xml:/reports/coverage.xml --cov-report=html:/reports/coverage
+      - name: Quick deterministic evaluation
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --network none \
+            -e PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+            -e AGENT_TRACE_SAMPLE_RATIO=0 \
+            -e AGENT_MODEL_PROVIDER=fake -e AGENT_EMBEDDING_PROVIDER=deterministic \
+            -v "$PWD/target/ci/agent:/reports" \
+            --entrypoint python hotshop-agent:ci-test \
+            -m hotshop_agent.eval_runner --suite quick --output /reports/quick-eval.json
+      - name: Upload Agent reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: agent-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: target/ci/agent/
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Summarize Agent artifacts
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'Agent report artifact: agent-reports-%s-%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_STEP_SUMMARY"
+
+  web:
+    name: Web quality and mocked smoke
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@7088e561eb65bb68695d245aa206f005ef30921d # v4.1.0
+        with:
+          version: 10.15.0
+          run_install: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Install frozen dependencies
+        working-directory: web
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+      - name: Run Web gates and coverage
+        working-directory: web
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm format:check
+          pnpm lint
+          pnpm typecheck
+          pnpm test
+          pnpm test:coverage
+          pnpm build
+          pnpm api:check
+          pnpm api:check:admin
+      - name: Run mocked Playwright smoke
+        working-directory: web
+        shell: bash
+        env:
+          CI: "true"
+        run: |
+          set -euo pipefail
+          pnpm exec playwright install --with-deps chromium
+          pnpm exec playwright test e2e/smoke.spec.ts
+      - name: Upload Web coverage
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: web-coverage-${{ github.run_id }}-${{ github.run_attempt }}
+          path: web/coverage/
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Upload failed Playwright evidence
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: playwright-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            web/playwright-report/
+            web/test-results/
+          if-no-files-found: warn
+          retention-days: 3
+      - name: Summarize Web artifacts
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'Web coverage artifact: web-coverage-%s-%s; Playwright failure artifact is created only on failure.\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_STEP_SUMMARY"
+
+  openapi:
+    name: OpenAPI compatibility and drift
+    needs: changes
+    if: needs.changes.outputs.openapi == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Run runtime compatibility and generated-client drift
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          New-Item -ItemType Directory -Force target/ci/openapi | Out-Null
+          & ./script/generate-openapi.ps1 *>&1 | Tee-Object target/ci/openapi/generate.log
+          docker run --rm --mount "type=bind,source=${PWD},target=/repo" -w /repo python:3.12.11-slim-bookworm@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7 python -m unittest script.tests.test_check_openapi_compatibility *>&1 | Tee-Object target/ci/openapi/compat-tests.log
+          docker run --rm --mount "type=bind,source=${PWD},target=/repo" -w /repo python:3.12.11-slim-bookworm@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7 python script/check_openapi_compatibility.py --baseline docs/api/openapi-baseline --current target/openapi *>&1 | Tee-Object target/ci/openapi/compatibility.log
+          docker run --rm --mount "type=bind,source=${PWD},target=/repo" -w /repo/web node:22-bookworm@sha256:0557ac14e0d45d02ed563067b82856ca5e7aa3437fa28d98d4350ea9c3d9494a bash -lc 'corepack enable && corepack prepare pnpm@10.15.0 --activate && pnpm install --frozen-lockfile && pnpm api:check && pnpm api:check:admin' *>&1 | Tee-Object target/ci/openapi/client-drift.log
+          git diff --exit-code -- web/src/api/generated | Tee-Object target/ci/openapi/worktree-drift.log
+      - name: Upload contract evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: openapi-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: target/ci/openapi/
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Summarize OpenAPI artifacts
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'OpenAPI report artifact: openapi-reports-%s-%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_STEP_SUMMARY"
+
+  docker:
+    name: Docker reproducible builds
+    needs: changes
+    if: needs.changes.outputs.docker == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - name: Validate Compose configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose --env-file .env.example config --quiet
+      - name: Build Java runtime image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: Dockerfile
+          build-args: MODULE=portal
+          load: true
+          push: false
+          tags: hotshop-portal:ci
+          cache-from: type=gha,scope=ci-java-portal
+          cache-to: type=gha,mode=max,scope=ci-java-portal
+      - name: Build Agent runtime image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: agent
+          file: agent/Dockerfile
+          load: true
+          push: false
+          tags: hotshop-agent:ci
+          cache-from: type=gha,scope=ci-agent-runtime
+          cache-to: type=gha,mode=max,scope=ci-agent-runtime
+      - name: Build Agent test image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: agent
+          file: agent/Dockerfile
+          target: test
+          load: true
+          push: false
+          tags: hotshop-agent:ci-test
+          cache-from: type=gha,scope=ci-agent-test
+          cache-to: type=gha,mode=max,scope=ci-agent-test
+      - name: Build Web image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: web
+          file: web/Dockerfile
+          load: true
+          push: false
+          tags: hotshop-web:ci
+          cache-from: type=gha,scope=ci-web
+          cache-to: type=gha,mode=max,scope=ci-web
+      - name: Verify runtime users
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(docker image inspect hotshop-portal:ci --format '{{.Config.User}}')" = "10001:10001"
+          test "$(docker image inspect hotshop-web:ci --format '{{.Config.User}}')" = "pwuser"
+          test "$(docker run --rm -e AGENT_ASSERTION_PRIVATE_KEY_SOURCE_PATH=/etc/hostname hotshop-agent:ci id -u)" = "10001"
+          docker run --rm --entrypoint id hotshop-agent:ci-test -u | grep -q '^10001$'
+          printf 'Compose config and Java, Agent runtime/test, and Web image builds passed; no image was pushed.\n' >> "$GITHUB_STEP_SUMMARY"
+
+  gate:
+    name: Required CI gate
+    if: always()
+    needs: [changes, ci-security, java, agent, web, openapi, docker]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Verify every selected job result
+        shell: bash
+        env:
+          HOTSHOP_NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          python3 script/ci/check_gate.py
+          printf 'All jobs selected by change detection succeeded.\n' >> "$GITHUB_STEP_SUMMARY"

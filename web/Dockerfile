@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/playwright:v1.55.0-noble
+FROM mcr.microsoft.com/playwright:v1.55.0-noble@sha256:b27e719ecbfef153e13fd24e8341736733bf2658b229677eb21ff57ff5d7fb29
 
 ARG PNPM_VERSION=10.15.0
 
@@ -14,4 +14,6 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .
 
+RUN chown -R pwuser:pwuser /workspace/web
+USER pwuser
 CMD ["pnpm", "test:e2e"]

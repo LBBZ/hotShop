@@ -22,6 +22,7 @@ class AdminAgentToolsControllerTest {
         assertThat(authorization).isNotNull();
         assertThat(authorization.value()).isEqualTo("hasAuthority('ROLE_ADMIN')");
         assertThat(AdminAgentToolsController.class.getDeclaredMethods())
+                .filteredOn(method -> !method.isSynthetic())
                 .extracting(java.lang.reflect.Method::getName)
                 .containsExactlyInAnyOrder(
                         "statistics",

@@ -1,0 +1,5 @@
+# Exact historical findings retained as a narrow baseline. New findings at any
+# other commit, path, rule, or line remain blocking.
+78a03368233d7bc82fd6dbb30fafc2c0032faad3:admin/src/main/resources/application.yml:generic-api-key:39
+b203f1240ab24bafdbc8e66c7abc02bfe683b9ba:common/src/main/resources/config/common-jwt.yml:generic-api-key:2
+dedfa119dc5155bc39c9d7e8c7697fffe52d197a:domain/src/main/resources/application.yml:generic-api-key:26

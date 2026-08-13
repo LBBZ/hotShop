@@ -1,3 +1,5 @@
+[![CI](https://github.com/LBBZ/hotShop/actions/workflows/ci.yml/badge.svg)](https://github.com/LBBZ/hotShop/actions/workflows/ci.yml)
+
 # 快速跳转
 <details>
 <summary>📦 hotShop 文档</summary>
@@ -11,6 +13,7 @@
      - <a href="#34-Redis-分发机制">📤 3.4 Redis 分发机制</a>
      - <a href="#35-超时订单自动取消">⏲️ 3.5 超时取消机制</a>
 - <a href="#4-业务架构">🤹 4. 业务架构</a>
+- [持续集成与验证](docs/quality/ci.md)
 </details>
 
 <details>

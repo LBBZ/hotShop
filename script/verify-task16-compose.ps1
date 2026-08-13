@@ -2,12 +2,15 @@
 param(
     [string]$ProjectName = "",
     [string]$EvidenceDirectory = "",
-    [int]$TimeoutSeconds = 360
+    [int]$TimeoutSeconds = 360,
+    [ValidateSet("", "preflight-only", "fail-after-resource-startup")]
+    [string]$OwnershipTestMode = ""
 )
 
 $ErrorActionPreference = "Stop"
 $repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 Set-Location $repositoryRoot
+. (Join-Path $PSScriptRoot "ci\native_cleanup.ps1")
 
 $suffix = ([Guid]::NewGuid().ToString("N")).Substring(0, 10)
 if ([string]::IsNullOrWhiteSpace($ProjectName)) {
@@ -29,16 +32,28 @@ $keyRoot = [System.IO.Path]::GetFullPath(
     (Join-Path ([System.IO.Path]::GetTempPath()) "hotshop-task16-keys-$suffix")
 )
 $composeArguments = @("-p", $ProjectName, "--env-file", ".env.example")
-$projectOwned = $false
 $sseCounter = 0
 $sensitiveValues = [System.Collections.Generic.List[string]]::new()
 $privateKeyMarkers = [System.Collections.Generic.List[string]]::new()
 $startedAt = [DateTimeOffset]::UtcNow
+$verificationFailure = $null
 $ownedImages = @(
     "$ProjectName-portal:verify",
     "$ProjectName-admin:verify",
     "$ProjectName-agent:verify"
 )
+$resourceOwnership = [ordered]@{
+    preflightPassed = $false
+    creationAuthorized = $false
+    containers = @()
+    volumes = @()
+    networks = @()
+    keyDirectory = $false
+    images = @{}
+}
+foreach ($ownedImage in $ownedImages) {
+    $resourceOwnership.images[$ownedImage] = ""
+}
 
 $environmentOverrides = [ordered]@{
     MYSQL_ROOT_PASSWORD = "Task16Mysql$suffix"
@@ -56,6 +71,9 @@ $environmentOverrides = [ordered]@{
     HOTSHOP_KEY_DIR = $keyRoot
     HOTSHOP_SECURE_COOKIES = "false"
     AGENT_MODEL_PROVIDER = "fake"
+    # This scenario sends explicit JSON tool calls. Disable natural-language RAG routing so
+    # names such as compensate_inventory reach the registry policy asserted below.
+    AGENT_RAG_ENABLED = "false"
     AGENT_QWEN_API_KEY = ""
     HOTSHOP_TRACE_SAMPLING_PROBABILITY = "1.0"
 }
@@ -144,12 +162,12 @@ function Invoke-Http {
     if ((Get-Command Invoke-WebRequest).Parameters.ContainsKey("SkipHttpErrorCheck")) {
         $arguments.SkipHttpErrorCheck = $true
         $result = Invoke-WebRequest @arguments
-        Assert-NoPrivateKey ([string]$result.Content) "HTTP response from $Uri"
+        Assert-NoPrivateKey (Get-ResponseContentText $result) "HTTP response from $Uri"
         return $result
     }
     try {
         $result = Invoke-WebRequest @arguments
-        Assert-NoPrivateKey ([string]$result.Content) "HTTP response from $Uri"
+        Assert-NoPrivateKey (Get-ResponseContentText $result) "HTTP response from $Uri"
         return $result
     }
     catch {
@@ -175,7 +193,7 @@ function Invoke-Http {
             Content = $content
             Headers = $response.Headers
         }
-        Assert-NoPrivateKey ([string]$result.Content) "HTTP response from $Uri"
+        Assert-NoPrivateKey (Get-ResponseContentText $result) "HTTP response from $Uri"
         return $result
     }
 }
@@ -194,9 +212,19 @@ function Assert-Status([object]$Response, [int]$Expected, [string]$Step) {
     Write-Host "$Step -> HTTP $Expected"
 }
 
+function Get-ResponseContentText([object]$Response) {
+    if ($null -eq $Response.Content) {
+        return ""
+    }
+    if ($Response.Content -is [byte[]]) {
+        return [System.Text.Encoding]::UTF8.GetString([byte[]]$Response.Content)
+    }
+    return [string]$Response.Content
+}
+
 function Convert-JsonBody([object]$Response, [string]$Step) {
     try {
-        return $Response.Content | ConvertFrom-Json
+        return ConvertFrom-Json -InputObject (Get-ResponseContentText $Response)
     }
     catch {
         throw "$Step did not return valid JSON"
@@ -286,6 +314,23 @@ function Redact-SensitiveValues([string]$Text) {
         $result = $result.Replace($secret, "[REDACTED]")
     }
     return $result
+}
+
+function Add-PrivateKeyMaterial([string]$Path) {
+    $keyText = [System.IO.File]::ReadAllText($Path)
+    $keyLines = @($keyText -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $bodyLines = @($keyLines | Where-Object {
+        -not $_.StartsWith("-----", [StringComparison]::Ordinal)
+    })
+    if ([string]::IsNullOrWhiteSpace($keyText) -or $bodyLines.Count -eq 0) {
+        throw "Generated private key is empty or malformed: $Path"
+    }
+    foreach ($marker in @($keyText) + $keyLines) {
+        if (-not $script:privateKeyMarkers.Contains($marker)) {
+            $script:privateKeyMarkers.Add($marker)
+        }
+        Add-SensitiveValue $marker
+    }
 }
 
 function Parse-Sse([string]$Body) {
@@ -411,7 +456,7 @@ function Get-BusinessSnapshot {
 
 function Get-ProblemCode([object]$Response) {
     try {
-        return ($Response.Content | ConvertFrom-Json).code
+        return (ConvertFrom-Json -InputObject (Get-ResponseContentText $Response)).code
     }
     catch {
         return ""
@@ -469,6 +514,29 @@ function Test-FileContainsByteSequence([string]$Path, [byte[]]$Pattern) {
     }
 }
 
+function Assert-ImageHistoryHasNoPrivateKeys(
+    [string]$RuntimeImage,
+    [string[]]$HostPrivateKeyPaths,
+    [string]$Label
+) {
+    $archivePath = Join-Path $script:EvidenceDirectory "$($Label.ToLowerInvariant())-image-save.tar"
+    try {
+        docker image save --output $archivePath $RuntimeImage
+        Assert-DockerSucceeded "Save $Label runtime image history"
+        foreach ($privateKeyPath in $HostPrivateKeyPaths) {
+            $privateKeyBytes = [System.IO.File]::ReadAllBytes($privateKeyPath)
+            if (Test-FileContainsByteSequence $archivePath $privateKeyBytes) {
+                throw "$Label runtime image history contains generated private key bytes"
+            }
+        }
+    }
+    finally {
+        if (Test-Path -LiteralPath $archivePath -PathType Leaf) {
+            Remove-Item -LiteralPath $archivePath -Force
+        }
+    }
+}
+
 function Assert-AgentPrivateKeyDeployment([string]$HostPrivateKeyPath) {
     $targetPath = "/run/hotshop-agent/agent-service-private.pem"
     $containerId = docker compose @script:composeArguments ps -q agent-service
@@ -502,25 +570,7 @@ function Assert-AgentPrivateKeyDeployment([string]$HostPrivateKeyPath) {
     Assert-DockerSucceeded "Inspect Agent runtime configuration"
     Assert-NoPrivateKey $inspectText "Agent container inspection"
 
-    $probeName = "$($script:ProjectName)-agent-image-probe"
-    $exportPath = Join-Path $script:EvidenceDirectory "agent-image-export.tar"
-    docker create --name $probeName $script:ownedImages[2] | Out-Null
-    Assert-DockerSucceeded "Create Agent image inspection container"
-    try {
-        docker export --output $exportPath $probeName
-        Assert-DockerSucceeded "Export Agent runtime image"
-        $privateKeyBytes = [System.IO.File]::ReadAllBytes($HostPrivateKeyPath)
-        $imageContainsPrivateKey = Test-FileContainsByteSequence $exportPath $privateKeyBytes
-        if ($imageContainsPrivateKey) {
-            throw "Agent runtime image contains the generated private key bytes"
-        }
-    }
-    finally {
-        docker rm $probeName 2>$null | Out-Null
-        if (Test-Path -LiteralPath $exportPath -PathType Leaf) {
-            Remove-Item -LiteralPath $exportPath -Force
-        }
-    }
+    Assert-ImageHistoryHasNoPrivateKeys $script:ownedImages[2] @($HostPrivateKeyPath) "Agent"
 
     return [ordered]@{
         businessPidEffectiveUid = 10001
@@ -528,7 +578,59 @@ function Assert-AgentPrivateKeyDeployment([string]$HostPrivateKeyPath) {
         runtimeKeyOwnership = "10001:10001:400"
         unrelatedUidCanRead = $false
         privateKeyInContainerInspection = $false
-        privateKeyBytesInRuntimeImage = $false
+        privateKeyBytesInRuntimeImageHistory = $false
+    }
+}
+
+function Assert-JavaPrivateKeyDeployment(
+    [string]$Service,
+    [string[]]$HostPrivateKeyPaths,
+    [string[]]$RuntimePrivateKeyPaths,
+    [string]$RuntimeImage,
+    [string]$Label
+) {
+    $containerId = docker compose @script:composeArguments ps -q $Service
+    Assert-DockerSucceeded "Resolve $Label container"
+    if ([string]::IsNullOrWhiteSpace($containerId)) {
+        throw "$Label container was not found"
+    }
+
+    $effectiveUid = @(
+        docker compose @script:composeArguments exec -T $Service sh -lc `
+            "awk '/^Uid:/{print `$2}' /proc/1/status"
+    ) -join ""
+    Assert-DockerSucceeded "Read $Label business PID UID"
+    Assert-Equal $effectiveUid "10001" "$Label business PID effective UID"
+
+    foreach ($runtimePrivateKeyPath in $RuntimePrivateKeyPaths) {
+        docker compose @script:composeArguments exec -T --user 10001 $Service sh -lc `
+            "test -r '$runtimePrivateKeyPath'"
+        Assert-DockerSucceeded "Verify $Label owner can read $runtimePrivateKeyPath"
+        $ownership = @(
+            docker compose @script:composeArguments exec -T --user 10001 $Service sh -lc `
+                "stat -c '%u:%g:%a' '$runtimePrivateKeyPath'"
+        ) -join ""
+        Assert-DockerSucceeded "Read $Label private key ownership for $runtimePrivateKeyPath"
+        Assert-Equal $ownership "10001:10001:400" "$Label private key ownership"
+
+        docker compose @script:composeArguments exec -T --user 10002 $Service sh -lc `
+            "test ! -r '$runtimePrivateKeyPath'"
+        Assert-DockerSucceeded "Verify unrelated UID cannot read $Label $runtimePrivateKeyPath"
+    }
+
+    $inspectText = @((docker inspect $containerId)) -join "`n"
+    Assert-DockerSucceeded "Inspect $Label runtime configuration"
+    Assert-NoPrivateKey $inspectText "$Label container inspection"
+
+    Assert-ImageHistoryHasNoPrivateKeys $RuntimeImage $HostPrivateKeyPaths $Label
+
+    return [ordered]@{
+        businessPidEffectiveUid = 10001
+        ownerCanRead = $true
+        runtimeKeyOwnership = @($RuntimePrivateKeyPaths | ForEach-Object { "$_=10001:10001:400" })
+        unrelatedUidCanRead = $false
+        privateKeyInContainerInspection = $false
+        privateKeyBytesInRuntimeImageHistory = $false
     }
 }
 
@@ -540,15 +642,227 @@ function Write-JsonEvidence([string]$Name, [object]$Value) {
 }
 
 function Assert-CleanProjectName {
-    $containers = @(docker ps -aq --filter "label=com.docker.compose.project=$script:ProjectName")
-    Assert-DockerSucceeded "Inspect existing project containers"
-    $volumes = @(docker volume ls -q --filter "label=com.docker.compose.project=$script:ProjectName")
-    Assert-DockerSucceeded "Inspect existing project volumes"
-    $networks = @(docker network ls -q --filter "label=com.docker.compose.project=$script:ProjectName")
-    Assert-DockerSucceeded "Inspect existing project networks"
-    if ($containers.Count -gt 0 -or $volumes.Count -gt 0 -or $networks.Count -gt 0) {
-        throw "Compose project already owns resources; refusing destructive reuse: $script:ProjectName"
+    $conflicts = [System.Collections.Generic.List[string]]::new()
+    foreach ($resource in @(
+        @{Name = "containers"; Arguments = @("ps", "-aq", "--filter", "label=com.docker.compose.project=$script:ProjectName")},
+        @{Name = "volumes"; Arguments = @("volume", "ls", "-q", "--filter", "label=com.docker.compose.project=$script:ProjectName")},
+        @{Name = "networks"; Arguments = @("network", "ls", "-q", "--filter", "label=com.docker.compose.project=$script:ProjectName")}
+    )) {
+        $query = Invoke-HotShopNativeCommand -FilePath "docker" -Arguments $resource.Arguments
+        if ($query.ExitCode -ne 0) {
+            throw "Preflight lookup for $($resource.Name) failed with exit code $($query.ExitCode)"
+        }
+        if (@(Get-HotShopNativeOutputLines $query.Stdout).Count -gt 0) {
+            [void]$conflicts.Add($resource.Name)
+        }
     }
+    foreach ($ownedImage in $script:ownedImages) {
+        $imageQuery = Invoke-HotShopNativeCommand -FilePath "docker" `
+            -Arguments @("image", "inspect", $ownedImage)
+        if ($imageQuery.ExitCode -eq 0) {
+            [void]$conflicts.Add("image:$ownedImage")
+        }
+        elseif ($imageQuery.ExitCode -ne 1) {
+            throw "Preflight lookup for image $ownedImage failed with exit code $($imageQuery.ExitCode)"
+        }
+    }
+    if ($conflicts.Count -gt 0) {
+        throw "Resource ownership conflict; refusing destructive reuse for $script:ProjectName`: $($conflicts -join ', ')"
+    }
+    if (Test-Path -LiteralPath $script:keyRoot) {
+        throw "Temporary key path already exists; refusing reuse: $script:keyRoot"
+    }
+    $script:resourceOwnership.preflightPassed = $true
+}
+
+function Convert-DockerInspectJson([object]$Result, [string]$Step) {
+    if ($Result.ExitCode -ne 0) {
+        throw "$Step failed with exit code $($Result.ExitCode)"
+    }
+    try {
+        $objects = @($Result.Stdout | ConvertFrom-Json)
+    }
+    catch {
+        throw "$Step returned invalid Docker inspect JSON: $($_.Exception.Message)"
+    }
+    if ($objects.Count -ne 1) {
+        throw "$Step returned $($objects.Count) objects instead of exactly one"
+    }
+    return $objects[0]
+}
+
+function Get-CleanupDockerInspectState(
+    [System.Collections.Generic.List[string]]$Failures,
+    [string]$Step,
+    [ValidateSet("container", "volume", "network", "image")][string]$ResourceType,
+    [string]$Identifier
+) {
+    try {
+        $failureCountBefore = $Failures.Count
+        $result = Invoke-HotShopCleanupNativeStep -Failures $Failures -Step $Step `
+            -FilePath "docker" -Arguments @($ResourceType, "inspect", $Identifier) `
+            -AcceptedExitCodes @(0, 1)
+        if ($result.ExitCode -eq 0) {
+            try {
+                $objects = @($result.Stdout | ConvertFrom-Json)
+            }
+            catch {
+                [void]$Failures.Add("$Step returned invalid Docker inspect JSON: $($_.Exception.Message)")
+                return [pscustomobject]@{State = "error"; Object = $null}
+            }
+            if ($objects.Count -ne 1) {
+                [void]$Failures.Add("$Step returned $($objects.Count) objects instead of exactly one")
+                return [pscustomobject]@{State = "error"; Object = $null}
+            }
+            return [pscustomobject]@{State = "present"; Object = $objects[0]}
+        }
+        if ($result.ExitCode -eq 1 -and
+                $result.Stderr -match "(?i)(no such (container|volume|image)|network .+ not found)") {
+            return [pscustomobject]@{State = "missing"; Object = $null}
+        }
+        if ($Failures.Count -eq $failureCountBefore) {
+            [void]$Failures.Add("$Step failed with exit code $($result.ExitCode)")
+        }
+        return [pscustomobject]@{State = "error"; Object = $null}
+    }
+    catch {
+        [void]$Failures.Add("$Step raised an isolated cleanup exception: $($_.Exception.Message)")
+        return [pscustomobject]@{State = "error"; Object = $null}
+    }
+}
+
+function Get-DockerInspectProjectLabel([object]$InspectObject, [string]$ResourceType) {
+    $labels = if ($ResourceType -ceq "container") {
+        $InspectObject.Config.Labels
+    }
+    else {
+        $InspectObject.Labels
+    }
+    if ($null -eq $labels) {
+        return ""
+    }
+    $property = $labels.PSObject.Properties["com.docker.compose.project"]
+    if ($null -eq $property) {
+        return ""
+    }
+    return [string]$property.Value
+}
+
+function Record-CreatedProjectResources {
+    if (-not $script:resourceOwnership.preflightPassed -or
+            -not $script:resourceOwnership.creationAuthorized) {
+        throw "Resource creation was not authorized by a clean preflight"
+    }
+
+    $recordFailures = [System.Collections.Generic.List[string]]::new()
+    $containerQuery = Invoke-HotShopCleanupNativeStep -Failures $recordFailures `
+        -Step "Record invocation containers" -FilePath "docker" `
+        -Arguments @("ps", "-aq", "--filter", "label=com.docker.compose.project=$script:ProjectName")
+    if ($containerQuery.ExitCode -eq 0) {
+        $script:resourceOwnership.containers = @(
+            Get-HotShopNativeOutputLines $containerQuery.Stdout | Where-Object {
+                $_ -match "^[0-9a-f]{12,64}$"
+            }
+        )
+    }
+
+    $volumeQuery = Invoke-HotShopCleanupNativeStep -Failures $recordFailures `
+        -Step "Record invocation volumes" -FilePath "docker" `
+        -Arguments @("volume", "ls", "-q", "--filter", "label=com.docker.compose.project=$script:ProjectName")
+    if ($volumeQuery.ExitCode -eq 0) {
+        $script:resourceOwnership.volumes = @(Get-HotShopNativeOutputLines $volumeQuery.Stdout)
+    }
+
+    $networkQuery = Invoke-HotShopCleanupNativeStep -Failures $recordFailures `
+        -Step "Record invocation networks" -FilePath "docker" `
+        -Arguments @("network", "ls", "-q", "--filter", "label=com.docker.compose.project=$script:ProjectName")
+    if ($networkQuery.ExitCode -eq 0) {
+        $script:resourceOwnership.networks = @(
+            Get-HotShopNativeOutputLines $networkQuery.Stdout | Where-Object {
+                $_ -match "^[0-9a-f]{12,64}$"
+            }
+        )
+    }
+
+    foreach ($ownedImage in $script:ownedImages) {
+        $imageQuery = Invoke-HotShopNativeCommand -FilePath "docker" `
+            -Arguments @("image", "inspect", $ownedImage)
+        if ($imageQuery.ExitCode -eq 0) {
+            $imageObject = Convert-DockerInspectJson $imageQuery "Record invocation image $ownedImage"
+            $script:resourceOwnership.images[$ownedImage] = [string]$imageObject.Id
+        }
+        elseif ($imageQuery.ExitCode -ne 1) {
+            [void]$recordFailures.Add(
+                "Record invocation image $ownedImage failed with exit code $($imageQuery.ExitCode)"
+            )
+        }
+    }
+
+    if ($recordFailures.Count -gt 0) {
+        throw "Could not fully record invocation-owned resources: $($recordFailures -join '; ')"
+    }
+}
+
+function Invoke-RequiredNativeCommand([string]$Step, [string[]]$Arguments) {
+    $result = Invoke-HotShopNativeCommand -FilePath "docker" -Arguments $Arguments
+    if ($result.ExitCode -ne 0) {
+        throw "$Step failed with exit code $($result.ExitCode)"
+    }
+    return $result
+}
+
+function Start-OwnershipFailureProbe {
+    if ([Environment]::GetEnvironmentVariable("HOTSHOP_CI_OWNERSHIP_TEST") -ne "1") {
+        throw "Ownership test modes require HOTSHOP_CI_OWNERSHIP_TEST=1"
+    }
+    $probeImage = "alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce"
+    [void](Invoke-RequiredNativeCommand "Pull fixed ownership probe image" @(
+        "image", "pull", $probeImage
+    ))
+    $script:resourceOwnership.keyDirectory = $true
+    New-Item -ItemType Directory -Path $script:keyRoot | Out-Null
+    $script:resourceOwnership.creationAuthorized = $true
+
+    foreach ($ownedImage in $script:ownedImages) {
+        [void](Invoke-RequiredNativeCommand "Create probe image tag $ownedImage" `
+            @("image", "tag", $probeImage, $ownedImage))
+        $imageId = Invoke-RequiredNativeCommand "Record probe image $ownedImage" `
+            @("image", "inspect", $ownedImage)
+        $imageObject = Convert-DockerInspectJson $imageId "Record probe image $ownedImage"
+        $script:resourceOwnership.images[$ownedImage] = [string]$imageObject.Id
+    }
+
+    $networkName = "$($script:ProjectName)_ownership_probe"
+    $network = Invoke-RequiredNativeCommand "Create probe network" @(
+        "network", "create", "--label",
+        "com.docker.compose.project=$($script:ProjectName)", $networkName
+    )
+    $script:resourceOwnership.networks = @($network.Stdout.Trim())
+
+    $volumeName = "$($script:ProjectName)_ownership_probe"
+    [void](Invoke-RequiredNativeCommand "Create probe volume" @(
+        "volume", "create", "--label",
+        "com.docker.compose.project=$($script:ProjectName)", $volumeName
+    ))
+    $script:resourceOwnership.volumes = @($volumeName)
+
+    $containerName = "$($script:ProjectName)-ownership-probe"
+    $container = Invoke-RequiredNativeCommand "Create probe container" @(
+        "container", "create", "--label",
+        "com.docker.compose.project=$($script:ProjectName)",
+        "--name", $containerName, $probeImage, "sleep", "600"
+    )
+    $script:resourceOwnership.containers = @($container.Stdout.Trim())
+    if ([Environment]::GetEnvironmentVariable(
+            "HOTSHOP_CI_INJECT_CLEANUP_PARSE_EXCEPTION"
+        ) -eq "1") {
+        # `docker container inspect --help` exits zero with non-JSON output. Recording this
+        # synthetic identifier before the real ID proves JSON parse failure isolation while
+        # the exact invocation-owned container remains available for the following cleanup.
+        $script:resourceOwnership.containers = @("--help") +
+            @($script:resourceOwnership.containers)
+    }
+    throw "Synthetic business startup failure after invocation-owned resources were created"
 }
 
 try {
@@ -563,34 +877,54 @@ try {
     Assert-DockerSucceeded "Docker availability check"
     Assert-CleanProjectName
 
+    if ($OwnershipTestMode -eq "preflight-only") {
+        if ([Environment]::GetEnvironmentVariable("HOTSHOP_CI_OWNERSHIP_TEST") -ne "1") {
+            throw "Ownership test modes require HOTSHOP_CI_OWNERSHIP_TEST=1"
+        }
+        Write-Host "Resource ownership preflight passed"
+        return
+    }
+    if ($OwnershipTestMode -eq "fail-after-resource-startup") {
+        Start-OwnershipFailureProbe
+    }
+
+    # The exact key path was absent during preflight. Authorize only this invocation to
+    # remove a partially or fully created directory immediately before key generation.
+    $resourceOwnership.keyDirectory = $true
     & "$PSScriptRoot\generate-auth-keys.ps1" -OutputDirectory $keyRoot
     if ($LASTEXITCODE -ne 0) {
         throw "Authentication key generation failed"
     }
     $hostAgentPrivateKey = Join-Path $keyRoot "agent-service-private.pem"
-    $privateKeyText = [System.IO.File]::ReadAllText($hostAgentPrivateKey)
-    $privateKeyBodyMarker = @(
-        $privateKeyText -split "`r?`n" | Where-Object {
-            $_ -and -not $_.StartsWith("-----", [StringComparison]::Ordinal)
-        }
-    ) | Select-Object -First 1
-    if ([string]::IsNullOrWhiteSpace($privateKeyText) -or
-            [string]::IsNullOrWhiteSpace($privateKeyBodyMarker)) {
-        throw "Generated Agent private key is empty or malformed"
+    $hostUserPrivateKey = Join-Path $keyRoot "user-private.pem"
+    $hostDelegationPrivateKey = Join-Path $keyRoot "agent-delegation-private.pem"
+    $hostAdminPrivateKey = Join-Path $keyRoot "administrator-private.pem"
+    foreach ($privateKey in @(
+        $hostAgentPrivateKey,
+        $hostUserPrivateKey,
+        $hostDelegationPrivateKey,
+        $hostAdminPrivateKey
+    )) {
+        Add-PrivateKeyMaterial $privateKey
     }
-    $privateKeyMarkers.Add($privateKeyText)
-    $privateKeyMarkers.Add([string]$privateKeyBodyMarker)
-    Add-SensitiveValue $privateKeyText
-    Add-SensitiveValue ([string]$privateKeyBodyMarker)
 
     docker compose @composeArguments --profile app --profile agent config --quiet
     Assert-DockerSucceeded "Compose configuration validation"
 
-    $projectOwned = $true
-    docker compose @composeArguments --profile app --profile agent up -d --build `
-        mysql redis-cache redis-seckill database-migrator `
-        portal-service admin-service agent-service
-    Assert-DockerSucceeded "Isolated TASK-16 Compose startup"
+    # All exact project resources and image tags were absent at preflight. From this point,
+    # a partial Compose build/start may create any subset, so this invocation owns only
+    # those exact names and may clean them in finally.
+    $resourceOwnership.creationAuthorized = $true
+    $composeUpArguments = @("compose") + @($composeArguments) + @(
+        "--profile", "app", "--profile", "agent", "up", "-d", "--build",
+        "mysql", "redis-cache", "redis-seckill", "database-migrator",
+        "portal-service", "admin-service", "agent-service"
+    )
+    $composeStartup = Invoke-HotShopNativeCommand -FilePath "docker" -Arguments $composeUpArguments
+    Record-CreatedProjectResources
+    if ($composeStartup.ExitCode -ne 0) {
+        throw "Isolated TASK-16 Compose startup failed with exit code $($composeStartup.ExitCode)"
+    }
 
     $portalBase = Get-ServiceBaseUrl "portal-service" 8080
     $adminBase = Get-ServiceBaseUrl "admin-service" 8088
@@ -600,6 +934,16 @@ try {
     Wait-Http "$agentBase/health/ready" "agent-service"
     $privateKeyEvidence = Assert-AgentPrivateKeyDeployment $hostAgentPrivateKey
     Write-JsonEvidence "agent-private-key-deployment.json" $privateKeyEvidence
+    $portalPrivateKeyEvidence = Assert-JavaPrivateKeyDeployment `
+        "portal-service" @($hostUserPrivateKey, $hostDelegationPrivateKey) `
+        @("/run/secrets/hotshop/user-private.pem", "/run/secrets/hotshop/agent-delegation-private.pem") `
+        $ownedImages[0] "Portal"
+    Write-JsonEvidence "portal-private-key-deployment.json" $portalPrivateKeyEvidence
+    $adminPrivateKeyEvidence = Assert-JavaPrivateKeyDeployment `
+        "admin-service" @($hostAdminPrivateKey) `
+        @("/run/secrets/hotshop/administrator-private.pem") `
+        $ownedImages[1] "Admin"
+    Write-JsonEvidence "admin-private-key-deployment.json" $adminPrivateKeyEvidence
     Assert-Equal (Get-Scalar "SELECT version FROM flyway_schema_history WHERE success=1 ORDER BY installed_rank DESC LIMIT 1;") `
         "1.8" "Fresh Compose Flyway version"
     Assert-Equal (Get-Scalar @"
@@ -992,14 +1336,16 @@ WHERE LOWER(CAST(state_summary AS CHAR)) REGEXP
 "@)
     Assert-Equal $unsafeAuditCount 0 "Sensitive audit summary count"
     $exactSecretAuditCount = 0
-    foreach ($auditSecret in @(
+    $auditSecrets = @(
         $confirmationToken,
         $userAccess,
         $otherAccess,
         $adminAccess,
-        $promptSentinel,
-        $privateKeyBodyMarker
-    )) {
+        $promptSentinel
+    ) + @($privateKeyMarkers)
+    foreach ($auditSecret in $auditSecrets | Where-Object {
+        -not [string]::IsNullOrWhiteSpace([string]$_)
+    }) {
         $escapedAuditSecret = ([string]$auditSecret).Replace("'", "''")
         $exactSecretAuditCount += [int](Get-Scalar @"
 SELECT COUNT(*) FROM audit_log
@@ -1036,6 +1382,8 @@ WHERE LOCATE('$escapedAuditSecret', CAST(state_summary AS CHAR)) > 0;
             "user-suspension"
         )
         agentPrivateKeyDeployment = $privateKeyEvidence
+        portalPrivateKeyDeployment = $portalPrivateKeyEvidence
+        adminPrivateKeyDeployment = $adminPrivateKeyEvidence
         productStockBeforeDraft = $beforeDraft.productOneStock
         productStockAfterDraft = $afterDraft.productOneStock
         productStockAfterConsumeAndReplay = $finalSnapshot.productOneStock
@@ -1063,10 +1411,13 @@ WHERE LOCATE('$escapedAuditSecret', CAST(state_summary AS CHAR)) > 0;
     Write-Host "Evidence: $EvidenceDirectory"
 }
 catch {
+    $verificationFailure = $_
     try {
-        if ($projectOwned) {
+        if ($resourceOwnership.containers -or $resourceOwnership.volumes -or $resourceOwnership.networks) {
             $failureLogs = docker compose @composeArguments logs --no-color
             $failureText = Redact-SensitiveValues (@($failureLogs) -join "`n")
+            Assert-NoSensitiveValue $failureText "redacted failure logs"
+            Assert-NoPrivateKey $failureText "redacted failure logs"
             Set-Content -LiteralPath (Join-Path $EvidenceDirectory "failure-logs-redacted.txt") `
                 -Value $failureText -Encoding UTF8
         }
@@ -1077,21 +1428,246 @@ catch {
     throw
 }
 finally {
-    if ($projectOwned) {
-        $cleanupPreference = $ErrorActionPreference
-        $ErrorActionPreference = "SilentlyContinue"
-        docker compose @composeArguments --profile app --profile agent down `
-            --volumes --remove-orphans --timeout 30 2>$null | Out-Null
-        docker image rm $ownedImages 2>$null | Out-Null
-        $ErrorActionPreference = $cleanupPreference
-    }
-    if (Test-Path -LiteralPath $keyRoot -PathType Container) {
-        $resolvedKeyRoot = [System.IO.Path]::GetFullPath($keyRoot)
-        $resolvedTemp = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
-        if ($resolvedKeyRoot.StartsWith($resolvedTemp, [StringComparison]::OrdinalIgnoreCase) -and
-                (Split-Path -Leaf $resolvedKeyRoot) -like "hotshop-task16-keys-*") {
-            Remove-Item -LiteralPath $resolvedKeyRoot -Recurse -Force
+    $cleanupFailures = [System.Collections.Generic.List[string]]::new()
+    try {
+        try {
+            foreach ($containerId in @($resourceOwnership.containers)) {
+                try {
+                    $inspection = Get-CleanupDockerInspectState $cleanupFailures `
+                        "Inspect invocation container ownership $containerId" `
+                        "container" $containerId
+                    if ($inspection.State -ceq "present") {
+                        $label = Get-DockerInspectProjectLabel $inspection.Object "container"
+                        if ($label -ceq $ProjectName) {
+                            [void](Invoke-HotShopCleanupNativeStep -Failures $cleanupFailures `
+                                -Step "Remove invocation container $containerId" `
+                                -FilePath "docker" `
+                                -Arguments @("container", "rm", "--force", $containerId))
+                        }
+                        else {
+                            [void]$cleanupFailures.Add(
+                                "Refused container with changed project ownership: $containerId"
+                            )
+                        }
+                    }
+                }
+                catch {
+                    [void]$cleanupFailures.Add(
+                        "Container cleanup exception for $containerId`: $($_.Exception.Message)"
+                    )
+                }
+            }
+        }
+        catch {
+            [void]$cleanupFailures.Add("Container cleanup phase failed: $($_.Exception.Message)")
+        }
+
+        try {
+            foreach ($volumeName in @($resourceOwnership.volumes)) {
+                try {
+                    $inspection = Get-CleanupDockerInspectState $cleanupFailures `
+                        "Inspect invocation volume ownership $volumeName" `
+                        "volume" $volumeName
+                    if ($inspection.State -ceq "present") {
+                        $label = Get-DockerInspectProjectLabel $inspection.Object "volume"
+                        if ($label -ceq $ProjectName) {
+                            [void](Invoke-HotShopCleanupNativeStep -Failures $cleanupFailures `
+                                -Step "Remove invocation volume $volumeName" `
+                                -FilePath "docker" `
+                                -Arguments @("volume", "rm", "--force", $volumeName))
+                        }
+                        else {
+                            [void]$cleanupFailures.Add(
+                                "Refused volume with changed project ownership: $volumeName"
+                            )
+                        }
+                    }
+                }
+                catch {
+                    [void]$cleanupFailures.Add(
+                        "Volume cleanup exception for $volumeName`: $($_.Exception.Message)"
+                    )
+                }
+            }
+        }
+        catch {
+            [void]$cleanupFailures.Add("Volume cleanup phase failed: $($_.Exception.Message)")
+        }
+
+        try {
+            foreach ($networkId in @($resourceOwnership.networks)) {
+                try {
+                    $inspection = Get-CleanupDockerInspectState $cleanupFailures `
+                        "Inspect invocation network ownership $networkId" `
+                        "network" $networkId
+                    if ($inspection.State -ceq "present") {
+                        $label = Get-DockerInspectProjectLabel $inspection.Object "network"
+                        if ($label -ceq $ProjectName) {
+                            [void](Invoke-HotShopCleanupNativeStep -Failures $cleanupFailures `
+                                -Step "Remove invocation network $networkId" `
+                                -FilePath "docker" `
+                                -Arguments @("network", "rm", $networkId))
+                        }
+                        else {
+                            [void]$cleanupFailures.Add(
+                                "Refused network with changed project ownership: $networkId"
+                            )
+                        }
+                    }
+                }
+                catch {
+                    [void]$cleanupFailures.Add(
+                        "Network cleanup exception for $networkId`: $($_.Exception.Message)"
+                    )
+                }
+            }
+        }
+        catch {
+            [void]$cleanupFailures.Add("Network cleanup phase failed: $($_.Exception.Message)")
+        }
+
+        try {
+            if ($resourceOwnership.keyDirectory -and
+                    (Test-Path -LiteralPath $keyRoot -PathType Container)) {
+                $resolvedKeyRoot = [System.IO.Path]::GetFullPath($keyRoot)
+                $resolvedTemp = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+                $expectedKeyDirectory = "hotshop-task16-keys-$suffix"
+                if ($resolvedKeyRoot.StartsWith(
+                        $resolvedTemp, [StringComparison]::OrdinalIgnoreCase
+                    ) -and (Split-Path -Leaf $resolvedKeyRoot) -ceq $expectedKeyDirectory) {
+                    Remove-Item -LiteralPath $resolvedKeyRoot -Recurse -Force
+                }
+                else {
+                    [void]$cleanupFailures.Add(
+                        "Refused to remove unvalidated private key directory: $resolvedKeyRoot"
+                    )
+                }
+            }
+        }
+        catch {
+            [void]$cleanupFailures.Add(
+                "Temporary private key directory removal failed: $($_.Exception.Message)"
+            )
+        }
+
+        try {
+            foreach ($ownedImage in $ownedImages) {
+                try {
+                    $recordedImageId = [string]$resourceOwnership.images[$ownedImage]
+                    if ([string]::IsNullOrWhiteSpace($recordedImageId)) {
+                        continue
+                    }
+                    $inspection = Get-CleanupDockerInspectState $cleanupFailures `
+                        "Inspect owned image $ownedImage" "image" $ownedImage
+                    if ($inspection.State -ceq "present") {
+                        $currentImageId = [string]$inspection.Object.Id
+                        if ($currentImageId -ceq $recordedImageId) {
+                            [void](Invoke-HotShopCleanupNativeStep -Failures $cleanupFailures `
+                                -Step "Remove owned image $ownedImage" -FilePath "docker" `
+                                -Arguments @("image", "rm", "--force", $ownedImage))
+                        }
+                        else {
+                            [void]$cleanupFailures.Add(
+                                "Refused image tag with changed ownership: $ownedImage"
+                            )
+                        }
+                    }
+                }
+                catch {
+                    [void]$cleanupFailures.Add(
+                        "Image cleanup exception for $ownedImage`: $($_.Exception.Message)"
+                    )
+                }
+            }
+        }
+        catch {
+            [void]$cleanupFailures.Add("Image cleanup phase failed: $($_.Exception.Message)")
+        }
+
+        try {
+            foreach ($ownedResource in @(
+                @{Type = "container"; Ids = @($resourceOwnership.containers)},
+                @{Type = "volume"; Ids = @($resourceOwnership.volumes)},
+                @{Type = "network"; Ids = @($resourceOwnership.networks)}
+            )) {
+                foreach ($resourceId in $ownedResource.Ids) {
+                    try {
+                        $verification = Get-CleanupDockerInspectState $cleanupFailures `
+                            "Verify invocation $($ownedResource.Type) cleanup $resourceId" `
+                            $ownedResource.Type $resourceId
+                        if ($verification.State -ceq "present") {
+                            [void]$cleanupFailures.Add(
+                                "Invocation-owned $($ownedResource.Type) remains after cleanup: $resourceId"
+                            )
+                        }
+                    }
+                    catch {
+                        [void]$cleanupFailures.Add(
+                            "Resource cleanup verification exception for $resourceId`: $($_.Exception.Message)"
+                        )
+                    }
+                }
+            }
+        }
+        catch {
+            [void]$cleanupFailures.Add(
+                "Resource cleanup verification phase failed: $($_.Exception.Message)"
+            )
+        }
+
+        try {
+            if ($resourceOwnership.keyDirectory -and (Test-Path -LiteralPath $keyRoot)) {
+                [void]$cleanupFailures.Add("Temporary private key directory remains after cleanup")
+            }
+        }
+        catch {
+            [void]$cleanupFailures.Add(
+                "Temporary private key cleanup verification failed: $($_.Exception.Message)"
+            )
+        }
+
+        try {
+            foreach ($ownedImage in $ownedImages) {
+                try {
+                    if ([string]::IsNullOrWhiteSpace(
+                            [string]$resourceOwnership.images[$ownedImage]
+                        )) {
+                        continue
+                    }
+                    $inspection = Get-CleanupDockerInspectState $cleanupFailures `
+                        "Verify owned image cleanup $ownedImage" "image" $ownedImage
+                    if ($inspection.State -ceq "present") {
+                        [void]$cleanupFailures.Add("Owned image remains after cleanup: $ownedImage")
+                    }
+                }
+                catch {
+                    [void]$cleanupFailures.Add(
+                        "Owned image cleanup verification exception for $ownedImage`: $($_.Exception.Message)"
+                    )
+                }
+            }
+        }
+        catch {
+            [void]$cleanupFailures.Add(
+                "Owned image cleanup verification phase failed: $($_.Exception.Message)"
+            )
         }
     }
-    Restore-Environment
+    finally {
+        try {
+            Restore-Environment
+        }
+        catch {
+            [void]$cleanupFailures.Add("Environment restoration failed: $($_.Exception.Message)")
+        }
+    }
+    if ($cleanupFailures.Count -gt 0) {
+        $cleanupMessage = "Cleanup verification failed: $($cleanupFailures -join '; ')"
+        if ($null -ne $verificationFailure) {
+            Write-Error $cleanupMessage -ErrorAction Continue
+        }
+        else {
+            throw $cleanupMessage
+        }
+    }
 }

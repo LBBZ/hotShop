@@ -2,7 +2,7 @@
 param(
     [string]$OutputDirectory,
     [switch]$Force,
-    [string]$OpenSslImage = 'alpine/openssl:3.5.4'
+    [string]$OpenSslImage = 'alpine/openssl:3.5.4@sha256:42c7389ef077aed0eb4e96d0abbd094083d701bbaff1313073b061c0c9cd8278'
 )
 
 $ErrorActionPreference = 'Stop'

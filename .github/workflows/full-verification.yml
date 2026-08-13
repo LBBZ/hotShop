@@ -1,0 +1,362 @@
+name: Full verification
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: full-verification-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  AGENT_MODEL_PROVIDER: fake
+  AGENT_EMBEDDING_PROVIDER: deterministic
+
+jobs:
+  java:
+    name: Full Java 21 verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: Verify complete Maven reactor
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./mvnw
+          ./mvnw -B -ntp clean verify
+      - name: Assert required JaCoCo reports
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s portal/target/site/jacoco/jacoco.xml
+          test -s admin/target/site/jacoco/jacoco.xml
+          test -s task/target/site/jacoco/jacoco.xml
+      - name: Upload Java reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: full-java-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            **/target/surefire-reports/*.xml
+            **/target/failsafe-reports/*.xml
+            **/target/site/jacoco/**
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Summarize Java artifacts
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'Full Java report artifact: full-java-reports-%s-%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_STEP_SUMMARY"
+
+  agent-qdrant:
+    name: Full Agent with Qdrant
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - name: Build Agent test image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: agent
+          file: agent/Dockerfile
+          target: test
+          load: true
+          push: false
+          tags: hotshop-agent:full-test
+          cache-from: type=gha,scope=full-agent-test-gate
+          cache-to: type=gha,mode=max,scope=full-agent-test-gate
+      - name: Prepare isolated Qdrant
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker network create --internal hotshop-full-agent
+          docker volume create hotshop-full-qdrant
+          docker run -d --name hotshop-full-qdrant --network hotshop-full-agent \
+            -v hotshop-full-qdrant:/qdrant/storage \
+            qdrant/qdrant:v1.15.4@sha256:6ac4807063bbecddca0250bfbcff52acf18c22263b904d12919349e6d0a408f1
+          for _ in $(seq 1 60); do
+            if docker run --rm --network hotshop-full-agent --entrypoint python hotshop-agent:full-test \
+              -c "import urllib.request; urllib.request.urlopen('http://hotshop-full-qdrant:6333/readyz', timeout=2)"; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs hotshop-full-qdrant
+          exit 1
+      - name: Run serial full pytest and full eval
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -d -m 0777 target/ci/agent-full
+          docker run --rm --network hotshop-full-agent \
+            -e PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+            -e AGENT_MODEL_PROVIDER=fake -e AGENT_EMBEDDING_PROVIDER=deterministic \
+            -e AGENT_QDRANT_URL=http://hotshop-full-qdrant:6333 \
+            -v "$PWD/target/ci/agent-full:/reports" \
+            --entrypoint python hotshop-agent:full-test \
+            -m pytest -p pytest_asyncio.plugin -p no:cacheprovider \
+            --junitxml=/reports/junit.xml
+          docker run --rm --network hotshop-full-agent \
+            -e PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+            -e COVERAGE_CORE=sysmon -e COVERAGE_FILE=/reports/.coverage \
+            -e AGENT_MODEL_PROVIDER=fake -e AGENT_EMBEDDING_PROVIDER=deterministic \
+            -e AGENT_QDRANT_URL=http://hotshop-full-qdrant:6333 \
+            -v "$PWD/target/ci/agent-full:/reports" \
+            --entrypoint python hotshop-agent:full-test \
+            -m pytest tests/test_embeddings.py tests/test_knowledge_rag.py \
+            tests/test_qdrant_integration.py tests/test_pytest_plugin_isolation.py \
+            -p pytest_asyncio.plugin -p pytest_cov.plugin -p no:cacheprovider \
+            --cov=hotshop_agent \
+            --cov-report=xml:/reports/coverage.xml --cov-report=html:/reports/coverage
+          docker run --rm --network hotshop-full-agent \
+            -e PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+            -e AGENT_MODEL_PROVIDER=fake -e AGENT_EMBEDDING_PROVIDER=deterministic \
+            -e AGENT_QDRANT_URL=http://hotshop-full-qdrant:6333 \
+            -v "$PWD/target/ci/agent-full:/reports" \
+            --entrypoint python hotshop-agent:full-test \
+            -m hotshop_agent.eval_runner --suite full --output /reports/full-eval.json
+      - name: Upload full Agent reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: full-agent-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: target/ci/agent-full/
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Clean Agent containers, network, and volume
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          cleanup_failed=0
+          docker rm -f hotshop-full-qdrant 2>/dev/null || true
+          docker network rm hotshop-full-agent 2>/dev/null || cleanup_failed=1
+          docker volume rm hotshop-full-qdrant 2>/dev/null || cleanup_failed=1
+          printf 'Full Agent artifact: full-agent-reports-%s-%s; provider=fake, embedding=deterministic, vector store=Qdrant.\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_STEP_SUMMARY"
+          exit "$cleanup_failed"
+
+  web-contracts:
+    name: Full Web and contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Run complete Web, mocked smoke, and OpenAPI gates
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          New-Item -ItemType Directory -Force target/ci/openapi | Out-Null
+          docker run --rm --mount "type=bind,source=${PWD},target=/repo" -w /repo/web mcr.microsoft.com/playwright@sha256:b27e719ecbfef153e13fd24e8341736733bf2658b229677eb21ff57ff5d7fb29 bash -lc 'set -euo pipefail; apt-get update >/dev/null; apt-get install -y --no-install-recommends openjdk-21-jre-headless >/dev/null; corepack enable; corepack prepare pnpm@10.15.0 --activate; pnpm install --frozen-lockfile; pnpm format:check; pnpm lint; pnpm typecheck; pnpm test:coverage; pnpm build; pnpm api:check; pnpm api:check:admin; CI=true pnpm exec playwright test e2e/smoke.spec.ts'
+          & ./script/generate-openapi.ps1 *>&1 | Tee-Object target/ci/openapi/generate.log
+          docker run --rm --mount "type=bind,source=${PWD},target=/repo" -w /repo python:3.12.11-slim-bookworm@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7 python script/check_openapi_compatibility.py --baseline docs/api/openapi-baseline --current target/openapi *>&1 | Tee-Object target/ci/openapi/compatibility.log
+          git diff --exit-code -- web/src/api/generated *>&1 | Tee-Object target/ci/openapi/worktree-drift.log
+      - name: Upload Web coverage
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: full-web-coverage-${{ github.run_id }}-${{ github.run_attempt }}
+          path: web/coverage/
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Upload contract evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: full-openapi-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: target/ci/openapi/
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Upload failed Playwright evidence
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: full-playwright-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            web/playwright-report/
+            web/test-results/
+          if-no-files-found: warn
+          retention-days: 3
+      - name: Summarize Web and contract artifacts
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'Full Web artifacts: full-web-coverage-%s-%s and full-openapi-reports-%s-%s; Playwright evidence is created only on failure.\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_STEP_SUMMARY"
+
+  docker-compose-smoke:
+    name: Complete Docker and Compose smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - name: Validate Compose configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose --env-file .env.example config --quiet
+      - name: Build Admin runtime image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: Dockerfile
+          build-args: MODULE=admin
+          load: true
+          push: false
+          tags: hotshop-admin:full
+          cache-from: type=gha,scope=full-java-admin
+          cache-to: type=gha,mode=max,scope=full-java-admin
+      - name: Build Portal runtime image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: Dockerfile
+          build-args: MODULE=portal
+          load: true
+          push: false
+          tags: hotshop-portal:full
+          cache-from: type=gha,scope=full-java-portal
+          cache-to: type=gha,mode=max,scope=full-java-portal
+      - name: Build Task runtime image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: Dockerfile
+          build-args: MODULE=task
+          load: true
+          push: false
+          tags: hotshop-task:full
+          cache-from: type=gha,scope=full-java-task
+          cache-to: type=gha,mode=max,scope=full-java-task
+      - name: Build Agent runtime image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: agent
+          file: agent/Dockerfile
+          load: true
+          push: false
+          tags: hotshop-agent:full
+          cache-from: type=gha,scope=full-agent-runtime
+          cache-to: type=gha,mode=max,scope=full-agent-runtime
+      - name: Build Agent test image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: agent
+          file: agent/Dockerfile
+          target: test
+          load: true
+          push: false
+          tags: hotshop-agent:full-test
+          cache-from: type=gha,scope=full-agent-test
+          cache-to: type=gha,mode=max,scope=full-agent-test
+      - name: Build Web image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: web
+          file: web/Dockerfile
+          load: true
+          push: false
+          tags: hotshop-web:full
+          cache-from: type=gha,scope=full-web
+          cache-to: type=gha,mode=max,scope=full-web
+      - name: Verify runtime users and start core Compose services
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(docker image inspect hotshop-portal:full --format '{{.Config.User}}')" = "10001:10001"
+          test "$(docker image inspect hotshop-web:full --format '{{.Config.User}}')" = "pwuser"
+          test "$(docker run --rm -e AGENT_ASSERTION_PRIVATE_KEY_SOURCE_PATH=/etc/hostname hotshop-agent:full id -u)" = "10001"
+          docker run --rm --entrypoint id hotshop-agent:full-test -u | grep -q '^10001$'
+          COMPOSE_PROJECT_NAME=hotshop-full-compose docker compose --env-file .env.example up -d --wait mysql database-migrator redis-cache redis-seckill rabbitmq
+          docker compose --env-file .env.example -p hotshop-full-compose ps
+      - name: Exercise the existing stable full-stack Compose smoke
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          & ./script/verify-task16-compose.ps1 -TimeoutSeconds 420
+      - name: Summarize successful Docker and Compose smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'Built all application images and passed core readiness plus the existing isolated TASK-16 full-stack Compose smoke; no image was pushed.\n' >> "$GITHUB_STEP_SUMMARY"
+      - name: Clean isolated Compose resources
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! docker compose --env-file .env.example -p hotshop-full-compose down -v --remove-orphans; then
+            printf 'Cleanup for the isolated core Compose project failed.\n' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          printf 'Cleanup for the isolated core Compose project completed; consult this job result for verification status.\n' >> "$GITHUB_STEP_SUMMARY"
+
+  security:
+    name: Full CI and secret policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Validate workflows and scan all reachable history
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s script/ci/tests -v
+          python3 script/ci/check_ci_policy.py .
+          docker run --rm -v "$PWD:/repo:ro" -w /repo rhysd/actionlint@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9
+          docker run --rm -v "$PWD:/repo:ro" -w /repo zricethezav/gitleaks@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854 git --redact --config .gitleaks.toml --log-opts=HEAD --no-banner
+          docker run --rm -v "$PWD:/repo:ro" -w /repo zricethezav/gitleaks@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854 dir --redact --config .gitleaks.toml --no-banner .
+          docker run --rm --entrypoint sh -v "$PWD:/repo:ro" -w /repo zricethezav/gitleaks@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854 script/ci/test_gitleaks.sh
+          printf 'CI policy, workflow syntax, and redacted reachable-history secret scan completed successfully.\n' >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify Compose cleanup ownership boundaries
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          & ./script/ci/tests/test_native_cleanup.ps1
+          & ./script/ci/tests/test_compose_cleanup_ownership.ps1
+
+  gate:
+    name: Full verification gate
+    if: always()
+    needs: [java, agent-qdrant, web-contracts, docker-compose-smoke, security]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every full-verification job
+        shell: bash
+        env:
+          FULL_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, sys
+          results = json.loads(os.environ["FULL_RESULTS"])
+          bad = {name: item.get("result") for name, item in results.items() if item.get("result") != "success"}
+          if bad:
+              print(f"Full verification failed: {bad}", file=sys.stderr)
+              raise SystemExit(1)
+          print("Every full-verification job succeeded.")
+          PY
+          printf 'All full-verification jobs succeeded. This workflow does not run the formal 10k VU benchmark.\n' >> "$GITHUB_STEP_SUMMARY"

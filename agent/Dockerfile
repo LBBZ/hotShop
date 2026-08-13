@@ -17,7 +17,8 @@ RUN python -m pip install --requirement requirements.lock
 FROM base AS test-dependencies
 
 ENV MYPY_CACHE_DIR=/tmp/mypy-cache \
-    RUFF_CACHE_DIR=/tmp/ruff-cache
+    RUFF_CACHE_DIR=/tmp/ruff-cache \
+    PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
 
 COPY requirements-dev.lock pyproject.toml ./
 RUN python -m pip install --requirement requirements-dev.lock
@@ -30,9 +31,9 @@ COPY evals ./evals
 COPY --chown=10001:10001 tests ./tests
 
 USER 10001:10001
-CMD ["python", "-m", "pytest", "-p", "no:cacheprovider"]
+CMD ["python", "-m", "pytest", "-p", "pytest_asyncio.plugin", "-p", "no:cacheprovider"]
 
-FROM docker:28.3.3-cli AS docker-cli
+FROM docker:28.3.3-cli@sha256:0135662b510037ea581d99c2e5929c5e01185139c0b86986a418bd4da0b98a44 AS docker-cli
 
 FROM test AS security-test
 

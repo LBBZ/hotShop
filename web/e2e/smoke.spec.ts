@@ -41,9 +41,7 @@ test("User and Administrator shells restore only their own mocked sessions", asy
   await expect(page.getByText("会话已隔离")).toBeVisible();
 
   await page.goto("/admin");
-  await expect(
-    page.getByRole("heading", { name: "交易脉冲总览" }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "运营脉冲" })).toBeVisible();
   await expect(page.getByText("会话已隔离")).toBeVisible();
 
   expect(userRefreshes).toBe(1);

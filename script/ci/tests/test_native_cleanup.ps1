@@ -96,7 +96,11 @@ try {
     if ($argumentResult.ExitCode -ne 0) {
         throw "Native argument fidelity probe failed"
     }
-    $actualArguments = @($argumentResult.Stdout | ConvertFrom-Json)
+    $parsedArguments = ConvertFrom-Json -InputObject $argumentResult.Stdout
+    $actualArguments = [System.Collections.Generic.List[string]]::new()
+    foreach ($argument in $parsedArguments) {
+        [void]$actualArguments.Add([string]$argument)
+    }
     if ($actualArguments.Count -ne $expectedArguments.Count) {
         throw "Native argument count changed across the process boundary"
     }

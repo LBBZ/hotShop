@@ -316,7 +316,7 @@ jobs:
           & ./script/generate-openapi.ps1 *>&1 | Tee-Object target/ci/openapi/generate.log
           docker run --rm --mount "type=bind,source=${PWD},target=/repo" -w /repo python:3.12.11-slim-bookworm@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7 python -m unittest script.tests.test_check_openapi_compatibility *>&1 | Tee-Object target/ci/openapi/compat-tests.log
           docker run --rm --mount "type=bind,source=${PWD},target=/repo" -w /repo python:3.12.11-slim-bookworm@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7 python script/check_openapi_compatibility.py --baseline docs/api/openapi-baseline --current target/openapi *>&1 | Tee-Object target/ci/openapi/compatibility.log
-          docker run --rm --mount "type=bind,source=${PWD},target=/repo" -w /repo/web node:22-bookworm@sha256:0557ac14e0d45d02ed563067b82856ca5e7aa3437fa28d98d4350ea9c3d9494a bash -lc 'corepack enable && corepack prepare pnpm@10.15.0 --activate && pnpm install --frozen-lockfile && pnpm api:check && pnpm api:check:admin' *>&1 | Tee-Object target/ci/openapi/client-drift.log
+          docker run --rm --mount "type=bind,source=${PWD},target=/repo" -w /repo/web node:22-bookworm@sha256:0557ac14e0d45d02ed563067b82856ca5e7aa3437fa28d98d4350ea9c3d9494a bash -lc 'apt-get update >/dev/null && apt-get install -y --no-install-recommends openjdk-17-jre-headless >/dev/null && corepack enable && corepack prepare pnpm@10.15.0 --activate && pnpm install --frozen-lockfile && pnpm api:check && pnpm api:check:admin' *>&1 | Tee-Object target/ci/openapi/client-drift.log
           git diff --exit-code -- web/src/api/generated | Tee-Object target/ci/openapi/worktree-drift.log
       - name: Upload contract evidence
         if: always()

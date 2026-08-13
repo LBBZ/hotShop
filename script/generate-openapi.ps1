@@ -23,12 +23,15 @@ try {
     }
 
     if (-not $UseExistingPackages) {
+        # This container only packages the runtime used to export OpenAPI. The Java CI job
+        # owns clean verify; skipping tests here avoids duplicating Testcontainers in a
+        # nested build container that intentionally has no Docker socket.
         docker run --rm `
             --mount "type=bind,source=$repositoryRoot,target=/workspace" `
             --mount "type=volume,source=hotshop-task04-m2,target=/root/.m2" `
             --workdir /workspace `
             eclipse-temurin:21-jdk@sha256:efd34b940f2d5a621605c8531c2afb7759c936b6c2ef637a69aa3bf3e1e789d1 `
-            ./mvnw -B -pl portal,admin -am package
+            sh ./mvnw -B -DskipTests -pl portal,admin -am package
         if ($LASTEXITCODE -ne 0) {
             throw 'Java package build failed; runtime OpenAPI was not generated'
         }

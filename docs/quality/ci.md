@@ -158,8 +158,9 @@ Windows PowerShell 用 `${PWD}` 替换 `$PWD`，Docker Desktop 的嵌套 Testcon
   附加清理汇总。RECONCILE-04 的完整 TASK-16 Compose 在固定 PowerShell 7.4 和
   固定 Docker CLI/Compose 组合镜像中运行一次并 exit 0；登录、Agent 工具边界、购买确认、防重放与
   数据库审计断言均通过。退出后按精确 project label 和 image tag 检查为 0 个容器、0 个卷、0 个
-  网络、0 个 owned image，临时私钥目录为 0。当前 Docker Desktop 使用 Linux containers，无法在
-  不切换 daemon 的前提下运行 Windows PowerShell 5.1 容器；5.1 的动态探针仍待兼容环境验证。
+  网络、0 个 owned image，临时私钥目录为 0。同一工作树还在本机 Windows PowerShell 5.1 下让
+  native cleanup 探针连续三次 exit 0、ownership 探针 exit 0，并完整执行 TASK-16 Compose 至 exit 0；
+  该次完整业务验证同样由脚本自动清理至容器、卷、网络、owned image 和临时私钥目录全部为 0。
 - CI 自检：43 项规则/变更检测/final-gate 单测通过（包含两个 workflow 的清理探针防移除规则，以及
   禁止 final cleanup 直接 native 调用、inspect format 和 native `-Command` 的回归规则）；
   actionlint、Compose config、`git diff --check`、Gitleaks working tree、完整 HEAD history 和两个运行时

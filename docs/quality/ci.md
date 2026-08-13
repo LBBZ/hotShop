@@ -1,7 +1,7 @@
 # HotShop GitHub Actions CI
 
-本页描述 TASK-18 建立的持续集成边界。工作流文件已经过本地静态检查和底层命令验证；在本页首次
-提交并推送之前，不能把它描述为“GitHub Actions 已在线跑绿”。
+本页描述 TASK-18 建立的持续集成边界。工作流文件已经过本地静态检查、底层命令验证和 GitHub
+托管环境验证；修复首次运行暴露的 OpenAPI 构建可移植性问题后，`dc779d5` 对应的 CI 全部通过。
 
 ## 工作流与职责
 
@@ -120,7 +120,8 @@ Windows PowerShell 用 `${PWD}` 替换 `$PWD`，Docker Desktop 的嵌套 Testcon
   空报告或虚构阈值制造绿色。
 - Dependabot 对 GitHub Actions、Maven、Web npm/pnpm 和 Agent pip 做分组更新并限制并发 PR；更新仍须通过
   相同门禁。
-- workflow 的实际托管环境结论只能在主对话提交推送后，从 GitHub Actions 运行记录确认。
+- workflow 的实际托管环境结论以 GitHub Actions 运行记录为准；`dc779d5` 对应运行的全部 Job 和
+  `Required CI gate` 均通过。
 
 ## TASK-18 reconciliation 本地验证基线
 
@@ -168,4 +169,4 @@ Windows PowerShell 用 `${PWD}` 替换 `$PWD`，Docker Desktop 的嵌套 Testcon
 
 本地 Docker Desktop 曾在旧 Agent 缓存镜像上出现随机 Python 进程崩溃。本轮不沿用该旧镜像；以上
 数字仅描述本轮无缓存镜像的五次 pytest、一次 Qdrant pytest 和两组 eval 实际结果，不推断超出样本的
-长期稳定性。这不替代首次 GitHub Actions 在线运行。实际 Actions 运行待主对话提交推送后验证。
+长期稳定性。GitHub Actions 托管运行已验证工作流编排和最终门禁，不能替代更长期的稳定性观察。

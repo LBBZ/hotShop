@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$OutputDirectory,
+    [string]$DockerOutputDirectory = "",
     [switch]$Force,
     [string]$OpenSslImage = 'alpine/openssl:3.5.4@sha256:42c7389ef077aed0eb4e96d0abbd094083d701bbaff1313073b061c0c9cd8278'
 )
@@ -11,6 +12,9 @@ if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
     $OutputDirectory = Join-Path $repositoryRoot '.local\keys\hotshop'
 }
 $OutputDirectory = [System.IO.Path]::GetFullPath($OutputDirectory)
+if ([string]::IsNullOrWhiteSpace($DockerOutputDirectory)) {
+    $DockerOutputDirectory = $OutputDirectory
+}
 New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
 
 $names = @('user', 'administrator', 'agent-delegation', 'agent-service')
@@ -35,14 +39,14 @@ if ($LASTEXITCODE -ne 0) {
 
 foreach ($name in $names) {
     docker run --rm `
-        --mount "type=bind,source=$OutputDirectory,target=/keys" `
+        --mount "type=bind,source=$DockerOutputDirectory,target=/keys" `
         $OpenSslImage `
         genpkey -quiet -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out "/keys/$name-private.pem"
     if ($LASTEXITCODE -ne 0) {
         throw "Could not generate the $name private key"
     }
     docker run --rm `
-        --mount "type=bind,source=$OutputDirectory,target=/keys" `
+        --mount "type=bind,source=$DockerOutputDirectory,target=/keys" `
         $OpenSslImage `
         pkey -in "/keys/$name-private.pem" -pubout -out "/keys/$name-public.pem"
     if ($LASTEXITCODE -ne 0) {

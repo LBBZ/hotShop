@@ -1,0 +1,24 @@
+name: hotshop-task19-control-only
+
+# This file is used only by Playwright inside the already-created isolated
+# TASK-19 project. It intentionally contains no ports, mounts, secrets, or
+# commands: compose exec/start/stop/pause resolves the existing containers by
+# project/service labels and cannot materialize the production stack from this
+# control file.
+services:
+  mysql:
+    image: mysql:8.4.6
+  redis-seckill:
+    image: redis:7.4.5-alpine
+  portal-service:
+    image: hotshop-control-only:never-pull
+    profiles: [app]
+  task-service:
+    image: hotshop-control-only:never-pull
+    profiles: [app]
+  agent-service:
+    image: hotshop-control-only:never-pull
+    profiles: [agent]
+  qdrant:
+    image: qdrant/qdrant:v1.15.3
+    profiles: [agent]

@@ -119,3 +119,24 @@ available independently.
 
 Flyway V1.8 creates the four TASK-16 tables and no foreign keys. V1.0 through V1.7 remain
 unchanged.
+
+## Browser confirmation and streaming boundary
+
+The User workspace at `/user/agent` and Administrator workspace at `/admin/agent` use generated
+clients from the FastAPI runtime OpenAPI baseline. The only handwritten transport is the SSE
+reader because OpenAPI does not describe the streaming frame protocol. Browser traffic uses the
+explicit `/agent-api` proxy/base URL; the more general Portal `/api` proxy cannot capture it and
+the Agent does not enable wildcard CORS.
+
+Access tokens remain in the existing in-memory auth stores. Session and Run identifiers are
+component memory only. The clear confirmation token exists only as a local variable between the
+issue response and the immediately following consume request; it is never assigned to React
+state/ref, rendered, logged, or written to Web Storage. A confirmation lock rejects double click
+at the UI while the Java row lock, digest, owner, nonce and status checks remain authoritative.
+
+Each stream has an AbortController and a monotonically changing UI generation. Route unmount or
+explicit cancel aborts the reader, asks the service to cancel the active run, and prevents any
+late event from updating a later request. The parser accepts only known event shapes bound to the
+expected session/run/message and increasing sequence; malformed, oversized or extra-field events
+are discarded. Phase changes and failures are announced through `aria-live`, completion moves
+focus to the answer heading, and the layout retains keyboard, mobile and reduced-motion behavior.

@@ -10,6 +10,7 @@ import {
   UserMockPaymentsApi,
   UserOrdersApi,
   UserProfileApi,
+  UserPurchaseConfirmationApi,
 } from "@/api/generated/user";
 import { Configuration as UserConfiguration } from "@/api/generated/user/runtime";
 import {
@@ -20,6 +21,8 @@ import {
   AdminUsersApi,
 } from "@/api/generated/admin";
 import { Configuration as AdminConfiguration } from "@/api/generated/admin/runtime";
+import { AdministratorAgentApi, UserAgentApi } from "@/api/generated/agent";
+import { Configuration as AgentConfiguration } from "@/api/generated/agent/runtime";
 import { apiEnvironment } from "@/api/core/environment";
 import { publicFetch } from "@/api/core/public-fetch";
 import { adminAuth, userAuth } from "@/auth/domains";
@@ -58,6 +61,18 @@ const adminAuthenticationConfiguration = new AdminConfiguration({
   },
 });
 
+const userAgentConfiguration = new AgentConfiguration({
+  basePath: apiEnvironment.agentBaseUrl,
+  credentials: "omit",
+  fetchApi: userAuth.fetch,
+});
+
+const administratorAgentConfiguration = new AgentConfiguration({
+  basePath: apiEnvironment.agentBaseUrl,
+  credentials: "omit",
+  fetchApi: adminAuth.fetch,
+});
+
 export const apiClients = Object.freeze({
   public: Object.freeze({
     activities: new PublicFlashSaleActivitiesApi(publicConfiguration),
@@ -70,6 +85,7 @@ export const apiClients = Object.freeze({
     orders: new UserOrdersApi(userConfiguration),
     payments: new UserMockPaymentsApi(userConfiguration),
     profile: new UserProfileApi(userConfiguration),
+    purchaseConfirmations: new UserPurchaseConfirmationApi(userConfiguration),
   }),
   admin: Object.freeze({
     auditLogs: new AdminAuditLogsApi(adminConfiguration),
@@ -79,5 +95,9 @@ export const apiClients = Object.freeze({
     orders: new AdminOrdersApi(adminConfiguration),
     products: new AdminProductsApi(adminConfiguration),
     users: new AdminUsersApi(adminConfiguration),
+  }),
+  agent: Object.freeze({
+    user: new UserAgentApi(userAgentConfiguration),
+    admin: new AdministratorAgentApi(administratorAgentConfiguration),
   }),
 });

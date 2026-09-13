@@ -17,6 +17,7 @@ import org.slf4j.MDC;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.containers.MySQLContainer;
@@ -33,8 +34,10 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.awaitility.Awaitility.await;
 
 @Testcontainers
 class MockPaymentIntegrationTest {
@@ -356,7 +359,13 @@ class MockPaymentIntegrationTest {
     }
 
     private static com.real.common.api.dto.MockPaymentCallbackResponse accept(byte[] body, String nonce, String timestamp) {
-        return callbacks.accept(timestamp, nonce, provider.sign(timestamp, nonce, body), body, request());
+        AtomicReference<com.real.common.api.dto.MockPaymentCallbackResponse> result = new AtomicReference<>();
+        await().pollInterval(Duration.ofMillis(200))
+                .atMost(Duration.ofSeconds(45))
+                .ignoreException(CannotCreateTransactionException.class)
+                .untilAsserted(() -> result.set(callbacks.accept(
+                        timestamp, nonce, provider.sign(timestamp, nonce, body), body, request())));
+        return result.get();
     }
     private static void assertRejected(byte[] body, String nonce, String timestamp, String category) {
         assertThatThrownBy(() -> accept(body, nonce, timestamp)).isInstanceOf(CallbackRejectedException.class)

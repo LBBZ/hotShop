@@ -68,6 +68,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           & ./script/ci/tests/test_native_cleanup.ps1
           & ./script/ci/tests/test_compose_cleanup_ownership.ps1
+          & ./script/ci/tests/test_task19_resource_ownership.ps1
       - name: Validate workflow syntax
         shell: bash
         run: |
@@ -97,6 +98,26 @@ jobs:
             zricethezav/gitleaks@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854 \
             script/ci/test_gitleaks.sh
           printf 'CI policy, actionlint, and redacted secret scan passed.\n' >> "$GITHUB_STEP_SUMMARY"
+      - name: Run fixed local TASK-19 security rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -d -m 0777 target/ci/security
+          docker run --rm --network none -v "$PWD:/src:ro" \
+            -v "$PWD/target/ci/security:/reports" -w /src \
+            semgrep/semgrep@sha256:cda1b566fafbf6010a02a3ea1d265b1c8eba4380e489a13891a102243d81ca6f \
+            semgrep scan --config .semgrep/task19.yml --error --json \
+            --output /reports/task19-semgrep.json
+          test -s target/ci/security/task19-semgrep.json
+          printf 'TASK-19 local static security rules passed.\n' >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload quick security reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: quick-security-${{ github.run_id }}-${{ github.run_attempt }}
+          path: target/ci/security/
+          if-no-files-found: warn
+          retention-days: 7
 
   java:
     name: Java 21 verify
@@ -263,6 +284,7 @@ jobs:
           pnpm build
           pnpm api:check
           pnpm api:check:admin
+          pnpm api:check:agent
       - name: Run mocked Playwright smoke
         working-directory: web
         shell: bash
@@ -316,7 +338,7 @@ jobs:
           & ./script/generate-openapi.ps1 *>&1 | Tee-Object target/ci/openapi/generate.log
           docker run --rm --mount "type=bind,source=${PWD},target=/repo" -w /repo python:3.12.11-slim-bookworm@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7 python -m unittest script.tests.test_check_openapi_compatibility *>&1 | Tee-Object target/ci/openapi/compat-tests.log
           docker run --rm --mount "type=bind,source=${PWD},target=/repo" -w /repo python:3.12.11-slim-bookworm@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7 python script/check_openapi_compatibility.py --baseline docs/api/openapi-baseline --current target/openapi *>&1 | Tee-Object target/ci/openapi/compatibility.log
-          docker run --rm --mount "type=bind,source=${PWD},target=/repo" -w /repo/web node:22-bookworm@sha256:0557ac14e0d45d02ed563067b82856ca5e7aa3437fa28d98d4350ea9c3d9494a bash -lc 'apt-get update >/dev/null && apt-get install -y --no-install-recommends openjdk-17-jre-headless >/dev/null && corepack enable && corepack prepare pnpm@10.15.0 --activate && pnpm install --frozen-lockfile && pnpm api:check && pnpm api:check:admin' *>&1 | Tee-Object target/ci/openapi/client-drift.log
+          docker run --rm --mount "type=bind,source=${PWD},target=/repo" -w /repo/web node:22-bookworm@sha256:0557ac14e0d45d02ed563067b82856ca5e7aa3437fa28d98d4350ea9c3d9494a bash -lc 'apt-get update >/dev/null && apt-get install -y --no-install-recommends openjdk-17-jre-headless >/dev/null && corepack enable && corepack prepare pnpm@10.15.0 --activate && pnpm install --frozen-lockfile && pnpm api:check && pnpm api:check:admin && pnpm api:check:agent' *>&1 | Tee-Object target/ci/openapi/client-drift.log
           git diff --exit-code -- web/src/api/generated | Tee-Object target/ci/openapi/worktree-drift.log
       - name: Upload contract evidence
         if: always()
@@ -396,7 +418,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(docker image inspect hotshop-portal:ci --format '{{.Config.User}}')" = "10001:10001"
-          test "$(docker image inspect hotshop-web:ci --format '{{.Config.User}}')" = "pwuser"
+          test "$(docker image inspect hotshop-web:ci --format '{{.Config.User}}')" = "101:101"
           test "$(docker run --rm -e AGENT_ASSERTION_PRIVATE_KEY_SOURCE_PATH=/etc/hostname hotshop-agent:ci id -u)" = "10001"
           docker run --rm --entrypoint id hotshop-agent:ci-test -u | grep -q '^10001$'
           printf 'Compose config and Java, Agent runtime/test, and Web image builds passed; no image was pushed.\n' >> "$GITHUB_STEP_SUMMARY"

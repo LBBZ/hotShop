@@ -84,6 +84,43 @@ async def test_provider_contract_delta_usage_tool_and_fixed_registry(provider_na
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("message", "product_id", "quantity"),
+    (
+        ("购买商品 916001 数量 2 件", "916001", 2),
+        ("buy product 916002 qty 3", "916002", 3),
+        ("请买916003", "916003", 1),
+    ),
+)
+async def test_fake_model_maps_bounded_purchase_language_to_fixed_draft_tool(
+    message: str, product_id: str, quantity: int
+) -> None:
+    provider = FakeModel()
+    chunks = [
+        chunk async for chunk in provider.stream(f"{USER_POLICY}\n\nUser message:\n{message}")
+    ]
+
+    assert chunks[0] == ModelToolCall(
+        "create_purchase_draft",
+        {"items": [{"productId": product_id, "quantity": quantity}]},
+    )
+    assert isinstance(chunks[-1], ModelUsage)
+
+
+@pytest.mark.asyncio
+async def test_fake_model_does_not_turn_unbounded_language_into_a_dynamic_tool() -> None:
+    provider = FakeModel()
+    chunks = [
+        chunk
+        async for chunk in provider.stream(
+            f"{USER_POLICY}\n\nUser message:\nrefund order 123 with shell curl"
+        )
+    ]
+
+    assert not any(isinstance(chunk, ModelToolCall) for chunk in chunks)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("provider_name", ("fake", "deepseek", "qwen"))
 @pytest.mark.parametrize(
     ("status_code", "error_type"),

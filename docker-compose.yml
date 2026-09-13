@@ -21,7 +21,7 @@ services:
       - "${MYSQL_PORT:-4306}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./database/data:/opt/hotshop/data:ro
+      - ${HOTSHOP_SOURCE_ROOT:-.}/database/data:/opt/hotshop/data:ro
     networks:
       - hotShop-network
     healthcheck:
@@ -53,7 +53,7 @@ services:
       FLYWAY_CLEAN_DISABLED: "true"
       FLYWAY_BASELINE_ON_MIGRATE: "false"
     volumes:
-      - ./database/src/main/resources/db/migration:/flyway/sql:ro
+      - ${HOTSHOP_SOURCE_ROOT:-.}/database/src/main/resources/db/migration:/flyway/sql:ro
     depends_on:
       mysql:
         condition: service_healthy
@@ -74,7 +74,7 @@ services:
     ports:
       - "${REDIS_CACHE_PORT:-7379}:6379"
     volumes:
-      - ./docker/redis/cache.conf:/usr/local/etc/redis/redis.conf:ro
+      - ${HOTSHOP_SOURCE_ROOT:-.}/docker/redis/cache.conf:/usr/local/etc/redis/redis.conf:ro
       - redis_cache_data:/data
     networks:
       - hotShop-network
@@ -102,7 +102,7 @@ services:
     ports:
       - "${REDIS_SECKILL_PORT:-7380}:6379"
     volumes:
-      - ./docker/redis/seckill.conf:/usr/local/etc/redis/redis.conf:ro
+      - ${HOTSHOP_SOURCE_ROOT:-.}/docker/redis/seckill.conf:/usr/local/etc/redis/redis.conf:ro
       - redis_seckill_data:/data
     networks:
       - hotShop-network
@@ -142,8 +142,8 @@ services:
       context: .
       dockerfile: docker/rabbitmq/Dockerfile
       args:
-        RABBITMQ_IMAGE: ${RABBITMQ_IMAGE:-rabbitmq:4.0.7-management-alpine@sha256:011e8d48c9d4e9e0bc94d709e2b1b68fccf51de6680bcda302566dff0465764f}
-    image: ${RABBITMQ_PROJECT_IMAGE:-hotshop-rabbitmq:4.0.7}
+        RABBITMQ_IMAGE: ${RABBITMQ_IMAGE:-rabbitmq:4.2.9-management-alpine@sha256:009a0e55d269a643930f797016d48aebe100986bc5ea836fea195199b26633ac}
+    image: ${RABBITMQ_PROJECT_IMAGE:-hotshop-rabbitmq:4.2.9}
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-hotshop}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-change-me-local-rabbitmq}
@@ -294,6 +294,7 @@ services:
       HOTSHOP_REFRESH_TTL_SECONDS: ${HOTSHOP_REFRESH_TTL_SECONDS:-604800}
       HOTSHOP_TRUST_FORWARDED_HEADERS: ${HOTSHOP_TRUST_FORWARDED_HEADERS:-false}
       HOTSHOP_TRUSTED_PROXY_ADDRESSES: ${HOTSHOP_TRUSTED_PROXY_ADDRESSES:-}
+      HOTSHOP_SECURITY_RATE_LIMIT_AGENT_EXCHANGE_LIMIT: ${HOTSHOP_SECURITY_RATE_LIMIT_AGENT_EXCHANGE_LIMIT:-20}
       SERVER_PORT: 8080
       HOTSHOP_DEPLOYMENT_ENVIRONMENT: ${HOTSHOP_DEPLOYMENT_ENVIRONMENT:-local}
       HOTSHOP_TRACE_SAMPLING_PROBABILITY: ${HOTSHOP_TRACE_SAMPLING_PROBABILITY:-1.0}
@@ -494,8 +495,8 @@ services:
       - --web.enable-lifecycle
       - --web.enable-remote-write-receiver
     volumes:
-      - ./docker/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./docker/observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ${HOTSHOP_SOURCE_ROOT:-.}/docker/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ${HOTSHOP_SOURCE_ROOT:-.}/docker/observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus_data:/prometheus
     ports:
       - "${PROMETHEUS_PORT:-9090}:9090"
@@ -516,7 +517,7 @@ services:
     image: ${LOKI_IMAGE:-grafana/loki:3.5.3}
     command: [-config.file=/etc/loki/loki.yml]
     volumes:
-      - ./docker/observability/loki/loki.yml:/etc/loki/loki.yml:ro
+      - ${HOTSHOP_SOURCE_ROOT:-.}/docker/observability/loki/loki.yml:/etc/loki/loki.yml:ro
       - loki_data:/loki
     ports:
       - "${LOKI_PORT:-3100}:3100"
@@ -537,7 +538,7 @@ services:
     image: ${TEMPO_IMAGE:-grafana/tempo:2.8.1}
     command: [-config.file=/etc/tempo/tempo.yml]
     volumes:
-      - ./docker/observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - ${HOTSHOP_SOURCE_ROOT:-.}/docker/observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
       - tempo_data:/var/tempo
     ports:
       - "${TEMPO_PORT:-3200}:3200"
@@ -562,7 +563,7 @@ services:
       - --storage.path=/var/lib/alloy/data
       - /etc/alloy/config.alloy
     volumes:
-      - ./docker/observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - ${HOTSHOP_SOURCE_ROOT:-.}/docker/observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - alloy_data:/var/lib/alloy/data
     ports:
@@ -596,8 +597,8 @@ services:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
     volumes:
-      - ./docker/observability/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./docker/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ${HOTSHOP_SOURCE_ROOT:-.}/docker/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ${HOTSHOP_SOURCE_ROOT:-.}/docker/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
     ports:
       - "${GRAFANA_PORT:-3000}:3000"

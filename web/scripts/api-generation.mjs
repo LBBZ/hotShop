@@ -17,7 +17,7 @@ const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryRoot = resolve(webRoot, "..");
 const baselineRoot = join(repositoryRoot, "docs", "api", "openapi-baseline");
 const defaultOutputRoot = join(webRoot, "src", "api", "generated");
-const generatedDomains = ["public", "user", "admin"];
+const generatedDomains = ["public", "user", "admin", "agent"];
 
 function executableName() {
   return process.platform === "win32"
@@ -115,6 +115,14 @@ function generateDomain(domain, outputRoot) {
 
   removeNonTypeScriptFiles(output);
   normalizeGeneratedTypeScriptFiles(output);
+}
+
+export function generateDomainForCheck(domain, outputRoot = defaultOutputRoot) {
+  if (!generatedDomains.includes(domain)) {
+    throw new Error(`Unknown generated domain: ${domain}`);
+  }
+  mkdirSync(outputRoot, { recursive: true });
+  generateDomain(domain, outputRoot);
 }
 
 export function generateAdmin(outputRoot = defaultOutputRoot) {

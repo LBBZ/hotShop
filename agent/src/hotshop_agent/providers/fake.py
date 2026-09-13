@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -88,7 +89,39 @@ class FakeModel:
         if marker not in prompt:
             return None
         raw = prompt.rsplit(marker, maxsplit=1)[1]
-        return parse_tool_call(raw)
+        explicit = parse_tool_call(raw)
+        if explicit is not None:
+            return explicit
+        return FakeModel._deterministic_natural_language_tool_call(raw)
+
+    @staticmethod
+    def _deterministic_natural_language_tool_call(message: str) -> ModelToolCall | None:
+        """Keep browser journeys deterministic without granting dynamic tool selection."""
+        normalized = " ".join(message.strip().split())
+        purchase = re.fullmatch(
+            r"(?i)(?:please\s+)?(?:buy|purchase)\s+(?:product\s+)?(?P<product>[1-9]\d{0,18})"
+            r"(?:\s*(?:x|quantity|qty)\s*(?P<quantity>[1-9]\d{0,2}))?[.!]?",
+            normalized,
+        )
+        if purchase is None:
+            purchase = re.fullmatch(
+                r"(?:请)?(?:购买|买)\s*(?:商品)?\s*(?P<product>[1-9]\d{0,18})"
+                r"(?:\s*(?:数量|共|x|X)\s*(?P<quantity>[1-9]\d{0,2})\s*(?:件|个)?)?(?:[。！!])?",
+                normalized,
+            )
+        if purchase is None:
+            return None
+        return ModelToolCall(
+            name="create_purchase_draft",
+            arguments={
+                "items": [
+                    {
+                        "productId": purchase.group("product"),
+                        "quantity": int(purchase.group("quantity") or "1"),
+                    }
+                ]
+            },
+        )
 
     @staticmethod
     def _tool_summary(prompt: str) -> str | None:

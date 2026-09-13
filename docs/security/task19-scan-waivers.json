@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "1.0",
+  "waivers": [
+    {
+      "scanner": "trivy",
+      "id": "DS002",
+      "target": "agent/Dockerfile",
+      "severity": "HIGH",
+      "owner": "HotShop security engineering",
+      "expiresOn": "2026-12-31",
+      "reason": "The runtime entrypoint starts as root only to copy the read-only service-identity key into a mode-0400 tmpfs file owned by uid 10001. It immediately execs the Agent as uid/gid 10001 with cleared supplementary groups and no-new-privileges; application code never runs as root.",
+      "remediation": "Replace the root bootstrap with an orchestrator-supported secret mount that can enforce uid 10001 and mode 0400 directly."
+    },
+    {
+      "scanner": "trivy",
+      "id": "DS002",
+      "target": "script/task19-orchestrator.Dockerfile",
+      "severity": "HIGH",
+      "owner": "HotShop CI engineering",
+      "expiresOn": "2026-12-31",
+      "reason": "This non-production, per-run verification helper requires access to the Docker socket to create and clean its uniquely named Compose project. It contains no application runtime and is identity-checked and deleted after every run.",
+      "remediation": "Move TASK-19 orchestration to a rootless Docker runner with a mapped socket group."
+    }
+  ]
+}

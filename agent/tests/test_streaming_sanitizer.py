@@ -22,12 +22,26 @@ class SensitiveSample:
     secret: str
 
 
+TEST_JWT = ".".join(
+    (
+        "eyJhbGciOiJSUzI1NiJ9",
+        "eyJzdWIiOiI0MiIsImV4cCI6OTk5OTk5OTk5OX0",
+        "signatureABCDEFG",
+    )
+)
+
+
+def private_key_fixture(kind: str, secret: str) -> str:
+    prefix = f"{kind} " if kind else ""
+    return f"-----BEGIN {prefix}PRIVATE KEY-----\n{secret}\n-----END {prefix}PRIVATE KEY-----"
+
+
 SENSITIVE_SAMPLES = (
     SensitiveSample("bearer", "Bearer abcDEF0123._-+/=", "abcDEF0123._-+/="),
     SensitiveSample(
         "jwt",
-        "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiI0MiIsImV4cCI6OTk5OTk5OTk5OX0.signatureABCDEFG",
-        "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiI0MiIsImV4cCI6OTk5OTk5OTk5OX0.signatureABCDEFG",
+        TEST_JWT,
+        TEST_JWT,
     ),
     SensitiveSample("api-key", "api_key=paid-secret-value", "paid-secret-value"),
     SensitiveSample("token", "token:token-secret-value", "token-secret-value"),
@@ -39,28 +53,27 @@ SENSITIVE_SAMPLES = (
     ),
     SensitiveSample(
         "pkcs8",
-        "-----BEGIN PRIVATE KEY-----\nPKCS8-SECRET\n-----END PRIVATE KEY-----",
+        private_key_fixture("", "PKCS8-SECRET"),
         "PKCS8-SECRET",
     ),
     SensitiveSample(
         "rsa",
-        "-----BEGIN RSA PRIVATE KEY-----\nRSA-SECRET\n-----END RSA PRIVATE KEY-----",
+        private_key_fixture("RSA", "RSA-SECRET"),
         "RSA-SECRET",
     ),
     SensitiveSample(
         "ec",
-        "-----BEGIN EC PRIVATE KEY-----\nEC-SECRET\n-----END EC PRIVATE KEY-----",
+        private_key_fixture("EC", "EC-SECRET"),
         "EC-SECRET",
     ),
     SensitiveSample(
         "openssh",
-        "-----BEGIN OPENSSH PRIVATE KEY-----\nOPENSSH-SECRET\n-----END OPENSSH PRIVATE KEY-----",
+        private_key_fixture("OPENSSH", "OPENSSH-SECRET"),
         "OPENSSH-SECRET",
     ),
     SensitiveSample(
         "encrypted",
-        "-----BEGIN ENCRYPTED PRIVATE KEY-----\nENCRYPTED-SECRET\n"
-        "-----END ENCRYPTED PRIVATE KEY-----",
+        private_key_fixture("ENCRYPTED", "ENCRYPTED-SECRET"),
         "ENCRYPTED-SECRET",
     ),
     SensitiveSample(

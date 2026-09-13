@@ -140,6 +140,19 @@ def test_cross_user_and_administrator_dynamic_requests_are_rejected() -> None:
     assert ambiguous.reason == "ambiguous_dynamic_fact"
 
 
+def test_administrator_routing_allows_reads_and_refuses_high_risk_actions() -> None:
+    statistics = route_query("查看运营统计", IdentityKind.ADMINISTRATOR, "42")
+    anomaly = route_query("查看异常摘要", IdentityKind.ADMINISTRATOR, "42")
+    forbidden = route_query("重放 Outbox 并封禁用户", IdentityKind.ADMINISTRATOR, "42")
+
+    assert statistics.kind is RouteKind.DYNAMIC_TOOL
+    assert statistics.tool_name == "read_statistics"
+    assert anomaly.kind is RouteKind.DYNAMIC_TOOL
+    assert anomaly.tool_name == "read_anomaly_summary"
+    assert forbidden.kind is RouteKind.FORBIDDEN
+    assert forbidden.reason == "high_risk_administrator_action"
+
+
 def test_metrics_do_not_contain_query_or_document_body() -> None:
     metrics = AgentMetrics()
     metrics.rag_requests.labels("hit").inc()

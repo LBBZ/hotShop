@@ -17,6 +17,7 @@ EventType = Literal[
     "tool.started",
     "tool.completed",
     "tool.failed",
+    "purchase_draft.created",
     "rag.completed",
     "usage",
     "error",
@@ -31,6 +32,18 @@ EVENT_DATA_KEYS: dict[str, frozenset[str]] = {
     "tool.started": frozenset({"tool", "resourceType"}),
     "tool.completed": frozenset({"tool", "resourceType", "outcome", "summary"}),
     "tool.failed": frozenset({"tool", "resourceType", "outcome", "summary", "code"}),
+    "purchase_draft.created": frozenset(
+        {
+            "draftId",
+            "actionType",
+            "items",
+            "totalPriceSnapshot",
+            "currency",
+            "validUntil",
+            "confirmationRequired",
+            "nextStep",
+        }
+    ),
     "rag.completed": frozenset({"outcome", "citations"}),
     "usage": frozenset({"inputTokens", "outputTokens", "estimatedCostUsd"}),
     "error": frozenset({"code", "message", "retryable"}),
@@ -396,8 +409,54 @@ class StreamEvent(BaseModel):
         event_type = info.data.get("type")
         if event_type not in EVENT_DATA_KEYS or not EVENT_DATA_KEYS[event_type].issuperset(value):
             raise ValueError("SSE event contains non-allowlisted data")
+        if event_type == "purchase_draft.created" and not _valid_purchase_draft(value):
+            raise ValueError("SSE purchase draft is invalid")
         return value
 
     def encode(self) -> str:
         payload = self.model_dump(by_alias=True, exclude_none=True)
         return f"event: {self.type}\ndata: {safe_json(payload)}\n\n"
+
+
+def _valid_purchase_draft(value: dict[str, Any]) -> bool:
+    items = value.get("items")
+    if (
+        not isinstance(value.get("draftId"), str)
+        or len(value["draftId"]) > 100
+        or value.get("actionType") != "CREATE_ORDER"
+        or value.get("confirmationRequired") is not True
+        or not isinstance(items, list)
+        or not 1 <= len(items) <= 20
+    ):
+        return False
+    for item in items:
+        if not isinstance(item, dict) or set(item) - {
+            "productId",
+            "quantity",
+            "productName",
+            "unitPriceSnapshot",
+            "lineAmountSnapshot",
+        }:
+            return False
+        product_id = item.get("productId")
+        quantity = item.get("quantity")
+        if (
+            not isinstance(product_id, str)
+            or not product_id.isascii()
+            or not product_id.isdecimal()
+            or product_id.startswith("0")
+            or len(product_id) > 19
+            or isinstance(quantity, bool)
+            or not isinstance(quantity, int)
+            or not 1 <= quantity <= 100
+        ):
+            return False
+        if any(
+            key in item and (not isinstance(item[key], str) or len(item[key]) > 500)
+            for key in ("productName", "unitPriceSnapshot", "lineAmountSnapshot")
+        ):
+            return False
+    return all(
+        key not in value or (isinstance(value[key], str) and len(value[key]) <= 500)
+        for key in ("totalPriceSnapshot", "currency", "validUntil", "nextStep")
+    )

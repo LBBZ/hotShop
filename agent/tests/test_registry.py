@@ -272,7 +272,15 @@ async def test_tool_response_removes_sensitive_values(
             )
         ),
     )
-    token = issue_token(IdentityKind.DELEGATION)
+    token = issue_token(
+        IdentityKind.DELEGATION,
+        claim_overrides={
+            "scope": (
+                "catalog:read orders:self:read reservations:self:read "
+                "purchase-drafts:create"
+            )
+        },
+    )
     try:
         result = await registry.execute(
             "get_product",
@@ -336,3 +344,65 @@ async def test_all_administrator_tools_are_low_risk_and_fixed(
     assert result.outcome == "SUCCESS"
     assert calls[0].method == method
     assert calls[0].url.path == path
+
+
+@pytest.mark.asyncio
+async def test_transport_failure_retries_only_safe_get_tools(
+    settings: Any,
+    issue_token: Any,
+) -> None:
+    get_calls = 0
+
+    def transient_get(_request: httpx.Request) -> httpx.Response:
+        nonlocal get_calls
+        get_calls += 1
+        if get_calls == 1:
+            raise httpx.ConnectError("transient connection failure")
+        return httpx.Response(200, json={"items": []})
+
+    get_registry, get_client = user_registry(
+        settings,
+        httpx.MockTransport(transient_get),
+    )
+    token = issue_token(
+        IdentityKind.DELEGATION,
+        claim_overrides={
+            "scope": (
+                "catalog:read orders:self:read reservations:self:read "
+                "purchase-drafts:create"
+            )
+        },
+    )
+    try:
+        result = await get_registry.execute(
+            "get_product",
+            {"productId": "1"},
+            context(token, JwtVerifier(settings), IdentityKind.DELEGATION),
+        )
+    finally:
+        await get_client.aclose()
+    assert result.outcome == "SUCCESS"
+    assert get_calls == 2
+
+    post_calls = 0
+
+    def failing_post(_request: httpx.Request) -> httpx.Response:
+        nonlocal post_calls
+        post_calls += 1
+        raise httpx.ConnectError("transient connection failure")
+
+    post_registry, post_client = user_registry(
+        settings,
+        httpx.MockTransport(failing_post),
+    )
+    try:
+        result = await post_registry.execute(
+            "create_purchase_draft",
+            {"items": [{"productId": "1", "quantity": 1}]},
+            context(token, JwtVerifier(settings), IdentityKind.DELEGATION),
+        )
+    finally:
+        await post_client.aclose()
+    assert result.error is not None
+    assert result.error.code == "TOOL_BACKEND_UNAVAILABLE"
+    assert post_calls == 1

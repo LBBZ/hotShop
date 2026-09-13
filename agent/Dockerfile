@@ -1,4 +1,4 @@
-FROM python:3.12.11-slim-bookworm@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7 AS base
+FROM python:3.12.14-alpine@sha256:b64631e04e4920160c50fbe8d8df828f7f35f06f425cb44aa09bca53e708a35a AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -8,8 +8,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /opt/hotshop-agent
 
-RUN groupadd --system --gid 10001 hotshop \
-    && useradd --system --uid 10001 --gid hotshop --home-dir /nonexistent hotshop
+RUN apk add --no-cache --upgrade \
+        libuuid=2.42.3-r1 \
+        util-linux=2.42.3-r1 \
+    && addgroup -S -g 10001 hotshop \
+    && adduser -S -D -H -u 10001 -G hotshop hotshop
 
 COPY requirements.lock ./
 RUN python -m pip install --requirement requirements.lock

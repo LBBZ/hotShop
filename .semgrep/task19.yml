@@ -1,0 +1,46 @@
+rules:
+  - id: hotshop-python-dynamic-code-execution
+    message: Dynamic Python code execution is forbidden in production paths.
+    severity: ERROR
+    languages: [python]
+    paths:
+      include: [agent/src/**]
+    patterns:
+      - pattern-either:
+          - pattern: eval(...)
+          - pattern: exec(...)
+          - pattern: os.system(...)
+          - pattern: subprocess.$FUNC(...)
+
+  - id: hotshop-java-process-execution
+    message: Java services must not execute shell or OS processes.
+    severity: ERROR
+    languages: [java]
+    paths:
+      include: ["*/src/main/**"]
+    pattern-either:
+      - pattern: Runtime.getRuntime().exec(...)
+      - pattern: new ProcessBuilder(...)
+
+  - id: hotshop-web-dynamic-script
+    message: Web production code must not create executable script from data.
+    severity: ERROR
+    languages: [typescript]
+    paths:
+      include: [web/src/**]
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+      - pattern: $EL.innerHTML = $VALUE
+
+  - id: hotshop-agent-wildcard-cors
+    message: Agent Service must not enable wildcard CORS.
+    severity: ERROR
+    languages: [python]
+    paths:
+      include: [agent/src/**]
+    patterns:
+      - pattern-inside: CORSMiddleware(...)
+      - pattern-either:
+          - pattern: allow_origins=["*"]
+          - pattern: allow_origin_regex=".*"

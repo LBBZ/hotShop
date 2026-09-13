@@ -2,6 +2,8 @@ name: Full verification
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "17 18 * * 6"
 
 permissions:
   contents: read
@@ -163,7 +165,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
           New-Item -ItemType Directory -Force target/ci/openapi | Out-Null
-          docker run --rm --mount "type=bind,source=${PWD},target=/repo" -w /repo/web mcr.microsoft.com/playwright@sha256:b27e719ecbfef153e13fd24e8341736733bf2658b229677eb21ff57ff5d7fb29 bash -lc 'set -euo pipefail; apt-get update >/dev/null; apt-get install -y --no-install-recommends openjdk-21-jre-headless >/dev/null; corepack enable; corepack prepare pnpm@10.15.0 --activate; pnpm install --frozen-lockfile; pnpm format:check; pnpm lint; pnpm typecheck; pnpm test:coverage; pnpm build; pnpm api:check; pnpm api:check:admin; CI=true pnpm exec playwright test e2e/smoke.spec.ts'
+          docker run --rm --mount "type=bind,source=${PWD},target=/repo" -w /repo/web mcr.microsoft.com/playwright@sha256:3bed4b1a12f2338642f3d8cba28e291deef3c66bd4a964bbeb3e57bbff511dbd bash -lc 'set -euo pipefail; apt-get update >/dev/null; apt-get install -y --no-install-recommends openjdk-21-jre-headless >/dev/null; corepack enable; corepack prepare pnpm@10.15.0 --activate; pnpm install --frozen-lockfile; pnpm format:check; pnpm lint; pnpm typecheck; pnpm test:coverage; pnpm build; pnpm api:check; pnpm api:check:admin; pnpm api:check:agent; CI=true pnpm exec playwright test e2e/smoke.spec.ts'
           & ./script/generate-openapi.ps1 *>&1 | Tee-Object target/ci/openapi/generate.log
           docker run --rm --mount "type=bind,source=${PWD},target=/repo" -w /repo python:3.12.11-slim-bookworm@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7 python script/check_openapi_compatibility.py --baseline docs/api/openapi-baseline --current target/openapi *>&1 | Tee-Object target/ci/openapi/compatibility.log
           git diff --exit-code -- web/src/api/generated *>&1 | Tee-Object target/ci/openapi/worktree-drift.log
@@ -283,7 +285,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(docker image inspect hotshop-portal:full --format '{{.Config.User}}')" = "10001:10001"
-          test "$(docker image inspect hotshop-web:full --format '{{.Config.User}}')" = "pwuser"
+          test "$(docker image inspect hotshop-web:full --format '{{.Config.User}}')" = "101:101"
           test "$(docker run --rm -e AGENT_ASSERTION_PRIVATE_KEY_SOURCE_PATH=/etc/hostname hotshop-agent:full id -u)" = "10001"
           docker run --rm --entrypoint id hotshop-agent:full-test -u | grep -q '^10001$'
           COMPOSE_PROJECT_NAME=hotshop-full-compose docker compose --env-file .env.example up -d --wait mysql database-migrator redis-cache redis-seckill rabbitmq
@@ -336,11 +338,82 @@ jobs:
           $ErrorActionPreference = "Stop"
           & ./script/ci/tests/test_native_cleanup.ps1
           & ./script/ci/tests/test_compose_cleanup_ownership.ps1
+          & ./script/ci/tests/test_task19_resource_ownership.ps1
+
+  task19-real-e2e:
+    name: TASK-19 real browser journeys
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Run isolated Desktop and mobile real journeys
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          & ./script/verify-task19-e2e.ps1 -TimeoutSeconds 1200
+      - name: Upload TASK-19 E2E evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: task19-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+          path: target/task19-e2e/
+          if-no-files-found: warn
+          retention-days: 7
+
+  task19-faults:
+    name: TASK-19 fault and recovery matrix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Run isolated fault matrix
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          & ./script/verify-task19-faults.ps1 -TimeoutSeconds 1200
+      - name: Upload TASK-19 fault evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: task19-faults-${{ github.run_id }}-${{ github.run_attempt }}
+          path: target/task19-faults/
+          if-no-files-found: warn
+          retention-days: 7
+
+  task19-security:
+    name: TASK-19 scans, regression, images, and ZAP
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Run fixed-digest security verification
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          & ./script/verify-task19-security.ps1 -TimeoutSeconds 1200
+      - name: Upload TASK-19 security reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: task19-security-${{ github.run_id }}-${{ github.run_attempt }}
+          path: target/task19-security/
+          if-no-files-found: error
+          retention-days: 14
 
   gate:
     name: Full verification gate
     if: always()
-    needs: [java, agent-qdrant, web-contracts, docker-compose-smoke, security]
+    needs: [java, agent-qdrant, web-contracts, docker-compose-smoke, security, task19-real-e2e, task19-faults, task19-security]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

@@ -7,6 +7,9 @@ function normalizeBaseUrl(value: string | undefined): string {
 
 export const apiEnvironment = Object.freeze({
   baseUrl: normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL),
+  agentBaseUrl: normalizeBaseUrl(
+    import.meta.env.VITE_AGENT_BASE_URL ?? "/agent-api",
+  ),
 });
 
 export function toApiUrl(baseUrl: string, input: RequestInfo | URL): string {

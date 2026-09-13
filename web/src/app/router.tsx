@@ -22,6 +22,11 @@ const UserAuthPage = lazy(() =>
     default: module.UserAuthPage,
   })),
 );
+const UserAgentPage = lazy(() =>
+  import("@/pages/user-agent-page").then((module) => ({
+    default: module.UserAgentPage,
+  })),
+);
 const ProductDetailPage = lazy(() =>
   import("@/pages/product-detail-page").then((module) => ({
     default: module.ProductDetailPage,
@@ -82,6 +87,11 @@ const AdminAuditPage = lazy(() =>
     default: module.AdminAuditPage,
   })),
 );
+const AdminAgentPage = lazy(() =>
+  import("@/pages/admin-agent-page").then((module) => ({
+    default: module.AdminAgentPage,
+  })),
+);
 const ForbiddenPage = lazy(() =>
   import("@/pages/status-pages").then((module) => ({
     default: module.ForbiddenPage,
@@ -129,12 +139,14 @@ export function AppRouter() {
                   items={[
                     { label: "总览", to: "/user", icon: "overview" },
                     { label: "我的订单", to: "/user/orders", icon: "orders" },
+                    { label: "Agent", to: "/user/agent", icon: "agent" },
                   ]}
                 />
               }
             >
               <Route index element={<UserDashboard />} />
               <Route path="orders" element={<OrderListPage />} />
+              <Route path="agent" element={<UserAgentPage />} />
               <Route path="orders/:orderId" element={<OrderDetailPage />} />
               <Route
                 path="reservations/:activityId/:reservationNo"
@@ -174,6 +186,7 @@ export function AppRouter() {
                     },
                     { label: "Outbox", to: "/admin/outbox", icon: "outbox" },
                     { label: "审计", to: "/admin/audit", icon: "audit" },
+                    { label: "Agent", to: "/admin/agent", icon: "agent" },
                   ]}
                 />
               }
@@ -185,6 +198,7 @@ export function AppRouter() {
               <Route path="exceptions" element={<AdminExceptionsPage />} />
               <Route path="outbox" element={<AdminOutboxPage />} />
               <Route path="audit" element={<AdminAuditPage />} />
+              <Route path="agent" element={<AdminAgentPage />} />
             </Route>
           </Route>
 

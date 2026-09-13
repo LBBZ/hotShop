@@ -15,9 +15,11 @@ function composeProject() {
 }
 
 function compose(...args: string[]) {
+  const composeFile =
+    process.env.HOTSHOP_E2E_COMPOSE_FILE ?? "../docker-compose.yml";
   return execFileSync(
     "docker",
-    ["compose", "-p", composeProject(), "-f", "../docker-compose.yml", ...args],
+    ["compose", "-p", composeProject(), "-f", composeFile, ...args],
     { cwd: process.cwd(), encoding: "utf8" },
   );
 }
@@ -217,7 +219,8 @@ test.describe("real Compose user transaction journey", () => {
     await expect(page.locator(".dashboard-heading")).toContainText("CANCELED");
   });
 
-  test("flash-sale double click reuses one intent and reaches async order creation", async ({
+  test("flash-sale double click reuses one intent, enforces ownership, and reaches async order creation", async ({
+    browser,
     page,
   }, testInfo) => {
     await register(page, uniqueUser("seckill", testInfo.project.name));
@@ -246,6 +249,15 @@ test.describe("real Compose user transaction journey", () => {
       },
     );
     const reservationUrl = page.url();
+    const strangerContext = await browser.newContext();
+    const strangerPage = await strangerContext.newPage();
+    await register(
+      strangerPage,
+      uniqueUser("reservationstranger", testInfo.project.name),
+    );
+    await strangerPage.goto(reservationUrl);
+    await expect(strangerPage.locator("#error-title")).toBeVisible();
+    await strangerContext.close();
     await page.goto("/");
     await page.locator('[data-activity-id="913001"] button').first().click();
     await expect(page).toHaveURL(reservationUrl);
@@ -303,7 +315,7 @@ test.describe("real Compose user transaction journey", () => {
         failedEventRequests.push(request);
       }
     });
-    await createOrder(page);
+    const paidOrderId = await createOrder(page);
     await runPayment(page, "success", "PAID");
     await page.context().setOffline(true);
     await expect(page.locator(".transaction-receipt")).toHaveAttribute(
@@ -377,8 +389,56 @@ test.describe("real Compose user transaction journey", () => {
         "live",
         { timeout: 60_000 },
       );
+
+      compose("--profile", "app", "stop", "task-service");
+      let restartedReservationNo = "";
+      try {
+        await page.goto("/");
+        await page
+          .locator('[data-activity-id="913001"] button')
+          .first()
+          .click();
+        await expect(page).toHaveURL(
+          /\/user\/reservations\/913001\/rsv_[0-9a-f]{32}$/u,
+        );
+        restartedReservationNo = page.url().split("/").at(-1)!;
+        // While the consumer is stopped, RESERVED exists only in Redis. The
+        // durable MySQL timeline is written by the consumer in the same
+        // transaction that creates the order, so asserting a timeline row here
+        // would contradict the crash-before-commit invariant.
+        await expect(page.locator(".reservation-summary")).toContainText(
+          "RESERVED",
+          { timeout: 30_000 },
+        );
+        expect(
+          Number(
+            mysqlScalar(
+              `SELECT COUNT(*) FROM sales_order o JOIN sale_reservation r ON r.reservation_id=o.reservation_id WHERE r.reservation_no='${restartedReservationNo}'`,
+            ),
+          ),
+        ).toBe(0);
+      } finally {
+        compose("--profile", "app", "start", "task-service");
+      }
+      await expect(
+        page.locator('[data-event-type="ORDER_CREATED"]'),
+      ).toHaveCount(1, { timeout: 60_000 });
+      await expect(page.locator('[data-event-type="RESERVED"]')).toHaveCount(1);
+      await expect
+        .poll(() =>
+          Number(
+            mysqlScalar(
+              `SELECT COUNT(*) FROM sales_order o JOIN sale_reservation r ON r.reservation_id=o.reservation_id WHERE r.reservation_no='${restartedReservationNo}'`,
+            ),
+          ),
+        )
+        .toBe(1);
+      console.info(
+        "HOTSHOP_TASK_RESTART_EVIDENCE",
+        JSON.stringify({ reservationNo: restartedReservationNo, orders: 1 }),
+      );
     }
-    await page.reload();
+    await page.goto(`/user/orders/${paidOrderId}`);
     await expect(page.locator('[data-event-type="PAID"]')).toHaveCount(1);
   });
 

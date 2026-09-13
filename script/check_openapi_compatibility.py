@@ -319,7 +319,7 @@ def main() -> int:
     arguments = parser.parse_args()
 
     errors: list[str] = []
-    for name in ("public", "user", "admin"):
+    for name in ("public", "user", "admin", "agent"):
         baseline_path = arguments.baseline / f"{name}.json"
         current_path = arguments.current / f"{name}.json"
         if not baseline_path.is_file():
@@ -338,7 +338,7 @@ def main() -> int:
         for error in errors:
             print(f"- {error}", file=sys.stderr)
         return 1
-    print("OpenAPI compatibility check passed for public, user, and admin contracts.")
+    print("OpenAPI compatibility check passed for public, user, admin, and Agent contracts.")
     return 0
 
 

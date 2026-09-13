@@ -67,13 +67,14 @@ def classify_paths(paths: list[str]) -> dict[str, bool]:
         elif root in JAVA_ROOTS:
             selected.update({"java", "openapi", "docker"})
         elif root == "agent":
-            selected.update({"agent", "docker"})
+            selected.update({"agent", "web", "openapi", "docker"})
         elif root == "web":
             selected.update({"web", "docker"})
         elif path.startswith("docs/api/") or path in {
             "script/canonicalize_openapi.py",
             "script/check_openapi_compatibility.py",
             "script/generate-api-client.ps1",
+            "script/generate-agent-openapi.ps1",
             "script/generate-openapi.ps1",
             "script/update-openapi-baseline.ps1",
         }:

@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 IMAGE = os.environ.get("AGENT_CONTAINER_IMAGE", "")
+TASK19_PROJECT = os.environ.get("TASK19_PROJECT", "")
 DOCKER = shutil.which("docker") or "docker"
 pytestmark = pytest.mark.skipif(
     not IMAGE,
@@ -20,6 +21,12 @@ pytestmark = pytest.mark.skipif(
 
 PRIVATE_SENTINEL = b"TASK16_RECONCILE_PRIVATE_SENTINEL_8f3567e5\n"  # noqa: S105
 PUBLIC_SENTINEL = b"TASK16_RECONCILE_PUBLIC_TEST_VALUE\n"
+
+
+def ownership_label_arguments() -> list[str]:
+    if not TASK19_PROJECT:
+        return []
+    return ["--label", f"com.docker.compose.project={TASK19_PROJECT}"]
 
 
 def docker(*arguments: str, input_bytes: bytes | None = None, check: bool = True) -> str:
@@ -73,33 +80,35 @@ def runtime_container() -> Iterator[dict[str, str]]:
     name = f"hotshop-agent-security-{suffix}"
     private_volume = f"hotshop-agent-private-{suffix}"
     public_volume = f"hotshop-agent-public-{suffix}"
-    docker("volume", "create", private_volume)
-    docker("volume", "create", public_volume)
-    populate_volume(private_volume, "agent-service-private.pem", PRIVATE_SENTINEL, "0400")
-    populate_volume(public_volume, "verification-public.pem", PUBLIC_SENTINEL, "0444")
-    source_before = volume_metadata(private_volume, "agent-service-private.pem")
-    docker(
-        "run",
-        "--detach",
-        "--name",
-        name,
-        "--tmpfs",
-        "/run/hotshop-agent:rw,noexec,nosuid,nodev,mode=0700",
-        "--mount",
-        f"type=volume,source={private_volume},target=/run/key-source,readonly",
-        "--mount",
-        f"type=volume,source={public_volume},target=/run/public-keys,readonly",
-        "--env",
-        "AGENT_ASSERTION_PRIVATE_KEY_SOURCE_PATH=/run/key-source/agent-service-private.pem",
-        "--env",
-        "AGENT_ENVIRONMENT=test",
-        "--env",
-        "AGENT_STATE_BACKEND=memory",
-        "--env",
-        "AGENT_TRACE_SAMPLE_RATIO=0",
-        IMAGE,
-    )
+    source_before = ""
     try:
+        docker("volume", "create", *ownership_label_arguments(), private_volume)
+        docker("volume", "create", *ownership_label_arguments(), public_volume)
+        populate_volume(private_volume, "agent-service-private.pem", PRIVATE_SENTINEL, "0400")
+        populate_volume(public_volume, "verification-public.pem", PUBLIC_SENTINEL, "0444")
+        source_before = volume_metadata(private_volume, "agent-service-private.pem")
+        docker(
+            "run",
+            "--detach",
+            "--name",
+            name,
+            *ownership_label_arguments(),
+            "--tmpfs",
+            "/run/hotshop-agent:rw,noexec,nosuid,nodev,mode=0700",
+            "--mount",
+            f"type=volume,source={private_volume},target=/run/key-source,readonly",
+            "--mount",
+            f"type=volume,source={public_volume},target=/run/public-keys,readonly",
+            "--env",
+            "AGENT_ASSERTION_PRIVATE_KEY_SOURCE_PATH=/run/key-source/agent-service-private.pem",
+            "--env",
+            "AGENT_ENVIRONMENT=test",
+            "--env",
+            "AGENT_STATE_BACKEND=memory",
+            "--env",
+            "AGENT_TRACE_SAMPLE_RATIO=0",
+            IMAGE,
+        )
         deadline = time.monotonic() + 90
         while time.monotonic() < deadline:
             status = docker(
@@ -245,7 +254,7 @@ def test_entrypoint_fails_fast_without_usable_root_only_source(case: str) -> Non
     arguments = ["run", "--rm"]
     try:
         if case == "empty":
-            docker("volume", "create", volume)
+            docker("volume", "create", *ownership_label_arguments(), volume)
             populate_volume(volume, "empty.pem", b"", "0400")
             arguments.extend(
                 [

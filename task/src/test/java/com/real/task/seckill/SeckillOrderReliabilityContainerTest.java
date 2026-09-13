@@ -780,7 +780,11 @@ class SeckillOrderReliabilityContainerTest {
     private static void unpause(String containerId) {
         DockerClientFactory.instance().client().unpauseContainerCmd(containerId).exec();
         if (containerId.equals(MYSQL.getContainerId())) {
-            await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+            await().pollInterval(Duration.ofMillis(200))
+                    .during(Duration.ofSeconds(2))
+                    .atMost(Duration.ofSeconds(30))
+                    .ignoreExceptions()
+                    .untilAsserted(() -> {
                 try (var connection = DriverManager.getConnection(
                         MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword())) {
                     assertThat(connection.isValid(2)).isTrue();

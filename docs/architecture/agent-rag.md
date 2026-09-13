@@ -93,3 +93,9 @@ These controls reduce unsupported answers and make static knowledge auditable; t
 “completely eliminate hallucinations.” Coverage depends on maintained sources, routing phrases,
 embedding quality, threshold calibration, and the configured model. Dynamic correctness still
 depends on the Java system of record and its authorization.
+
+The Web workspace renders only the citation allowlist from `rag.completed`; it never renders a
+retrieved chunk body as executable HTML. When Qdrant is unavailable, the static branch emits an
+explicit degraded answer without citations. The server-owned dynamic route is evaluated before
+retrieval, so live Product/Order tools remain available during the same outage and there is no
+fallback to another model or embedding provider.

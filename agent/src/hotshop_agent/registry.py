@@ -236,17 +236,30 @@ class ToolRegistry:
             "X-Request-ID": context.request_id,
             "traceparent": f"00-{context.trace_id}-{_span_id()}-01",
         }
-        try:
-            response = await self._client.request(
-                spec.method,
-                f"{self._base_url}{path}",
-                params=values if spec.method == "GET" else None,
-                json=values if spec.method == "POST" else None,
-                headers=headers,
-                timeout=self._timeout_seconds,
+        response: httpx.Response | None = None
+        attempts = 2 if spec.method == "GET" else 1
+        for _attempt in range(attempts):
+            try:
+                response = await self._client.request(
+                    spec.method,
+                    f"{self._base_url}{path}",
+                    params=values if spec.method == "GET" else None,
+                    json=values if spec.method == "POST" else None,
+                    headers=headers,
+                    timeout=self._timeout_seconds,
+                )
+                break
+            except httpx.HTTPError as exception:
+                backend_error_type = type(exception).__name__
+                continue
+        if response is None:
+            self._log(
+                spec,
+                principal.subject_user_id,
+                context,
+                "FAILURE",
+                error_type=backend_error_type,
             )
-        except httpx.HTTPError:
-            self._log(spec, principal.subject_user_id, context, "FAILURE")
             return self._failure(
                 name,
                 spec.resource_type,
@@ -319,13 +332,20 @@ class ToolRegistry:
         )
 
     @staticmethod
-    def _log(spec: ToolSpec, subject: str, context: ToolContext, outcome: str) -> None:
+    def _log(
+        spec: ToolSpec,
+        subject: str,
+        context: ToolContext,
+        outcome: str,
+        *,
+        error_type: str = "ToolError",
+    ) -> None:
         logging.getLogger(__name__).info(
             "agent tool invocation",
             extra={
                 "event": "agent.tool.invoked",
                 "outcome": outcome,
-                "errorType": "" if outcome == "SUCCESS" else "ToolError",
+                "errorType": "" if outcome == "SUCCESS" else error_type,
                 "tool": spec.name,
                 "resourceType": spec.resource_type,
                 "subject": subject,

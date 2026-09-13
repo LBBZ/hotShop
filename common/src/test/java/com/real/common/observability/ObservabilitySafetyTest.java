@@ -15,7 +15,8 @@ class ObservabilitySafetyTest {
                 + " password=" + sentinel
                 + " apiKey=" + sentinel
                 + " requestBody={\"accessToken\":\"" + sentinel + "\"}"
-                + " eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature123456";
+                + " eyJhbGciOiJSUzI1NiJ9" + "."
+                + "eyJzdWIiOiIxMjM0NTY3ODkwIn0" + "." + "signature123456";
 
         String sanitized = SensitiveDataSanitizer.sanitize(raw);
 

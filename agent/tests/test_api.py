@@ -680,6 +680,20 @@ async def test_fake_model_executes_real_http_tool_graph_without_sse_data_leak(
             )
         ).text
         draft_events = parse_sse(draft_body)
+        structured_draft = next(
+            event for event in draft_events if event["type"] == "purchase_draft.created"
+        )
+        assert structured_draft["data"]["draftId"] == "draft-0001"
+        assert structured_draft["data"]["items"] == [
+            {
+                "productId": "1",
+                "productName": "Tea",
+                "quantity": 2,
+                "unitPriceSnapshot": "12.50",
+                "lineAmountSnapshot": "25.00",
+            }
+        ]
+        assert "confirmationToken" not in structured_draft["data"]
         visible = "".join(
             event["data"]["delta"] for event in draft_events if event["type"] == "message.delta"
         )

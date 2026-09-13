@@ -24,7 +24,7 @@ try {
     console.error("Run `pnpm api:generate` and review the generated changes.");
     process.exitCode = 1;
   } else {
-    console.log("Generated API clients match all three OpenAPI baselines.");
+    console.log("Generated API clients match all four OpenAPI baselines.");
   }
 } finally {
   rmSync(temporaryRoot, { recursive: true, force: true });

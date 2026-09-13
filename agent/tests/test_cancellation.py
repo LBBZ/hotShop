@@ -18,6 +18,15 @@ from hotshop_agent.security import JwtVerifier
 from hotshop_agent.service import RunHandle
 
 
+def find_application_route(app: Any, path: str) -> Any:
+    candidates = list(app.routes)
+    for route in app.routes:
+        included_router = getattr(route, "original_router", None)
+        if included_router is not None:
+            candidates.extend(included_router.routes)
+    return next(route for route in candidates if getattr(route, "path", "") == path)
+
+
 class FloodModel:
     name = "flood"
     model_name = "flood"
@@ -96,11 +105,7 @@ async def test_client_disconnect_closes_stream_and_cancels_model(
     message = await container.service.add_message(session.id, principal, "slow")
     run = await container.service.start_run(session.id, message.id, principal)
 
-    route = next(
-        route
-        for route in app.routes
-        if getattr(route, "path", "") == "/api/v1/agent/runs/{run_id}/events"
-    )
+    route = find_application_route(app, "/api/v1/agent/runs/{run_id}/events")
 
     async def receive() -> dict[str, str]:
         return {"type": "http.request", "body": ""}
@@ -115,7 +120,7 @@ async def test_client_disconnect_closes_stream_and_cancels_model(
         },
         receive=receive,
     )
-    response = await route.endpoint(  # type: ignore[attr-defined]
+    response = await route.endpoint(
         uuid.UUID(run.id),
         request,
         container,
@@ -210,11 +215,7 @@ async def test_full_queue_sse_disconnect_is_bounded_and_releases_provider(
         issue_token,
     )
     app = create_app(settings, container=container)
-    route = next(
-        route
-        for route in app.routes
-        if getattr(route, "path", "") == "/api/v1/agent/runs/{run_id}/events"
-    )
+    route = find_application_route(app, "/api/v1/agent/runs/{run_id}/events")
 
     async def receive() -> dict[str, str]:
         return {"type": "http.request", "body": ""}
@@ -231,7 +232,7 @@ async def test_full_queue_sse_disconnect_is_bounded_and_releases_provider(
     )
     token = issue_token(IdentityKind.USER)
     credential = Credential(token=token, principal=principal)
-    response = await route.endpoint(  # type: ignore[attr-defined]
+    response = await route.endpoint(
         uuid.UUID(run.id),
         request,
         container,

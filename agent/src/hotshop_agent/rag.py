@@ -143,6 +143,30 @@ class RagRetriever:
 
 def route_query(query: str, identity: IdentityKind, owner_id: str) -> RouteDecision:
     normalized = query.casefold()
+    if identity is IdentityKind.ADMINISTRATOR:
+        if any(
+            phrase in normalized
+            for phrase in (
+                "退款",
+                "补偿",
+                "outbox 重放",
+                "outbox replay",
+                "消息重放",
+                "封禁",
+                "权限",
+                "密钥",
+                "refund",
+                "compensate",
+                "ban user",
+                "permission",
+                "secret key",
+            )
+        ):
+            return RouteDecision(RouteKind.FORBIDDEN, reason="high_risk_administrator_action")
+        if any(phrase in normalized for phrase in ("异常摘要", "异常情况", "anomaly summary")):
+            return _administrator_tool(identity, "read_anomaly_summary", {})
+        if any(phrase in normalized for phrase in ("统计", "运营概览", "statistics")):
+            return _administrator_tool(identity, "read_statistics", {})
     cross_user = re.search(r"(?:用户|user)\s*#?(\d+)\s*(?:的)?\s*(?:订单|预约)", normalized)
     if cross_user and cross_user.group(1) != owner_id:
         return RouteDecision(RouteKind.FORBIDDEN, reason="cross_user_resource")
@@ -293,6 +317,19 @@ def _user_tool(identity: IdentityKind, name: str, arguments: dict[str, Any]) -> 
         tool_name=name,
         tool_arguments=arguments,
         reason="live_transaction_fact",
+    )
+
+
+def _administrator_tool(
+    identity: IdentityKind, name: str, arguments: dict[str, Any]
+) -> RouteDecision:
+    if identity is not IdentityKind.ADMINISTRATOR:
+        return RouteDecision(RouteKind.FORBIDDEN, reason="identity_boundary")
+    return RouteDecision(
+        RouteKind.DYNAMIC_TOOL,
+        tool_name=name,
+        tool_arguments=arguments,
+        reason="low_risk_administrator_fact",
     )
 
 

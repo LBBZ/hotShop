@@ -3,7 +3,7 @@ import { ArrowRight, Fingerprint } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
 import { apiClients } from "@/api/clients";
-import { LoadingState } from "@/components/async-states";
+import { ErrorState, LoadingState } from "@/components/async-states";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TransactionTimeline } from "@/features/transactions/transaction-timeline";
@@ -18,13 +18,23 @@ export function ReservationDetailPage() {
     refetchInterval: 3000,
   });
   const stream = useTransactionStream(
-    activityId && reservationNo
+    query.data && activityId && reservationNo
       ? `/api/v1/flash-sales/${activityId}/reservations/${reservationNo}/events`
       : null,
   );
   const orderId =
     [...stream.state.events].reverse().find((event) => event.orderId)
       ?.orderId ?? query.data?.orderId;
+
+  if (query.isError || (!query.isLoading && !query.data)) {
+    return (
+      <ErrorState
+        title="预约不可访问"
+        description="预约不存在，或它不属于当前登录用户。两种情况都使用相同的安全响应。"
+      />
+    );
+  }
+
   return (
     <div className="transaction-page">
       <header className="dashboard-heading">

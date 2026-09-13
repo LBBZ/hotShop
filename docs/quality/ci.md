@@ -1,7 +1,8 @@
 # HotShop GitHub Actions CI
 
-本页描述 TASK-18 建立的持续集成边界。工作流文件已经过本地静态检查、底层命令验证和 GitHub
-托管环境验证；修复首次运行暴露的 OpenAPI 构建可移植性问题后，`dc779d5` 对应的 CI 全部通过。
+本页描述 TASK-18 建立并由 TASK-19 扩展的持续集成边界。`dc779d5` 对应的托管 CI 全部通过只属于
+TASK-18 历史基线；当前未提交的 TASK-19 workflow 改动已在 Docker 内做本地策略与底层命令验证，尚无
+GitHub 托管运行，不把历史运行冒充本工作树结果。
 
 ## 工作流与职责
 
@@ -14,27 +15,31 @@ Docker/Compose、CI 配置和纯文档做 fail-safe 分类：公共配置、根 
 
 快速 job：
 
-- `CI and security policy`：运行 CI 规则测试、自检、Compose 清理 native/所有权实测探针、actionlint
-  和脱敏 Secret 扫描；所有变更均执行。
+- `CI and security policy`：运行 CI 规则测试、自检、Compose 清理 native/所有权实测探针、actionlint、
+  脱敏 Secret 扫描和固定 digest 的 TASK-19 Semgrep 本地规则；所有变更均执行。Semgrep JSON 作为
+  artifact 上传，快速 Gitleaks 由脱敏退出码/Job 日志门禁；完整工作流另保存两份 Gitleaks JSON。
 - `Java 21 verify`：Temurin 21、Maven Wrapper、Maven cache、`./mvnw -B -ntp clean verify`、
   Testcontainers、Surefire/Failsafe XML 和 JaCoCo 基线。
-- `Agent deterministic gate`：从固定 Python 3.12.11 Dockerfile 构建 test image；在
+- `Agent deterministic gate`：从固定 Python 3.12.14 Alpine Dockerfile 构建 test image；在
   `--network none` 下运行 Ruff、format、strict mypy、非 Qdrant 全量 pytest、确定性覆盖率采样和
   quick eval；全量测试与覆盖率步骤都必须成功。
 - `Web quality and mocked smoke`：Node 22、pnpm 10.15.0、frozen lockfile、格式/lint/typecheck、
-  Vitest、V8 coverage、build、public/user/admin client drift，以及现有 mocked `smoke.spec.ts`。
+  Vitest、V8 coverage、build、public/user/admin/Agent client drift，以及现有 mocked `smoke.spec.ts`。
 - `OpenAPI compatibility and drift`：Ubuntu Runner 的 `pwsh` 执行现有运行时 OpenAPI 脚本，验证
-  public/user/admin baseline compatibility、生成客户端 drift 和工作树无生成差异。
+  public/user/admin/Agent baseline compatibility、生成客户端 drift 和工作树无生成差异。Agent baseline
+  直接由 FastAPI `create_app().openapi()` 在固定 test image 中生成。
 - `Docker reproducible builds`：Compose config，Java runtime、Agent runtime/test、Web image 构建，
   并断言关键 runtime 配置为非 root；只构建、不推送、不上传 image tar。
 - `Required CI gate`：始终执行并聚合以上真实结果。
 
-手动工作流是 [`.github/workflows/full-verification.yml`](../../.github/workflows/full-verification.yml)。
-在仓库 Actions 页面选择 `Full verification` 后点击 `Run workflow`。它不使用模型 Secret，以
+完整工作流是 [`.github/workflows/full-verification.yml`](../../.github/workflows/full-verification.yml)，支持
+手动触发并按 UTC cron 每周运行。它不使用模型 Secret，以
 FakeModel 和 deterministic embedding 串行运行真实 Qdrant 全量 pytest 与 full eval；Qdrant 固定
 为 v1.15.4 并固定 digest，位于独立 internal Docker network，pytest 和 full eval 不会并行重建同一 alias。它还执行
 完整 Java、Web/OpenAPI、所有应用镜像构建、隔离 core Compose readiness，以及既有 TASK-16
-全服务 Compose smoke。这里只接入已有场景，不扩展 TASK-19 的真实故障矩阵。TASK-16 脚本先拒绝
+全服务 Compose smoke。TASK-19 增加三个独立且都有 timeout/artifact 的 job：真实 Desktop/mobile
+E2E、故障恢复矩阵，以及 Gitleaks/OSV/Trivy/Semgrep/ZAP 与最终镜像扫描；三者失败都传递到最终 gate。
+TASK-16 脚本先拒绝
 任何同项目标签资源或 owned image tag 冲突，再分别记录本轮实际创建的容器、network、volume、临时
 密钥目录和镜像 ID；finally 只清理这些已记录对象并汇总清理错误。
 
@@ -92,7 +97,7 @@ docker run --rm --network none -e PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
 # quick/full eval 同样设置 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1；full 只连接 internal Qdrant network。
 
 docker run --rm -v "$PWD:/repo" -w /repo/web \
-  mcr.microsoft.com/playwright:v1.55.0-noble@sha256:b27e719ecbfef153e13fd24e8341736733bf2658b229677eb21ff57ff5d7fb29 \
+  mcr.microsoft.com/playwright:v1.57.0-noble@sha256:3bed4b1a12f2338642f3d8cba28e291deef3c66bd4a964bbeb3e57bbff511dbd \
   bash -lc \
   'corepack enable && corepack prepare pnpm@10.15.0 --activate && pnpm install --frozen-lockfile && pnpm check && CI=true pnpm exec playwright test e2e/smoke.spec.ts'
 
@@ -110,7 +115,8 @@ Windows PowerShell 用 `${PWD}` 替换 `$PWD`，Docker Desktop 的嵌套 Testcon
 ## 已知限制
 
 - GitHub 托管 Runner 只提供功能持续验证，绝不作为 10k VU、吞吐或延迟的正式性能结论。
-- 快速 Playwright 是已有 mocked smoke，不冒充真实后端 E2E；真实故障矩阵和 E2E 扩展属于 TASK-19。
+- 快速 Playwright 仍是已有 mocked smoke，不冒充真实后端 E2E；重型真实浏览器、故障注入、ZAP 和
+  镜像扫描只在完整工作流运行。
 - JaCoCo、Python 和 Web coverage 当前只记录真实基线，不设置未经测量论证的阈值。Python JUnit
   来自完整选定测试集；coverage 来自稳定的核心 RAG/embedding（full workflow 另含 Qdrant）采样，
   不能把该覆盖率 artifact 解释为全套 Python 测试的覆盖率。
@@ -120,8 +126,16 @@ Windows PowerShell 用 `${PWD}` 替换 `$PWD`，Docker Desktop 的嵌套 Testcon
   空报告或虚构阈值制造绿色。
 - Dependabot 对 GitHub Actions、Maven、Web npm/pnpm 和 Agent pip 做分组更新并限制并发 PR；更新仍须通过
   相同门禁。
-- workflow 的实际托管环境结论以 GitHub Actions 运行记录为准；`dc779d5` 对应运行的全部 Job 和
-  `Required CI gate` 均通过。
+- workflow 的实际托管环境结论以 GitHub Actions 运行记录为准；`dc779d5` 对应 TASK-18 的全部 Job 和
+  `Required CI gate` 均通过，TASK-19 当前工作树尚未产生托管运行。
+
+## TASK-19 当前增量
+
+TASK-19 为消除扫描出的 High/Critical，当前使用 Spring Boot 3.5.16、Tomcat 10.1.59、Netty
+4.1.138.Final、RabbitMQ Java Client 5.33.1、Python 3.12.14 Alpine 和 Playwright 1.57.0。Web 最终
+runtime 是固定 digest 的 `nginx-unprivileged`，镜像配置用户为 `101:101`；Agent root 入口只复制
+service key，随后以 UID/GID 10001、清空附加组和 `NoNewPrivs=1` 执行业务进程。完整 E2E 同时启动最终
+Nginx，实测 CSP/nosniff、Portal 与 Agent 明确代理，ZAP 也扫描该最终入口。
 
 ## TASK-18 reconciliation 本地验证基线
 
@@ -131,15 +145,15 @@ Windows PowerShell 用 `${PWD}` 替换 `$PWD`，Docker Desktop 的嵌套 Testcon
 - Java `clean verify`：290 项测试，0 failure、0 error、0 skipped；`portal`、`admin`、`task` 的
   `jacoco.xml` 均存在且非空。effective POM 同时包含 JaCoCo 0.8.13 注入和
   `@{argLine} -XX:TieredStopAtLevel=1`。
-- Agent：无缓存重建固定 Python 3.12.11 test image 后，Ruff、format 通过，strict mypy 连续三次均
-  检查 53 个源文件且无问题；`--network none` 的非 Qdrant pytest 连续五次均为 244 passed、
-  6 skipped、8 deselected；coverage 采样为 32 passed 并生成 XML/HTML；quick eval 为 28/28；
-  真实 Qdrant full pytest 为 252 passed、6 skipped，full eval 为 29/29。pytest 禁止自动加载入口点
+- Agent：当前固定 Python 3.12.14 test image 的 strict mypy 检查 53 个源文件且无问题；
+  `--network none` 的非 Qdrant pytest 为 250 passed、6 skipped、8 deselected；quick eval 为 28/28；
+  独立 internal network 的真实 Qdrant 重点集为 36 passed，full eval 为 29/29。pytest 禁止自动加载入口点
   插件：普通/Qdrant 测试实际只显式加载 `pytest_asyncio.plugin`，coverage 额外显式加载
   `pytest_cov.plugin`；LangSmith pytest 插件未加载。上述过程只使用 FakeModel 和 deterministic
   embedding，非 Qdrant 测试与 quick eval 使用 `--network none`。
-- Web：Vitest 79/79，coverage 同样执行 79 项；format、lint、typecheck、build 和三组客户端 drift
-  均通过；mocked Playwright desktop/mobile 共 6/6。当前 V8 coverage 总行基线约为 26.65%，尚未
+- Web：Vitest 83/83，coverage 同样执行 83 项；format、lint、typecheck、build 和
+  public/user/admin/Agent 客户端 drift 均通过；mocked Playwright desktop/mobile 共 6/6。当前 V8
+  coverage 总行基线为 26.70%，尚未
   设置阈值。
 - OpenAPI：运行时生成 public、user、mock-provider-callback、admin 四份文档；public、user、admin
   compatibility 和客户端 drift 均通过。

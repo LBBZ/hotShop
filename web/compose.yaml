@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: test
     working_dir: /workspace/web
     init: true
     environment:

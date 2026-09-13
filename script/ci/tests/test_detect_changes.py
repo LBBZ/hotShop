@@ -95,7 +95,7 @@ class DetectChangesTest(unittest.TestCase):
     def test_deleted_agent_file_and_docs_select_agent_docker(self) -> None:
         self.assert_deleted_file_selects(
             "agent/src/hotshop_agent/deleted.py", "docs/quality/note.md",
-            {"java": False, "agent": True, "web": False, "openapi": False, "docker": True},
+            {"java": False, "agent": True, "web": True, "openapi": True, "docker": True},
         )
 
     def test_deleted_web_file_and_readme_select_web_docker(self) -> None:

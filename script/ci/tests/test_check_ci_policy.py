@@ -9,6 +9,7 @@ from script.ci.check_ci_policy import (
     check_cleanup_powershell,
     check_dockerfile,
     check_repository,
+    check_task19_workflow_gates,
     check_workflow,
 )
 
@@ -39,6 +40,7 @@ CLEANUP_GATES = """      - name: Verify cleanup ownership
         run: |
           & ./script/ci/tests/test_native_cleanup.ps1
           & ./script/ci/tests/test_compose_cleanup_ownership.ps1
+          & ./script/ci/tests/test_task19_resource_ownership.ps1
 """
 
 
@@ -90,6 +92,65 @@ class PolicyTest(unittest.TestCase):
             self.write(VALID.replace("  gate:\n", "  verification:\n"), "full-verification.yml")
         )
         self.assertTrue(any("final gate job is missing" in error for error in errors))
+
+    def test_task19_full_gate_deletion_is_rejected(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name)
+        workflows = root / ".github" / "workflows"
+        workflows.mkdir(parents=True)
+        (workflows / "ci.yml").write_text(
+            "pnpm api:check:agent\n.semgrep/task19.yml\n", encoding="utf-8"
+        )
+        (workflows / "full-verification.yml").write_text(
+            "on:\n  schedule:\n  workflow_dispatch:\njobs:\n"
+            "  task19-real-e2e:\n    timeout-minutes: 1\n"
+            "  task19-faults:\n    timeout-minutes: 1\n"
+            "  task19-security:\n    timeout-minutes: 1\n"
+            "  gate:\n    needs: [task19-real-e2e, task19-faults]\n"
+            "verify-task19-e2e.ps1 verify-task19-faults.ps1 verify-task19-security.ps1\n",
+            encoding="utf-8",
+        )
+        errors = check_task19_workflow_gates(root)
+        self.assertTrue(
+            any("final gate does not require TASK-19 job: task19-security" in error for error in errors)
+        )
+
+    def test_task19_web_runtime_contract_drift_is_rejected(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name)
+        workflows = root / ".github" / "workflows"
+        web = root / "web"
+        workflows.mkdir(parents=True)
+        web.mkdir()
+        digest = "a" * 64
+        (web / "Dockerfile").write_text(
+            f"FROM mcr.microsoft.com/playwright:v1.57.0-noble@sha256:{digest} AS test\n"
+            f"FROM nginx:alpine@sha256:{'b' * 64}\nUSER 101:101\n",
+            encoding="utf-8",
+        )
+        (workflows / "ci.yml").write_text(
+            'docker image inspect hotshop-web:ci --format x\" = \"pwuser\"\n',
+            encoding="utf-8",
+        )
+        (workflows / "full-verification.yml").write_text(
+            "on:\n  schedule:\n  workflow_dispatch:\njobs:\n"
+            "  task19-real-e2e:\n    timeout-minutes: 1\n"
+            "  task19-faults:\n    timeout-minutes: 1\n"
+            "  task19-security:\n    timeout-minutes: 1\n"
+            "  gate:\n    needs: [task19-real-e2e, task19-faults, task19-security]\n"
+            "verify-task19-e2e.ps1 verify-task19-faults.ps1 verify-task19-security.ps1\n"
+            'docker image inspect hotshop-web:full --format x\" = \"pwuser\"\n'
+            f"mcr.microsoft.com/playwright@sha256:{'c' * 64}\n",
+            encoding="utf-8",
+        )
+        errors = check_task19_workflow_gates(root)
+        self.assertTrue(any("Playwright image digest must match" in error for error in errors))
+        self.assertEqual(
+            sum("Web runtime user assertion must match 101:101" in error for error in errors),
+            2,
+        )
 
     def test_pinned_dockerfile_passes(self) -> None:
         path = self.write(

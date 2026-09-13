@@ -24,6 +24,7 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -39,7 +40,9 @@ import static org.awaitility.Awaitility.await;
 @Testcontainers
 class SeckillPaymentExpiredDeliveryContainerTest {
     @Container
-    static final RabbitMQContainer RABBIT = new RabbitMQContainer("rabbitmq:4.0.7-management-alpine");
+    static final RabbitMQContainer RABBIT = new RabbitMQContainer(DockerImageName.parse(
+            "rabbitmq:4.2.9-management-alpine@sha256:009a0e55d269a643930f797016d48aebe100986bc5ea836fea195199b26633ac"
+    ).asCompatibleSubstituteFor("rabbitmq"));
     @Container
     static final GenericContainer<?> REDIS = new GenericContainer<>("redis:8.8.1-alpine")
             .withExposedPorts(6379);

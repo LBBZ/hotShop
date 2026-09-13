@@ -67,6 +67,46 @@ class RunHandle:
 EVENT_QUEUE_MAXSIZE = 128
 
 
+def _purchase_draft_event(data: Any) -> dict[str, Any] | None:
+    if not isinstance(data, dict):
+        return None
+    items = data.get("items")
+    if (
+        not isinstance(data.get("draftId"), str)
+        or data.get("actionType") != "CREATE_ORDER"
+        or data.get("confirmationRequired") is not True
+        or not isinstance(items, list)
+    ):
+        return None
+    safe_items: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            return None
+        product_id = item.get("productId")
+        quantity = item.get("quantity")
+        if (
+            not isinstance(product_id, str)
+            or isinstance(quantity, bool)
+            or not isinstance(quantity, int)
+        ):
+            return None
+        safe_item: dict[str, Any] = {"productId": product_id, "quantity": quantity}
+        for key in ("productName", "unitPriceSnapshot", "lineAmountSnapshot"):
+            if isinstance(item.get(key), str):
+                safe_item[key] = item[key]
+        safe_items.append(safe_item)
+    event: dict[str, Any] = {
+        "draftId": data["draftId"],
+        "actionType": "CREATE_ORDER",
+        "items": safe_items,
+        "confirmationRequired": True,
+    }
+    for key in ("totalPriceSnapshot", "currency", "validUntil", "nextStep"):
+        if isinstance(data.get(key), str):
+            event[key] = data[key]
+    return event
+
+
 class AgentService:
     def __init__(
         self,
@@ -286,6 +326,11 @@ class AgentService:
                         fixed_answer = "无法查询其他用户的订单或预约。"
                     elif route.reason == "identity_boundary":
                         fixed_answer = "当前身份无权调用所需的实时交易工具。"
+                    elif route.reason == "high_risk_administrator_action":
+                        fixed_answer = (
+                            "该请求属于高风险管理操作，Agent 不具备退款、补偿、消息重放、"
+                            "用户封禁、权限或密钥修改能力，未调用任何工具。"
+                        )
                     else:
                         fixed_answer = "无法安全判断要查询的实时事实，请明确商品、订单或预约。"
                 elif route is not None and route.kind is RouteKind.DYNAMIC_TOOL:
@@ -430,6 +475,10 @@ class AgentService:
                                 "summary": tool_result.summary,
                             },
                         )
+                        if tool_result.tool == "create_purchase_draft":
+                            purchase_draft = _purchase_draft_event(tool_result.data)
+                            if purchase_draft is not None:
+                                await emit("purchase_draft.created", purchase_draft)
                     else:
                         assert tool_result.error is not None
                         await emit(

@@ -11,6 +11,7 @@ import {
   CircleAlert,
   ScrollText,
   Send,
+  Bot,
 } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useStore } from "zustand";
@@ -32,6 +33,7 @@ const icons = {
   exceptions: CircleAlert,
   outbox: Send,
   audit: ScrollText,
+  agent: Bot,
 };
 
 interface WorkspaceShellProps {

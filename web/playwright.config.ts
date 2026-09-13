@@ -34,6 +34,9 @@ export default defineConfig({
     },
     {
       name: "mobile-chromium",
+      testMatch: realCompose
+        ? /task-19-agent-security-real\.spec\.ts/
+        : undefined,
       use: { ...devices["Pixel 7"] },
     },
   ],

@@ -14,6 +14,12 @@ REQUIRED_WORKFLOW_NAMES = ("ci.yml", "full-verification.yml")
 REQUIRED_CLEANUP_GATES = (
     "script/ci/tests/test_native_cleanup.ps1",
     "script/ci/tests/test_compose_cleanup_ownership.ps1",
+    "script/ci/tests/test_task19_resource_ownership.ps1",
+)
+TASK19_FULL_JOBS = (
+    "task19-real-e2e",
+    "task19-faults",
+    "task19-security",
 )
 SHA_ACTION = re.compile(
     r"^\s*-?\s*uses:\s*([^\s@]+)@([0-9a-f]{40})\s+#\s+v?\d[^\r\n]*$", re.MULTILINE
@@ -252,6 +258,64 @@ def check_cleanup_powershell(root: Path) -> list[str]:
     return errors
 
 
+def check_task19_workflow_gates(root: Path) -> list[str]:
+    """Prevent TASK-19 browser, fault, scan, and Agent drift gates from disappearing."""
+    errors: list[str] = []
+    ci_path = root / ".github" / "workflows" / "ci.yml"
+    full_path = root / ".github" / "workflows" / "full-verification.yml"
+    if ci_path.is_file():
+        ci = ci_path.read_text(encoding="utf-8")
+        for marker in ("pnpm api:check:agent", ".semgrep/task19.yml"):
+            if marker not in ci:
+                errors.append(f"{ci_path}: required TASK-19 quick gate is missing: {marker}")
+    if full_path.is_file():
+        full = full_path.read_text(encoding="utf-8")
+        if not re.search(r"(?m)^\s{2}schedule:\s*$", full):
+            errors.append(f"{full_path}: TASK-19 full verification schedule is missing")
+        blocks = job_blocks(full)
+        gate = blocks.get("gate", "")
+        for job in TASK19_FULL_JOBS:
+            if job not in blocks:
+                errors.append(f"{full_path}: required TASK-19 job is missing: {job}")
+            if not re.search(rf"(?<![A-Za-z0-9_-]){re.escape(job)}(?![A-Za-z0-9_-])", gate):
+                errors.append(f"{full_path}: final gate does not require TASK-19 job: {job}")
+        for script in (
+            "verify-task19-e2e.ps1",
+            "verify-task19-faults.ps1",
+            "verify-task19-security.ps1",
+        ):
+            if script not in full:
+                errors.append(f"{full_path}: required TASK-19 entrypoint is missing: {script}")
+
+        web_dockerfile = root / "web" / "Dockerfile"
+        if web_dockerfile.is_file():
+            dockerfile = web_dockerfile.read_text(encoding="utf-8")
+            playwright = re.search(
+                r"mcr\.microsoft\.com/playwright:v[^@\s]+@(sha256:[0-9a-f]{64})",
+                dockerfile,
+            )
+            if not playwright or f"mcr.microsoft.com/playwright@{playwright.group(1)}" not in full:
+                errors.append(
+                    f"{full_path}: Playwright image digest must match web/Dockerfile"
+                )
+
+            runtime_users = re.findall(r"(?m)^USER\s+(\S+)\s*$", dockerfile)
+            if runtime_users:
+                expected_user = runtime_users[-1]
+                for workflow_path in (ci_path, full_path):
+                    if not workflow_path.is_file():
+                        continue
+                    workflow = workflow_path.read_text(encoding="utf-8")
+                    if not re.search(
+                        rf"docker image inspect hotshop-web:[^\s]+ .* = \"{re.escape(expected_user)}\"",
+                        workflow,
+                    ):
+                        errors.append(
+                            f"{workflow_path}: Web runtime user assertion must match {expected_user}"
+                        )
+    return errors
+
+
 def check_repository(root: Path) -> list[str]:
     errors: list[str] = []
     workflow_root = root / ".github" / "workflows"
@@ -278,6 +342,7 @@ def check_repository(root: Path) -> list[str]:
     for path in repository_dockerfiles(root):
         errors.extend(check_dockerfile(path))
     errors.extend(check_cleanup_powershell(root))
+    errors.extend(check_task19_workflow_gates(root))
     return errors
 
 

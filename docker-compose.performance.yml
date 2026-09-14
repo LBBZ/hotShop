@@ -1,4 +1,19 @@
 services:
+  mysql:
+    ports: !reset []
+
+  redis-cache:
+    ports: !reset []
+
+  redis-seckill:
+    ports: !reset []
+
+  qdrant:
+    ports: !reset []
+
+  rabbitmq:
+    ports: !reset []
+
   admin-service:
     environment:
       # The orchestrator authenticates once per independently loaded activity.
@@ -14,6 +29,18 @@ services:
       HOTSHOP_SECURITY_RATE_LIMIT_USER_LOGIN_IP_LIMIT: ${TASK20_LOGIN_LIMIT:-100000}
       HOTSHOP_SECURITY_RATE_LIMIT_USER_LOGIN_IDENTITY_LIMIT: ${TASK20_LOGIN_IDENTITY_LIMIT:-20}
       HOTSHOP_SECURITY_RATE_LIMIT_AGENT_EXCHANGE_LIMIT: ${TASK20_AGENT_EXCHANGE_LIMIT:-100000}
+
+  task-service:
+    ports: !reset []
+
+  loki:
+    ports: !reset []
+
+  tempo:
+    ports: !reset []
+
+  alloy:
+    ports: !reset []
 
   k6:
     profiles: [performance]

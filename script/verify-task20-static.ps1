@@ -14,6 +14,8 @@ $values = [ordered]@{
     TASK20_DURATION='1s'; TASK20_RUN_ID='run-static-1234'; TASK20_PROFILE='smoke'
     TASK20_SCENARIO='smoke'; TASK20_USER_PASSWORD=$staticPassword
     TASK20_ARTIFACT_DIR=(Join-Path $root 'target/task20-performance/static')
+    PORTAL_PORT='29801'; ADMIN_PORT='29802'; AGENT_PORT='29803'
+    PROMETHEUS_PORT='29804'; GRAFANA_PORT='29805'
 }
 foreach ($entry in $values.GetEnumerator()) {
     [Environment]::SetEnvironmentVariable($entry.Key, [string]$entry.Value, 'Process')
@@ -21,8 +23,22 @@ foreach ($entry in $values.GetEnumerator()) {
 try {
     New-Item -ItemType Directory -Force $values.TASK20_ARTIFACT_DIR | Out-Null
     & docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.performance.yml `
-        --profile app --profile observability --profile performance config --quiet
+        --profile app --profile agent --profile observability --profile performance config --quiet
     if ($LASTEXITCODE -ne 0) { throw 'TASK-20 merged Compose validation failed' }
+
+    $composeJson = (& docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.performance.yml `
+        --profile app --profile agent --profile observability --profile performance config --format json | Out-String) | ConvertFrom-Json
+    foreach ($internalService in @('mysql','redis-cache','redis-seckill','qdrant','rabbitmq','task-service','loki','tempo','alloy')) {
+        if ($null -ne $composeJson.services.$internalService.ports) {
+            throw "Internal service $internalService unexpectedly publishes a host port"
+        }
+    }
+    $published = @(@('admin-service','portal-service','agent-service','prometheus','grafana') | ForEach-Object {
+        @($composeJson.services.$_.ports).published
+    })
+    if ($published.Count -ne 5 -or @($published | Sort-Object -Unique).Count -ne 5) {
+        throw 'Externally required performance ports are not uniquely assigned'
+    }
 
     $image = 'grafana/k6:0.54.0@sha256:1f40432b1cbe7234e977f96c362c9bc550a2d2b583d014dd8669fe40d3e9e755'
     $k6Values = [ordered]@{
@@ -37,6 +53,9 @@ try {
         --mount "type=bind,source=$root/load/k6,target=/work,readonly" `
         $image inspect @k6EnvArgs /work/scenarios/task20.js | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'TASK-20 k6 script inspection failed' }
+    & docker run --rm --mount "type=bind,source=$root/load/k6,target=/work,readonly" `
+        $image run /work/tests/identity-regression.js | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw 'TASK-20 idempotency stage isolation regression failed' }
 
     $tokens = $null
     $parseErrors = $null
@@ -44,7 +63,7 @@ try {
         (Join-Path $root 'script/verify-task20-performance.ps1'), [ref]$tokens, [ref]$parseErrors
     ) | Out-Null
     if ($parseErrors.Count -ne 0) { throw 'TASK-20 PowerShell parser validation failed' }
-    Write-Host 'TASK-20 Compose, k6, and PowerShell static validation passed.'
+    Write-Host 'TASK-20 Compose, host-port boundary, k6, idempotency, and PowerShell static validation passed.'
 } finally {
     foreach ($entry in $values.GetEnumerator()) {
         [Environment]::SetEnvironmentVariable($entry.Key, $null, 'Process')

@@ -3,8 +3,9 @@ import exec from 'k6/execution';
 import { check, sleep } from 'k6';
 import { Trend } from 'k6/metrics';
 import { config, tags, username } from '../lib/config.js';
+import { newIntentKey } from '../lib/identity.js';
 import {
-  accepted, agentRuns, assertResponse, classifyReservation, jsonHeaders, newIntents, parseJson,
+  accepted, agentAttempts, agentFailures, agentRuns, assertResponse, classifyReservation, jsonHeaders, newIntents, parseJson,
   scenarioIterations,
 } from '../lib/http.js';
 
@@ -67,7 +68,10 @@ export function setup() {
   // Keep one extra identity so that boundary never causes credential reuse.
   const iterations = Math.ceil(config.rate * seconds(config.duration)) + 1;
   const required = config.scenario === 'smoke' || config.scenario === 'idempotency-replay'
-    ? config.vus : iterations;
+    ? config.vus
+    : config.scenario === 'mixed-e2e'
+      ? Math.ceil(config.rate * seconds(config.duration) * 0.30) + 1
+      : iterations;
   if (required > config.userCount) {
     throw new Error(`dataset refusal: ${required} unique users required, only ${config.userCount} prepared`);
   }
@@ -110,7 +114,9 @@ function tokenAt(data, index) {
 }
 
 function reservationRequest(token, index, scenario, intent = 'new', key = null) {
-  const idempotencyKey = key || `${config.runId}:${scenario}:${String(index).padStart(12, '0')}`;
+  const idempotencyKey = key || newIntentKey(
+    config.runId, config.activityId, scenario, index,
+  );
   const response = http.post(
     `${config.baseUrl}/api/v1/flash-sales/${config.activityId}/reservations`,
     JSON.stringify({ quantity: 1 }),
@@ -167,13 +173,16 @@ export function seckillNewIntent(data) {
   scenarioIterations.add(1, tags(config.scenario, 'reservation-create', 'new'));
   const index = exec.scenario.iterationInTest;
   const response = reservationRequest(tokenAt(data, index), index, config.scenario, 'new');
-  classifyReservation(response, config.scenario, 'new');
+  const result = classifyReservation(response, config.scenario, 'new');
+  check(response, {
+    'new intent has no idempotency conflict': () => result.problemCode !== 'IDEMPOTENCY_KEY_CONFLICT',
+  });
 }
 
 export function idempotencyReplay(data) {
   scenarioIterations.add(1, tags('idempotency-replay', 'reservation-create', 'replay'));
   const index = exec.scenario.iterationInTest;
-  const key = `${config.runId}:replay:${String(index).padStart(12, '0')}`;
+  const key = newIntentKey(config.runId, config.activityId, 'idempotency-replay', index);
   const first = reservationRequest(tokenAt(data, index), index, 'idempotency-replay', 'new', key);
   const original = classifyReservation(first, 'idempotency-replay', 'new');
   const replay = reservationRequest(tokenAt(data, index), index, 'idempotency-replay', 'replay', key);
@@ -198,7 +207,10 @@ export function mixedE2e(data) {
   } else if (bucket < 80) {
     const index = Math.floor(iteration / 100) * 30 + (bucket - 50);
     const response = reservationRequest(tokenAt(data, index), index, 'mixed-e2e', 'new');
-    classifyReservation(response, 'mixed-e2e', 'new');
+    const result = classifyReservation(response, 'mixed-e2e', 'new');
+    check(response, {
+      'mixed new intent has no idempotency conflict': () => result.problemCode !== 'IDEMPOTENCY_KEY_CONFLICT',
+    });
   } else {
     // A bounded authenticated read is used when no prior Reservation belongs to this VU.
     const response = http.get(`${config.baseUrl}/api/v1/users/me`, {
@@ -211,32 +223,44 @@ export function mixedE2e(data) {
 
 export function agentIsolation(data) {
   scenarioIterations.add(1, tags('agent-isolation', 'agent-run', 'read'));
+  agentAttempts.add(1, tags('agent-isolation', 'agent-run', 'read'));
   const started = Date.now();
   const token = data.tokens[exec.scenario.iterationInTest % data.tokens.length];
   const auth = { headers: jsonHeaders(token), tags: tags('agent-isolation', 'agent-session', 'read') };
   const sessionResponse = http.post(`${config.agentBaseUrl}/api/v1/agent/sessions`, JSON.stringify({ scopes: ['catalog:read'] }), auth);
   const session = parseJson(sessionResponse);
-  if (!check(sessionResponse, { 'agent session created': (r) => r.status === 201 && session && session.id })) return;
+  if (!check(sessionResponse, { 'agent session created': (r) => r.status === 201 && session && session.id })) {
+    agentFailures.add(1, tags('agent-isolation', 'agent-run', 'read'));
+    return;
+  }
   const messageResponse = http.post(
     `${config.agentBaseUrl}/api/v1/agent/sessions/${session.id}/messages`,
     JSON.stringify({ content: '请查看当前在售商品。' }),
     { headers: jsonHeaders(token), tags: tags('agent-isolation', 'agent-message', 'read') },
   );
   const message = parseJson(messageResponse);
-  if (!check(messageResponse, { 'agent message created': (r) => r.status === 201 && message && message.id })) return;
+  if (!check(messageResponse, { 'agent message created': (r) => r.status === 201 && message && message.id })) {
+    agentFailures.add(1, tags('agent-isolation', 'agent-run', 'read'));
+    return;
+  }
   const runResponse = http.post(
     `${config.agentBaseUrl}/api/v1/agent/sessions/${session.id}/runs`,
     JSON.stringify({ messageId: message.id }),
     { headers: jsonHeaders(token), tags: tags('agent-isolation', 'agent-run', 'read') },
   );
   const run = parseJson(runResponse);
-  if (!check(runResponse, { 'agent run accepted': (r) => r.status === 202 && run && run.id })) return;
+  if (!check(runResponse, { 'agent run accepted': (r) => r.status === 202 && run && run.id })) {
+    agentFailures.add(1, tags('agent-isolation', 'agent-run', 'read'));
+    return;
+  }
   const events = http.get(`${config.agentBaseUrl}/api/v1/agent/runs/${run.id}/events`, {
     headers: jsonHeaders(token), tags: tags('agent-isolation', 'agent-events-complete-stream', 'read'), timeout: '30s',
   });
   if (check(events, { 'agent SSE completes': (r) => r.status === 200 && r.body.includes('event: done') })) {
     agentRuns.add(1, tags('agent-isolation', 'agent-run', 'read'));
     agentDuration.add(Date.now() - started, tags('agent-isolation', 'agent-run', 'read'));
+  } else {
+    agentFailures.add(1, tags('agent-isolation', 'agent-run', 'read'));
   }
 }
 

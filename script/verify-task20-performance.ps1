@@ -2,7 +2,7 @@
 param(
     [ValidateSet('smoke', 'baseline', 'target-5k', 'agent-isolation')]
     [string]$Profile = 'smoke',
-    [int[]]$Rates = @(100, 250, 500, 1000),
+    [string[]]$Rates = @('100', '250', '500', '1000'),
     [int]$Rate = 0,
     [int]$VUs = 0,
     [string]$Warmup = '2s',
@@ -17,7 +17,8 @@ param(
     [string]$PrometheusRemoteWriteUrl = 'http://prometheus:9090/api/v1/write',
     [switch]$KeepStack,
     [switch]$RequirePerformanceTarget,
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [switch]$ControlledStartupFailure
 )
 
 $ErrorActionPreference = 'Stop'
@@ -30,9 +31,7 @@ Set-Location $root
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { throw 'docker is required' }
 if ($Warmup -notmatch '^\d+(ms|s|m)$') { throw 'Warmup must use ms, s, or m' }
 if ($Duration -and $Duration -notmatch '^\d+(ms|s|m)$') { throw 'Duration must use ms, s, or m' }
-if ($Rates.Count -eq 0 -or @($Rates | Where-Object { $_ -le 0 }).Count -gt 0) {
-    throw 'Rates must contain positive integers'
-}
+$normalizedRates = [int[]]@(ConvertTo-Task20Rates -Values $Rates)
 if ($PrometheusRemoteWriteUrl -notmatch '^https?://') {
     throw 'PrometheusRemoteWriteUrl must be an explicit HTTP(S) URL'
 }
@@ -52,12 +51,19 @@ if ($DataSeed -le 0) { throw 'DataSeed must be positive' }
 if ($ActivityId -lt 0) { throw 'ActivityId must be zero (automatic) or positive' }
 
 $artifactDir = Join-Path $root "target/task20-performance/$RunId"
-New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
+if (Test-Path -LiteralPath $artifactDir) {
+    $existingEntries = @(Get-ChildItem -LiteralPath $artifactDir -Force)
+    if ($existingEntries.Count -gt 0) { throw "RunId '$RunId' already has non-empty evidence; refusing to mix runs" }
+} else {
+    New-Item -ItemType Directory -Path $artifactDir | Out-Null
+}
 $commands = [System.Collections.Generic.List[object]]::new()
 $warnings = [System.Collections.Generic.List[string]]::new()
 $failures = [System.Collections.Generic.List[string]]::new()
 $scenarioResults = [System.Collections.Generic.List[object]]::new()
 $ports = Get-Task20PortBlock
+$runPlan = @(Get-Task20RunPlan -Profile $Profile -Rates $normalizedRates -Rate $Rate -VUs $VUs `
+    -Duration $Duration -UserCount $UserCount -Inventory $Inventory)
 $envNames = [System.Collections.Generic.List[string]]::new()
 $runPassword = 'Task20!' + ([Guid]::NewGuid().ToString('N'))
 $adminName = 'task20-admin-' + ($RunId -replace '^run-', '')
@@ -105,8 +111,8 @@ SELECT activity_id FROM flash_sale_activity WHERE activity_code=CONCAT('LOAD-', 
 "@
     $lines = @(Invoke-Mysql $sql | Where-Object { $_ -match '^\d+$' })
     if ($lines.Count -ne 1) { throw "Could not uniquely locate load-test activity slot $Slot" }
-    $activityId = [long]$lines[0]
-    if ($ActivityId -gt 0 -and $activityId -ne [long]$requestedActivityId) {
+    $createdActivityId = [long]$lines[0]
+    if ($ActivityId -gt 0 -and $createdActivityId -ne [long]$requestedActivityId) {
         throw "Requested activity ID $requestedActivityId was not created"
     }
 
@@ -114,13 +120,13 @@ SELECT activity_id FROM flash_sale_activity WHERE activity_code=CONCAT('LOAD-', 
         -ContentType 'application/json' -Body (@{ username = $adminName; password = $runPassword } | ConvertTo-Json -Compress)
     if (-not $adminLogin.accessToken) { throw 'Administrator login returned no access token' }
     $headers = @{ Authorization = "Bearer $($adminLogin.accessToken)"; 'X-Request-Id' = "task20-load-$Slot" }
-    $loaded = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$($ports[1])/admin/api/v1/flash-sales/$activityId/load" `
+    $loaded = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$($ports[1])/admin/api/v1/flash-sales/$createdActivityId/load" `
         -Headers $headers -ContentType 'application/json' `
         -Body (@{ reason = "TASK-20 isolated performance run $RunId" } | ConvertTo-Json -Compress)
     $adminLogin = $null
     $headers = $null
     if (-not $loaded.consistent) { throw "Redis activity load was not consistent for slot $Slot" }
-    return $activityId
+    return $createdActivityId
 }
 
 function Get-ScenarioFacts([long]$ActivityId, [int]$InitialStock) {
@@ -136,12 +142,20 @@ SELECT CONCAT_WS('\t',
   (SELECT COUNT(*) FROM seckill_reconciliation_issue i WHERE i.activity_id=a.activity_id AND i.status='OPEN'),
   (SELECT COUNT(*) FROM outbox_event WHERE status IN ('NEW','PUBLISHING','FAILED')),
   (SELECT COUNT(*) FROM processed_event),
+  (SELECT COUNT(*) FROM sales_order o JOIN sale_reservation r ON r.reservation_id=o.reservation_id
+    WHERE r.activity_id=a.activity_id AND NOT EXISTS (
+      SELECT 1 FROM outbox_event e WHERE e.aggregate_type='ORDER' AND e.aggregate_id=CAST(o.order_id AS CHAR)
+        AND e.event_type='ORDER_CREATED' AND e.status='PUBLISHED')),
+  (SELECT COUNT(*) FROM sales_order o JOIN sale_reservation r ON r.reservation_id=o.reservation_id
+    WHERE r.activity_id=a.activity_id AND NOT EXISTS (
+      SELECT 1 FROM outbox_event e WHERE e.aggregate_type='ORDER' AND e.aggregate_id=CAST(o.order_id AS CHAR)
+        AND e.event_type='LEGACY_ORDER_TIMEOUT_REQUESTED' AND e.status='PUBLISHED')),
   a.status)
 FROM flash_sale_activity a WHERE a.activity_id=$ActivityId;
 "@
     $line = @(Invoke-Mysql $factSql | Where-Object { $_ })[-1]
     $parts = $line -split "`t"
-    if ($parts.Count -ne 11) { throw 'Fact query returned an unexpected shape' }
+    if ($parts.Count -ne 13) { throw 'Fact query returned an unexpected shape' }
     # Braces are required here: in an interpolated PowerShell string,
     # `$ActivityId:stock` is parsed as a scoped variable rather than a value
     # followed by a literal suffix.
@@ -174,11 +188,34 @@ FROM flash_sale_activity a WHERE a.activity_id=$ActivityId;
     $rabbitLines = @(& docker compose --project-name $project --env-file .env.example -f docker-compose.yml -f docker-compose.performance.yml exec -T rabbitmq rabbitmqctl list_queues --quiet name messages_ready messages_unacknowledged)
     $rabbitReady = 0L
     $rabbitUnacknowledged = 0L
+    $rabbitExcludedReady = 0L
+    $rabbitQueues = [System.Collections.Generic.List[object]]::new()
+    $excludedRabbitQueues = [System.Collections.Generic.List[object]]::new()
+    $exclusionBoundary = [ordered]@{
+        'hotshop.order.created.v1' = [ordered]@{
+            eventType = 'ORDER_CREATED'
+            reason = 'Integration queue has no consumer in this repository; order creation is already committed and proven by one PUBLISHED outbox row per run order.'
+        }
+        'hotshop.order.timeout.delay.v1' = [ordered]@{
+            eventType = 'LEGACY_ORDER_TIMEOUT_REQUESTED'
+            reason = 'Intentional 15-minute TTL delay queue; one PUBLISHED timeout outbox row per run order proves the run-owned delivery boundary.'
+        }
+    }
     foreach ($rabbitLine in $rabbitLines) {
         $queueParts = $rabbitLine -split "`t"
         if ($queueParts.Count -eq 3 -and $queueParts[1] -match '^\d+$' -and $queueParts[2] -match '^\d+$') {
-            $rabbitReady += [long]$queueParts[1]
-            $rabbitUnacknowledged += [long]$queueParts[2]
+            $queueName = $queueParts[0]
+            $ready = [long]$queueParts[1]
+            $unacknowledged = [long]$queueParts[2]
+            $rabbitReady += $ready
+            $rabbitUnacknowledged += $unacknowledged
+            $excluded = $exclusionBoundary.Contains($queueName)
+            $rabbitQueues.Add([ordered]@{ name=$queueName; ready=$ready; unacknowledged=$unacknowledged; excludedReady=$excluded })
+            if ($excluded) {
+                $rabbitExcludedReady += $ready
+                $boundary = $exclusionBoundary[$queueName]
+                $excludedRabbitQueues.Add([ordered]@{ name=$queueName; eventType=$boundary.eventType; ready=$ready; reason=$boundary.reason })
+            }
         }
     }
     $reservedQuantity = [long]$parts[4]
@@ -202,8 +239,16 @@ FROM flash_sale_activity a WHERE a.activity_id=$ActivityId;
         inboxPending = 0
         rabbitReady = $rabbitReady
         rabbitUnacknowledged = $rabbitUnacknowledged
+        rabbitExcludedReady = $rabbitExcludedReady
+        rabbitUnexplainedReady = $rabbitReady - $rabbitExcludedReady
+        # In-flight deliveries are never excluded, even for a boundary queue.
+        rabbitUnexplainedUnacknowledged = $rabbitUnacknowledged
+        rabbitQueues = @($rabbitQueues)
+        excludedRabbitQueues = @($excludedRabbitQueues)
+        orderCreatedPublishProofMissing = [long]$parts[10]
+        timeoutPublishProofMissing = [long]$parts[11]
         reconciliationDifferences = [long]$parts[7]
-        finalActivityStatus = $parts[10]
+        finalActivityStatus = $parts[12]
         asyncOrderMs = [pscustomobject][ordered]@{
             formula = 'TIMESTAMPDIFF(MICROSECOND,sale_reservation.reserved_at,sales_order.created_at)/1000'
             sampleCount = $latencies.Count
@@ -218,10 +263,13 @@ FROM flash_sale_activity a WHERE a.activity_id=$ActivityId;
 function Wait-AsyncDrain([long]$ActivityId, [long]$ExpectedReservations) {
     $deadline = [DateTimeOffset]::UtcNow.AddMinutes(3)
     do {
-        $line = @(Invoke-Mysql "SELECT CONCAT_WS('\t',(SELECT COUNT(*) FROM sale_reservation WHERE activity_id=$ActivityId),(SELECT COUNT(*) FROM sales_order o JOIN sale_reservation r ON r.reservation_id=o.reservation_id WHERE r.activity_id=$ActivityId),(SELECT COUNT(*) FROM seckill_event_processing WHERE activity_id=$ActivityId AND status IN ('RETRYING','COMPENSATING')))" | Where-Object { $_ })[-1]
+        $line = @(Invoke-Mysql "SELECT CONCAT_WS('\t',(SELECT COUNT(*) FROM sale_reservation WHERE activity_id=$ActivityId),(SELECT COUNT(*) FROM sales_order o JOIN sale_reservation r ON r.reservation_id=o.reservation_id WHERE r.activity_id=$ActivityId),(SELECT COUNT(*) FROM seckill_event_processing WHERE activity_id=$ActivityId AND status IN ('RETRYING','COMPENSATING')),(SELECT COUNT(*) FROM outbox_event e JOIN sales_order o ON e.aggregate_type='ORDER' AND e.aggregate_id=CAST(o.order_id AS CHAR) JOIN sale_reservation r ON r.reservation_id=o.reservation_id WHERE r.activity_id=$ActivityId AND e.status IN ('NEW','PUBLISHING','FAILED')))" | Where-Object { $_ })[-1]
         $p = $line -split "`t"
-        if ($p.Count -eq 3 -and [long]$p[0] -eq $ExpectedReservations -and `
-            [long]$p[1] -eq $ExpectedReservations -and [long]$p[2] -eq 0) { return $true }
+        if ($p.Count -eq 4 -and [long]$p[0] -eq $ExpectedReservations -and `
+            [long]$p[1] -eq $ExpectedReservations -and [long]$p[2] -eq 0 -and [long]$p[3] -eq 0) {
+            Start-Sleep -Seconds 2
+            return $true
+        }
         Start-Sleep -Seconds 2
     } while ([DateTimeOffset]::UtcNow -lt $deadline)
     return $false
@@ -257,6 +305,7 @@ function Invoke-K6Scenario([string]$Scenario, [int]$ScenarioRate, [int]$Scenario
     )
     $process = Start-Process -FilePath 'docker' -ArgumentList $args -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru -WindowStyle Hidden
     $samples = Join-Path $scenarioDir 'container-resources.jsonl'
+    Set-Content -LiteralPath $samples -Value '' -Encoding utf8
     while (-not $process.HasExited) {
         $ids = @(& docker ps -q --filter "label=com.docker.compose.project=$project" | Where-Object { $_ })
         if ($ids.Count -gt 0) {
@@ -279,6 +328,7 @@ function Invoke-K6Scenario([string]$Scenario, [int]$ScenarioRate, [int]$Scenario
     }
     $process.WaitForExit()
     $k6Exit = $process.ExitCode
+    $resourceSummary = Get-Task20ResourceSummary $samples
     Record-Command "docker compose ... run --rm --no-deps k6 ($Scenario rate=$ScenarioRate)" $k6Exit
 
     $summaryPath = Join-Path $scenarioDir 'raw-summary.json'
@@ -316,6 +366,31 @@ function Invoke-K6Scenario([string]$Scenario, [int]$ScenarioRate, [int]$Scenario
     $dropped = [long](Get-Task20MetricValue $k6Summary 'dropped_iterations' 'count')
     $systemErrors = [long](Get-Task20MetricValue $k6Summary 'hotshop_business_system_errors' 'count')
     $checksFailed = [long](Get-Task20MetricValue $k6Summary 'checks' 'fails')
+    $problemMetricNames = [ordered]@{
+        IDEMPOTENCY_KEY_CONFLICT='hotshop_problem_idempotency_key_conflict'
+        RATE_LIMITED='hotshop_problem_rate_limited'
+        FLASH_SALE_ACTIVITY_NOT_FOUND='hotshop_problem_flash_sale_activity_not_found'
+        FLASH_SALE_NOT_STARTED='hotshop_problem_flash_sale_not_started'
+        FLASH_SALE_ENDED='hotshop_problem_flash_sale_ended'
+        FLASH_SALE_NOT_ACTIVE='hotshop_problem_flash_sale_not_active'
+        FLASH_SALE_SOLD_OUT='hotshop_problem_flash_sale_sold_out'
+        FLASH_SALE_USER_LIMIT_REACHED='hotshop_problem_flash_sale_user_limit_reached'
+        FLASH_SALE_INVALID_QUANTITY='hotshop_problem_flash_sale_invalid_quantity'
+        TRANSACTION_RATE_LIMIT_UNAVAILABLE='hotshop_problem_transaction_rate_limit_unavailable'
+        SECKILL_STATE_INVALID='hotshop_problem_seckill_state_invalid'
+        UNCLASSIFIED='hotshop_problem_unclassified'
+    }
+    $rejectionReasons = [ordered]@{}
+    foreach ($entry in $problemMetricNames.GetEnumerator()) {
+        $rejectionReasons[$entry.Key] = [long](Get-Task20MetricValue $k6Summary $entry.Value 'count')
+    }
+    $idempotencyConflicts = [long]$rejectionReasons.IDEMPOTENCY_KEY_CONFLICT
+    $unclassifiedProblems = [long]$rejectionReasons.UNCLASSIFIED
+    $agentAttemptCount = [long](Get-Task20MetricValue $k6Summary 'hotshop_agent_attempts' 'count')
+    $agentSuccessCount = [long](Get-Task20MetricValue $k6Summary 'hotshop_agent_runs' 'count')
+    $agentFailureCount = [long](Get-Task20MetricValue $k6Summary 'hotshop_agent_failures' 'count')
+    $agentP95 = Get-Task20MetricValue $k6Summary 'hotshop_agent_run_duration_ms' 'p(95)'
+    $agentP99 = Get-Task20MetricValue $k6Summary 'hotshop_agent_run_duration_ms' 'p(99)'
     $executionComplete = if ($Scenario -eq 'read-baseline') {
         [long](Get-Task20MetricValue $k6Summary 'http_reqs' 'count') -gt 0
     } elseif ($Scenario -eq 'oversell-boundary') {
@@ -325,15 +400,17 @@ function Invoke-K6Scenario([string]$Scenario, [int]$ScenarioRate, [int]$Scenario
     } else {
         $attempted -gt 0 -and $facts.reservations -eq $attempted
     }
-    $correct = $executionComplete -and $checksFailed -eq 0 -and $systemErrors -eq 0 -and $drained -and `
-        $facts.oversell -eq 0 -and $facts.duplicateValidOrders -eq 0 -and `
-        $facts.reconciliationDifferences -eq 0 -and $facts.failedOrStuckEvents -eq 0 -and `
-        $facts.streamPending -eq 0 -and $facts.redisRemainingStock -eq $facts.mysqlRemainingStock -and `
-        $facts.databaseInitialStock -eq $facts.initialStock -and $facts.reservations -eq $facts.validOrders -and `
-        ($facts.initialStock - $facts.redisRemainingStock) -eq $facts.reservedQuantity
-    $targetMet = $Scenario -in @('seckill-new-intent','agent-isolation') -and $newIntentRps -ge ($ScenarioRate * 0.99) -and `
-        $dropped -eq 0 -and $systemErrors -eq 0 -and $null -ne $p99 -and [double]$p99 -le 200 -and `
-        $facts.asyncOrderMs.sampleCount -gt 0 -and [double]$facts.asyncOrderMs.p99 -le 3000 -and $correct
+    if ($Scenario -eq 'agent-isolation') {
+        $executionComplete = $executionComplete -and $agentAttemptCount -gt 0 -and `
+            $agentAttemptCount -eq ($agentSuccessCount + $agentFailureCount) -and $agentFailureCount -eq 0
+    }
+    $correct = Test-Task20BusinessCorrectness -Facts $facts -ExecutionComplete $executionComplete `
+        -ChecksFailed $checksFailed -SystemErrors $systemErrors -AsyncDrained $drained `
+        -IdempotencyConflicts $idempotencyConflicts -UnclassifiedProblems $unclassifiedProblems
+    $targetMet = $Scenario -in @('seckill-new-intent','agent-isolation') -and `
+        (Test-Task20PerformanceTarget -Facts $facts -BusinessCorrectnessPassed $correct `
+            -ActualNewIntentRps $newIntentRps -RequestedRps $ScenarioRate -DroppedIterations $dropped `
+            -SystemErrors $systemErrors -P99 $p99)
     $result = [ordered]@{
         scenario = $Scenario; targetRps = $ScenarioRate; actualRps = $actualRps; newIntentRps = $newIntentRps
         attemptedRequests = [long]$attempted
@@ -342,14 +419,27 @@ function Invoke-K6Scenario([string]$Scenario, [int]$ScenarioRate, [int]$Scenario
         soldOutResponses = $soldOut
         businessRejectedResponses = $rejected
         rateLimitedResponses = $rateLimited
+        rejectionReasons = $rejectionReasons
         httpStatusClasses = [ordered]@{ http2xx = $http2xx; http4xx = $http4xx; http5xx = $http5xx; other = $httpOther }
+        http5xxRatio = if (($http2xx+$http4xx+$http5xx+$httpOther) -gt 0) { [Math]::Round($http5xx / ($http2xx+$http4xx+$http5xx+$httpOther), 6) } else { 0 }
         duration = $ScenarioDuration; warmup = $Warmup; activityId = $activityId
         users = $ScenarioUsers; inventory = $ScenarioInventory; vus = $ScenarioVUs
         p95Ms = $p95; p99Ms = $p99; droppedIterations = $dropped
         systemErrors = $systemErrors; checksFailed = $checksFailed; k6ExitCode = $k6Exit
-        evidenceComplete = ($null -ne $k6Summary -and (Test-Path $summaryPath) -and (Test-Path $samples))
+        evidenceComplete = ($null -ne $k6Summary -and (Test-Path $summaryPath) -and $resourceSummary.sampleCount -gt 0)
+        resources = $resourceSummary
         asyncDrained = $drained; businessCorrectnessPassed = $correct
         performanceTargetMet = $targetMet; facts = $facts
+        agent = if ($Scenario -eq 'agent-isolation') {
+            [ordered]@{
+                attempts=$agentAttemptCount; successes=$agentSuccessCount; failures=$agentFailureCount
+                successRate=if ($agentAttemptCount) { [Math]::Round($agentSuccessCount / $agentAttemptCount, 6) } else { 0 }
+                p95Ms=$agentP95; p99Ms=$agentP99
+            }
+        } else { $null }
+        transactionTraffic = if ($Scenario -eq 'agent-isolation') {
+            [ordered]@{ attempts=[long]$attempted; actualRps=$newIntentRps; p95Ms=$p95; p99Ms=$p99 }
+        } else { $null }
         trafficMix = if ($Scenario -eq 'mixed-e2e') {
             [ordered]@{ publicReadPct = 50; newIntentPct = 30; authenticatedReadPct = 20 }
         } else { $null }
@@ -357,30 +447,29 @@ function Invoke-K6Scenario([string]$Scenario, [int]$ScenarioRate, [int]$Scenario
     }
     $result | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $scenarioDir 'scenario-summary.json') -Encoding utf8
     $scenarioResults.Add($result)
-    if ($facts.rabbitReady -gt 0 -or $facts.rabbitUnacknowledged -gt 0) {
-        $warnings.Add("RabbitMQ retained $($facts.rabbitReady) ready and $($facts.rabbitUnacknowledged) unacknowledged messages after $Scenario")
+    if ($facts.rabbitUnexplainedReady -gt 0 -or $facts.rabbitUnexplainedUnacknowledged -gt 0) {
+        $failures.Add("RabbitMQ retained unexplained backlog after ${Scenario}: ready=$($facts.rabbitUnexplainedReady), unacknowledged=$($facts.rabbitUnexplainedUnacknowledged)")
+    }
+    if ($idempotencyConflicts -gt 0 -and $Scenario -in @('seckill-new-intent','mixed-e2e')) {
+        $failures.Add("IDEMPOTENCY_KEY_CONFLICT occurred in $Scenario")
     }
     if ($k6Exit -ne 0) { $failures.Add("k6 failed for $Scenario at $ScenarioRate RPS") }
     if (-not $correct -and $Scenario -ne 'read-baseline') { $failures.Add("business correctness failed for $Scenario at $ScenarioRate RPS") }
 }
 
 $cleanup = $null
-$stackStarted = $false
+$projectOwnershipAcquired = $false
+$composeUpSucceeded = $false
 try {
     Assert-Task20ProjectAvailable -Project $project
+    $projectOwnershipAcquired = $true
     @(& docker ps -a --format '{{json .}}') | Set-Content -LiteralPath (Join-Path $artifactDir 'docker-before.jsonl') -Encoding utf8
     Set-RunEnvironment COMPOSE_PROJECT_NAME $project
     Set-RunEnvironment PORTAL_PORT "$($ports[0])"
     Set-RunEnvironment ADMIN_PORT "$($ports[1])"
-    Set-RunEnvironment TASK_PORT "$($ports[2])"
     Set-RunEnvironment AGENT_PORT "$($ports[3])"
     Set-RunEnvironment PROMETHEUS_PORT "$($ports[4])"
     Set-RunEnvironment GRAFANA_PORT "$($ports[5])"
-    Set-RunEnvironment MYSQL_PORT "$($ports[6])"
-    Set-RunEnvironment REDIS_CACHE_PORT "$($ports[7])"
-    Set-RunEnvironment REDIS_SECKILL_PORT "$($ports[8])"
-    Set-RunEnvironment RABBITMQ_AMQP_PORT "$($ports[9])"
-    Set-RunEnvironment RABBITMQ_MANAGEMENT_PORT "$($ports[10])"
     Set-RunEnvironment TASK20_RUN_ID $RunId
     Set-RunEnvironment TASK20_PROFILE $Profile
     Set-RunEnvironment TASK20_DATA_SEED "$DataSeed"
@@ -406,6 +495,15 @@ try {
     Set-RunEnvironment AGENT_RAG_ENABLED 'false'
     Set-RunEnvironment HOTSHOP_TRACE_SAMPLING_PROBABILITY '0.01'
 
+    if ($ControlledStartupFailure) {
+        $partialCode = Invoke-Task20Compose -Project $project -Arguments @('up','-d','mysql')
+        Record-Command 'docker compose ... up -d mysql (controlled partial start)' $partialCode
+        $failureCode = Invoke-Task20Compose -Project $project -Arguments @('up','-d','task20-controlled-missing-service') -AllowFailure
+        Record-Command 'docker compose ... up -d task20-controlled-missing-service (expected failure)' $failureCode
+        if ($failureCode -eq 0) { throw 'Controlled startup failure command unexpectedly succeeded' }
+        throw "Controlled startup failure produced expected Compose exit code $failureCode"
+    }
+
     if (-not (Test-Path '.local/keys/hotshop/user-private.pem')) {
         & (Join-Path $root 'script/generate-auth-keys.ps1')
         Record-Command 'pwsh -File script/generate-auth-keys.ps1' $LASTEXITCODE
@@ -416,7 +514,7 @@ try {
     if (-not $SkipBuild) { $up += '--build' }
     $code = Invoke-Task20Compose -Project $project -Arguments $up
     Record-Command ($(if ($SkipBuild) { 'docker compose ... up -d' } else { 'docker compose ... up -d --build' })) $code
-    $stackStarted = $true
+    $composeUpSucceeded = $true
     Wait-Task20HttpReady "http://127.0.0.1:$($ports[0])/actuator/health"
     Wait-Task20HttpReady "http://127.0.0.1:$($ports[1])/actuator/health"
     if ($Profile -eq 'agent-isolation') { Wait-Task20HttpReady "http://127.0.0.1:$($ports[3])/health/ready" }
@@ -433,55 +531,27 @@ try {
         throw 'Runtime registration did not produce a valid BCrypt hash'
     }
 
-    $durationValue = if ($Duration) { $Duration } elseif ($Profile -eq 'target-5k') { '10s' } elseif ($Profile -eq 'agent-isolation') { '15s' } else { '10s' }
-    $slot = 1
-    switch ($Profile) {
-        'smoke' {
-            $vusValue = if ($VUs) { $VUs } else { 5 }
-            $users = if ($UserCount) { $UserCount } else { $vusValue }
-            $stock = if ($Inventory) { $Inventory } else { $users }
-            Invoke-K6Scenario 'smoke' 5 $vusValue $durationValue $users $stock $slot
-        }
-        'baseline' {
-            Invoke-K6Scenario 'read-baseline' 500 100 $durationValue 1 1 $slot; $slot++
-            foreach ($stageRate in $Rates) {
-                $seconds = if ($durationValue -match '^(\d+)s$') { [int]$Matches[1] } else { 60 }
-                $users = if ($UserCount) { $UserCount } else { [Math]::Ceiling($stageRate * $seconds) + 1 }
-                $stock = if ($Inventory) { $Inventory } else { $users }
-                Invoke-K6Scenario 'seckill-new-intent' $stageRate ([Math]::Min(1000,[Math]::Max(50,$stageRate))) $durationValue $users $stock $slot; $slot++
-            }
-            Invoke-K6Scenario 'idempotency-replay' 1 10 '1s' 10 10 $slot; $slot++
-            Invoke-K6Scenario 'oversell-boundary' 50 100 '2s' 101 25 $slot; $slot++
-            Invoke-K6Scenario 'mixed-e2e' 100 100 $durationValue 1000 1000 $slot
-        }
-        'target-5k' {
-            $rateValue = if ($Rate) { $Rate } else { 5000 }
-            $seconds = if ($durationValue -match '^(\d+)s$') { [int]$Matches[1] } else { 10 }
-            $users = if ($UserCount) { $UserCount } else { $rateValue * $seconds + 1 }
-            $stock = if ($Inventory) { $Inventory } else { $users }
-            Invoke-K6Scenario 'seckill-new-intent' $rateValue $(if ($VUs) {$VUs} else {1000}) $durationValue $users $stock $slot
-        }
-        'agent-isolation' {
-            $rateValue = if ($Rate) { $Rate } else { 20 }
-            $seconds = if ($durationValue -match '^(\d+)s$') { [int]$Matches[1] } else { 15 }
-            $users = if ($UserCount) { $UserCount } else { $rateValue * $seconds + 1 }
-            $stock = if ($Inventory) { $Inventory } else { $users }
-            Invoke-K6Scenario 'agent-isolation' $rateValue $(if ($VUs) {$VUs} else {100}) $durationValue $users $stock $slot
-        }
+    foreach ($stage in $runPlan) {
+        Invoke-K6Scenario $stage.scenario $stage.rate $stage.vus $stage.duration $stage.users $stage.inventory $stage.slot
     }
 
     $queries = @(
-        "sum by (scenario) (rate(k6_http_reqs_total{testid=`"$RunId`"}[1m]))"
-        "histogram_quantile(0.99,sum by (le,scenario)(rate(k6_http_req_duration_seconds_bucket{testid=`"$RunId`"}[1m])))"
-        'sum by (job)(up)'
+        [ordered]@{ name='k6RequestCount'; required=$true; query="sum by (scenario) (increase(k6_http_reqs_total{testid=`"$RunId`"}[30m]))" }
+        [ordered]@{ name='k6NewIntentP99'; required=$true; query="max(max_over_time(k6_hotshop_new_intent_duration_ms_p99{testid=`"$RunId`"}[30m]))" }
+        [ordered]@{ name='scrapeUp'; required=$true; query='sum by (job)(up)' }
     )
-    $prometheusSnapshots = foreach ($query in $queries) {
+    $prometheusSnapshots = foreach ($querySpec in $queries) {
         try {
-            $encoded = [Uri]::EscapeDataString($query)
-            [ordered]@{ query = $query; response = Invoke-RestMethod "http://127.0.0.1:$($ports[4])/api/v1/query?query=$encoded" }
+            $encoded = [Uri]::EscapeDataString($querySpec.query)
+            $response = Invoke-RestMethod "http://127.0.0.1:$($ports[4])/api/v1/query?query=$encoded"
+            $sampleCount = @($response.data.result).Count
+            if ($querySpec.required -and $sampleCount -eq 0) {
+                $failures.Add("Prometheus query '$($querySpec.name)' returned no samples")
+            }
+            [ordered]@{ name=$querySpec.name; query=$querySpec.query; required=$querySpec.required; sampleCount=$sampleCount; response=$response }
         } catch {
-            $warnings.Add("Prometheus query failed: $query")
-            [ordered]@{ query = $query; error = 'query failed' }
+            $failures.Add("Prometheus query '$($querySpec.name)' failed")
+            [ordered]@{ name=$querySpec.name; query=$querySpec.query; required=$querySpec.required; sampleCount=0; error='query failed' }
         }
     }
     $prometheusSnapshots | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath (Join-Path $artifactDir 'prometheus-snapshots.json') -Encoding utf8
@@ -504,12 +574,13 @@ try {
     $failures.Add($_.Exception.Message)
     $_ | Out-String | Set-Content -LiteralPath (Join-Path $artifactDir 'failure.log') -Encoding utf8
 } finally {
-    if ($stackStarted -and -not $KeepStack) {
+    $retainSuccessfulStack = $KeepStack -and $composeUpSucceeded
+    if ($projectOwnershipAcquired -and -not $retainSuccessfulStack) {
         try {
             $code = Invoke-Task20Compose -Project $project -Arguments @('--profile','app','--profile','agent','--profile','observability','--profile','performance','down','--volumes','--remove-orphans') -AllowFailure
             Record-Command 'docker compose ... down --volumes --remove-orphans' $code
         } catch { $failures.Add('Safe Compose cleanup command failed') }
-    } elseif ($KeepStack) {
+    } elseif ($retainSuccessfulStack) {
         $warnings.Add('Stack retained by -KeepStack; owned resource count is expected to be non-zero')
     }
     $cleanup = Get-Task20OwnedResources -Project $project
@@ -536,7 +607,27 @@ $summary = [ordered]@{
     businessCorrectnessPassed = $correctness
     runIntegrityPassed = $integrity
     ownedResourcesZero = $cleanup.resourcesZero
+    excludedRabbitQueues = @($scenarioResults | ForEach-Object { $_.facts.excludedRabbitQueues } | `
+        Group-Object name | ForEach-Object { $_.Group | Select-Object -First 1 })
     warnings = @($warnings); failures = @($failures); commands = @($commands)
+}
+$agentResult = @($scenarioResults | Where-Object { $null -ne $_.agent } | Select-Object -First 1)
+if ($agentResult.Count) {
+    $summary['agentIsolation'] = [ordered]@{
+        agent=$agentResult[0].agent
+        transactionTraffic=$agentResult[0].transactionTraffic
+        simultaneousTrafficConclusion=[ordered]@{
+            businessCorrectnessPassed=$agentResult[0].businessCorrectnessPassed
+            messageBacklogPassed=(Test-Task20MessageBacklog $agentResult[0].facts)
+            resourceConclusion=[ordered]@{
+                samplesCaptured=($agentResult[0].resources.sampleCount -gt 0)
+                sampleCount=$agentResult[0].resources.sampleCount
+                maxContainerCpuPercent=$agentResult[0].resources.maxContainerCpuPercent
+                maxContainerMemoryBytes=$agentResult[0].resources.maxContainerMemoryBytes
+            }
+            performanceTargetMet=$agentResult[0].performanceTargetMet
+        }
+    }
 }
 $representative = @($newStages | Sort-Object targetRps -Descending | Select-Object -First 1)
 if (-not $representative.Count) {
@@ -551,7 +642,7 @@ if ($representative.Count) {
     $summary['p95Ms'] = $r.p95Ms
     $summary['p99Ms'] = $r.p99Ms
     $summary['droppedIterations'] = $r.droppedIterations
-    $summary['http5xxRatio'] = if ($r.attemptedRequests -gt 0) { [Math]::Round($r.systemErrors / $r.attemptedRequests, 6) } else { 0 }
+    $summary['http5xxRatio'] = $r.http5xxRatio
     $summary['asyncOrderP95Ms'] = $r.facts.asyncOrderMs.p95
     $summary['asyncOrderP99Ms'] = $r.facts.asyncOrderMs.p99
     $summary['oversell'] = $r.facts.oversell
@@ -561,7 +652,7 @@ if ($representative.Count) {
 if (-not (Test-Path (Join-Path $artifactDir 'failure.log'))) {
     Set-Content -LiteralPath (Join-Path $artifactDir 'failure.log') -Value '' -Encoding utf8
 }
-@{ profile=$Profile; runId=$RunId; dataSeed=$DataSeed; rates=$Rates; rate=$Rate; vus=$VUs; warmup=$Warmup; duration=$Duration; keepStack=[bool]$KeepStack } |
+@{ profile=$Profile; runId=$RunId; dataSeed=$DataSeed; rates=$normalizedRates; rate=$Rate; vus=$VUs; warmup=$Warmup; duration=$Duration; keepStack=[bool]$KeepStack; controlledStartupFailure=[bool]$ControlledStartupFailure; plan=$runPlan } |
     ConvertTo-Json | Set-Content -LiteralPath (Join-Path $artifactDir 'parameters.json') -Encoding utf8
 @{ gitHead=$summary.gitHead; docker=(& docker version --format '{{.Server.Version}}'); compose=(& docker compose version --short); k6='0.54.0'; k6Digest='sha256:1f40432b1cbe7234e977f96c362c9bc550a2d2b583d014dd8669fe40d3e9e755' } |
     ConvertTo-Json | Set-Content -LiteralPath (Join-Path $artifactDir 'versions.json') -Encoding utf8
@@ -585,7 +676,7 @@ if ($hits.Count) {
 $summary | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath (Join-Path $artifactDir 'summary.json') -Encoding utf8
 
 Write-Host "TASK-20 report: $artifactDir"
-Write-Host "Business correctness: $correctness; run integrity: $integrity; 5000 RPS target: $target5k"
-if ($failures.Count -gt 0 -or -not $correctness -or -not $integrity) { exit 1 }
+Write-Host "Business correctness: $($summary.businessCorrectnessPassed); run integrity: $($summary.runIntegrityPassed); 5000 RPS target: $target5k"
+if ($failures.Count -gt 0 -or -not $summary.businessCorrectnessPassed -or -not $summary.runIntegrityPassed) { exit 1 }
 if ($RequirePerformanceTarget -and -not $summary.performanceTargetMet) { exit 2 }
 exit 0

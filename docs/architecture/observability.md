@@ -3,6 +3,12 @@
 TASK-11 establishes one reproducible local telemetry plane. It is an engineering diagnostic system,
 not a production SLO claim.
 
+TASK-20 adds a run-scoped measurement plane. Dockerized k6 sends low-cardinality, Run-ID-tagged
+metrics by Prometheus Remote Write, while its orchestrator captures persisted business facts and
+container/dependency snapshots. `sale_reservation.reserved_at` to `sales_order.created_at` is the
+canonical async-order latency; the matching identifier-free Micrometer histogram supports live
+diagnosis. No separate performance UI is introduced.
+
 ## Topology
 
 - Prometheus scrapes `/actuator/prometheus` from `portal`, `admin`, and `task`, `/metrics` from

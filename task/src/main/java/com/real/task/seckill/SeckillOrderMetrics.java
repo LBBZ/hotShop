@@ -5,6 +5,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Component
@@ -21,6 +22,7 @@ public class SeckillOrderMetrics {
     private final Counter failures;
     private final Counter reconciliationFindings;
     private final Timer conversionLatency;
+    private final Timer endToEndLatency;
     private final AtomicLong pending = new AtomicLong();
     private final AtomicLong oldestPendingIdleMs = new AtomicLong();
     private final AtomicLong streamLag = new AtomicLong();
@@ -38,6 +40,7 @@ public class SeckillOrderMetrics {
         failures = registry.counter("hotshop.seckill.order.processing_failures");
         reconciliationFindings = registry.counter("hotshop.seckill.reconciliation.findings");
         conversionLatency = registry.timer("hotshop.seckill.order.conversion_latency");
+        endToEndLatency = registry.timer("hotshop.seckill.order.end_to_end_latency");
         registry.gauge("hotshop.seckill.order.pending", pending);
         registry.gauge("hotshop.seckill.order.pending_oldest_idle_ms", oldestPendingIdleMs);
         registry.gauge("hotshop.seckill.stream.lag", streamLag);
@@ -85,6 +88,12 @@ public class SeckillOrderMetrics {
 
     public Timer conversionLatency() {
         return conversionLatency;
+    }
+
+    public void recordEndToEndLatency(long acceptedAtEpochMs) {
+        endToEndLatency.record(Duration.ofMillis(
+                Math.max(0, System.currentTimeMillis() - acceptedAtEpochMs)
+        ));
     }
 
     public void pending(long count, long oldestIdleMs) {

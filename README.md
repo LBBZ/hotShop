@@ -321,6 +321,12 @@ flowchart LR
 
 HotShop includes an opt-in Mock Payment flow solely for local demonstrations. It does not connect to any public payment service and transfers no funds. Set `HOTSHOP_MOCK_PAYMENT_ENABLED=true` and inject the same external `HOTSHOP_MOCK_PAYMENT_SECRET` (at least 32 UTF-8 bytes) into Portal and Task. See [docs/architecture/mock-payment.md](docs/architecture/mock-payment.md) for HMAC, replay protection, persistent delay, terminal races, and late-success handling.
 
+## 本机性能基线
+
+Docker 化 k6、Run ID 隔离、业务事实对账和安全清理入口见
+[TASK-20 本机高并发压测与性能基线](docs/quality/task-20-performance.md)。正式性能测试不在
+GitHub hosted runner 上执行。
+
 ## Agent static knowledge RAG
 
 The Agent uses a closed `fake | deepseek | qwen` ModelProvider registry. FakeModel remains the

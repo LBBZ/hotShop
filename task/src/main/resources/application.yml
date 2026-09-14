@@ -118,3 +118,4 @@ management:
       percentiles-histogram:
         http.server.requests: true
         hotshop.seckill.order.conversion_latency: true
+        hotshop.seckill.order.end_to_end_latency: true

@@ -3,9 +3,14 @@
 --   @hotshop_seed (default 42)
 --   @hotshop_user_count (default 10000, maximum 100000)
 --   @hotshop_product_count (default 1000, maximum 100000)
+--   @hotshop_activity_slot (default 1, maximum 9999)
+--   @hotshop_activity_stock (default 10000, maximum 100000)
+--   @hotshop_activity_id (default NULL, letting MySQL allocate it)
 SET @hotshop_seed = COALESCE(@hotshop_seed, 42);
 SET @hotshop_user_count = LEAST(COALESCE(@hotshop_user_count, 10000), 100000);
 SET @hotshop_product_count = LEAST(COALESCE(@hotshop_product_count, 1000), 100000);
+SET @hotshop_activity_slot = LEAST(COALESCE(@hotshop_activity_slot, 1), 9999);
+SET @hotshop_activity_stock = LEAST(COALESCE(@hotshop_activity_stock, 10000), 100000);
 
 CREATE TEMPORARY TABLE hotshop_load_number (
     n INT NOT NULL PRIMARY KEY
@@ -68,5 +73,31 @@ ON DUPLICATE KEY UPDATE
     stock = VALUES(stock),
     status = 'ACTIVE',
     deleted_at = NULL;
+
+-- A run-owned activity is deliberately part of load data rather than a Flyway migration.
+-- The code is a deterministic lookup key. Callers must use a fresh seed/slot for each run;
+-- an activity that already has reservations is never reset by the orchestration script.
+INSERT INTO flash_sale_activity (
+    activity_id, activity_code, product_id, sale_price, total_stock, available_stock,
+    per_user_limit, status, starts_at, ends_at, version, created_at, updated_at
+)
+SELECT
+    @hotshop_activity_id,
+    CONCAT('LOAD-', @hotshop_seed, '-ACTIVITY-', LPAD(@hotshop_activity_slot, 4, '0')),
+    product_id,
+    LEAST(price, CAST(9.99 AS DECIMAL(19, 2))),
+    @hotshop_activity_stock,
+    @hotshop_activity_stock,
+    1,
+    'ACTIVE',
+    UTC_TIMESTAMP(6) - INTERVAL 5 MINUTE,
+    UTC_TIMESTAMP(6) + INTERVAL 2 HOUR,
+    0,
+    UTC_TIMESTAMP(6),
+    UTC_TIMESTAMP(6)
+FROM catalog_product
+WHERE sku = CONCAT('LOAD-', @hotshop_seed, '-000001')
+ON DUPLICATE KEY UPDATE
+    updated_at = VALUES(updated_at);
 
 DROP TEMPORARY TABLE hotshop_load_number;

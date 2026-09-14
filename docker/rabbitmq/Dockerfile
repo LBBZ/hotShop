@@ -7,4 +7,5 @@ FROM ${RABBITMQ_IMAGE}
 
 USER root
 RUN apk add --no-cache --upgrade libcrypto3=3.5.8-r0 libssl3=3.5.8-r0
+RUN rabbitmq-plugins enable --offline rabbitmq_prometheus
 USER rabbitmq

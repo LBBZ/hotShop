@@ -1,0 +1,61 @@
+services:
+  admin-service:
+    environment:
+      # The orchestrator authenticates once per independently loaded activity.
+      # This is still real authentication; only the isolated run's preparation
+      # ceiling is raised so a multi-stage baseline is not cut off at stage six.
+      HOTSHOP_SECURITY_RATE_LIMIT_ADMINISTRATOR_LOGIN_IP_LIMIT: ${TASK20_ADMIN_LOGIN_LIMIT:-1000}
+      HOTSHOP_SECURITY_RATE_LIMIT_ADMINISTRATOR_LOGIN_IDENTITY_LIMIT: ${TASK20_ADMIN_LOGIN_IDENTITY_LIMIT:-1000}
+
+  portal-service:
+    environment:
+      # Authentication remains mandatory. These performance-stack-only limits permit the
+      # explicit login preparation phase to authenticate a large deterministic data set.
+      HOTSHOP_SECURITY_RATE_LIMIT_USER_LOGIN_IP_LIMIT: ${TASK20_LOGIN_LIMIT:-100000}
+      HOTSHOP_SECURITY_RATE_LIMIT_USER_LOGIN_IDENTITY_LIMIT: ${TASK20_LOGIN_IDENTITY_LIMIT:-20}
+      HOTSHOP_SECURITY_RATE_LIMIT_AGENT_EXCHANGE_LIMIT: ${TASK20_AGENT_EXCHANGE_LIMIT:-100000}
+
+  k6:
+    profiles: [performance]
+    image: grafana/k6:0.54.0@sha256:1f40432b1cbe7234e977f96c362c9bc550a2d2b583d014dd8669fe40d3e9e755
+    user: "10001:10001"
+    working_dir: /work
+    command:
+      - run
+      - --out
+      - experimental-prometheus-rw
+      - --summary-export=/artifacts/k6-summary.json
+      - /work/scenarios/task20.js
+    environment:
+      BASE_URL: ${TASK20_BASE_URL:-http://portal-service:8080}
+      AGENT_BASE_URL: ${TASK20_AGENT_BASE_URL:-http://agent-service:8090}
+      ACTIVITY_ID: ${TASK20_ACTIVITY_ID:?TASK20_ACTIVITY_ID is required}
+      DATA_SEED: ${TASK20_DATA_SEED:?TASK20_DATA_SEED is required}
+      USER_COUNT: ${TASK20_USER_COUNT:?TASK20_USER_COUNT is required}
+      INVENTORY: ${TASK20_INVENTORY:?TASK20_INVENTORY is required}
+      RATE: ${TASK20_RATE:?TASK20_RATE is required}
+      VUS: ${TASK20_VUS:?TASK20_VUS is required}
+      PRE_ALLOCATED_VUS: ${TASK20_PRE_ALLOCATED_VUS:?TASK20_PRE_ALLOCATED_VUS is required}
+      MAX_VUS: ${TASK20_MAX_VUS:?TASK20_MAX_VUS is required}
+      WARMUP: ${TASK20_WARMUP:?TASK20_WARMUP is required}
+      DURATION: ${TASK20_DURATION:?TASK20_DURATION is required}
+      RUN_ID: ${TASK20_RUN_ID:?TASK20_RUN_ID is required}
+      PROFILE: ${TASK20_PROFILE:?TASK20_PROFILE is required}
+      SCENARIO: ${TASK20_SCENARIO:?TASK20_SCENARIO is required}
+      USER_PASSWORD: ${TASK20_USER_PASSWORD:?TASK20_USER_PASSWORD is required}
+      K6_PROMETHEUS_RW_SERVER_URL: ${TASK20_PROMETHEUS_RW_URL:-http://prometheus:9090/api/v1/write}
+      K6_PROMETHEUS_RW_TREND_STATS: p(50),p(90),p(95),p(99),max
+      K6_PROMETHEUS_RW_STALE_MARKERS: "true"
+    volumes:
+      - ./load/k6:/work:ro
+      - ${TASK20_ARTIFACT_DIR:?TASK20_ARTIFACT_DIR is required}:/artifacts
+    networks:
+      - hotShop-network
+    depends_on:
+      portal-service:
+        condition: service_started
+      prometheus:
+        condition: service_healthy
+    mem_limit: ${TASK20_K6_MEMORY_LIMIT:-2g}
+    cpus: ${TASK20_K6_CPU_LIMIT:-4.0}
+    restart: "no"

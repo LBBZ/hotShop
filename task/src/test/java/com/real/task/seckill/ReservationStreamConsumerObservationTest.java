@@ -70,6 +70,7 @@ class ReservationStreamConsumerObservationTest {
         verify(processing).createOrder(
                 eq(SeckillRedisKeys.reservationStream(41)), eq("1-0"), any());
         verify(gateway).finalizeOrder(any(), eq("order-observation"));
+        verify(metrics).recordEndToEndLatency(anyLong());
         verify(streams).acknowledge(
                 SeckillRedisKeys.reservationStream(41), "hotshop-order-v1", "1-0");
     }

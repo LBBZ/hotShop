@@ -1,5 +1,11 @@
 # Local observability runbook
 
+TASK-20 performance runs use `script/verify-task20-performance.ps1`. The k6 dashboard requires
+Run ID, Profile, and Scenario filters; formal evidence is the ignored
+`target/task20-performance/<run-id>/` artifact, not a dashboard screenshot. Prometheus Remote
+Write is enabled only on this local observability stack. Metric definitions and safe cleanup are
+documented in `docs/quality/task-20-performance.md`.
+
 ## Start and inspect
 
 Generate local auth keys once, then start the application and telemetry profiles:

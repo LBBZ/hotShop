@@ -307,6 +307,7 @@ public class ReservationStreamConsumer {
                     failpoint.afterOrderCommitBeforeFinalize(event);
                     finalizeAndAck(stream, entryId, event, outcome.orderId(), false);
                     metrics.processed().increment();
+                    metrics.recordEndToEndLatency(event.occurredAtMs());
                 }
                 case DUPLICATE_ORDER -> {
                     finalizeAndAck(stream, entryId, event, outcome.orderId(), true);

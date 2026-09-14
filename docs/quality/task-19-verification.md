@@ -34,7 +34,7 @@ E2E 的 Node/Vite 原生 exit 139、故障矩阵首次 Maven launcher `stack sma
 
 | 验证 | 状态 | 结果/证据 |
 |---|---|---|
-| 初始 Git 基线 | 已自动验证 | HEAD `ed75306e82178b9e85075b72b9a13d81b4bd4b05f`；按要求保留既有未提交工作树 |
+| 初始 Git 基线 | 已自动验证 | HEAD `ed75306e82178b9e85075b72b9a13d81b4bd4b05`；按要求保留既有未提交工作树 |
 | 资源所有权回归 | 已自动验证 | 13 个场景通过；sentinel container/volume/network/image ID 不变；缺失、空、非空环境值以及成功、startup、Playwright、query、interrupt、OpenAPI build/export/JSON 路径的 cwd/env 恢复与精确清理通过；`target/task19-ownership-regression/0244727a67ae/summary.json` |
 | CI policy tests | 已自动验证 | 45/45，`check_ci_policy.py` 通过 |
 | Compose config | 已自动验证 | `docker compose --env-file .env.example config --quiet`，exit 0 |

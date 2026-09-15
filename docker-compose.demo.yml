@@ -1,0 +1,29 @@
+# Compose 2.24.4+ is required for !override. Use through script/task21-demo.ps1.
+services:
+  mysql:
+    ports: !override ["127.0.0.1::3306"]
+  redis-cache:
+    ports: !override ["127.0.0.1::6379"]
+  redis-seckill:
+    ports: !override ["127.0.0.1::6379"]
+  rabbitmq:
+    ports: !override ["127.0.0.1::5672", "127.0.0.1::15672"]
+  qdrant:
+    ports: !override ["127.0.0.1::6333"]
+  admin-service:
+    ports: !override ["127.0.0.1::8088"]
+  portal-service:
+    ports: !override ["127.0.0.1::8080"]
+  task-service:
+    ports: !override ["127.0.0.1::8888"]
+  agent-service:
+    ports: !override ["127.0.0.1::8090"]
+  web-demo:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      target: runtime
+    image: ${WEB_DEMO_IMAGE:?Use task21-demo.ps1}
+    ports: ["127.0.0.1:${WEB_DEMO_PORT:-18080}:8080"]
+    depends_on: [portal-service, admin-service, agent-service]
+    networks: [hotShop-network]

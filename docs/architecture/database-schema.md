@@ -1,3 +1,5 @@
+> 当前迁移已至 V1.10；下文按历史任务分节记录，旧测试数量只属于对应任务，不代表当前完整验证。
+
 # HotShop 数据库迁移与约束设计
 
 > TASK-02 基线、TASK-06 审计增量与 TASK-08 可靠订单处理增量；适用于 MySQL 8.0。
@@ -278,3 +280,12 @@ MySQL 事务提交。
 # V1.6 Mock Payment additions
 
 V1.6 扩展 `payment_order.status` 为 `PENDING/SUCCEEDED/FAILED/CLOSED/LATE_SUCCEEDED`，增加 `(order_id,status,payment_id)` 终态查找索引。`payment_callback_ledger` 以 callbackId 唯一并保存 payload hash、Provider 事实及处理结果；`payment_callback_nonce` 以 nonce SHA-256 hash 唯一。两表均无外键，不保存原始 nonce 或签名。延迟继续使用 `outbox_event.available_at` 和已有 `(status,available_at,lease_expires_at,outbox_id)` 领取索引。
+
+## V1.7 至 V1.10 当前补充
+
+- V1.7：用户持久交易 timeline，供进度与重连读取。
+- V1.8：Agent 工具及购买草稿/一次性用户确认结构，不授予 Agent 消费确认的权限。
+- V1.9：`expected_stock` / `expected_available_stock`。迁移时复制现存库存建立基线，INSERT 表达式默认值只用于新行，后续合法业务 delta 在同一事务维护两列。直接仅 UPDATE 实际库存会留下差异；同时篡改两列不在该检测保证内。
+- V1.10：为有界对账证据查询增加索引；不替代完整扫描结束证据。
+
+结构事实见 [Flyway 迁移目录](../../database/src/main/resources/db/migration)，库存扫描和版本边界见 [当前架构](current-state.md)。以上迁移继续不使用外键。

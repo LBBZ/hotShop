@@ -2,9 +2,8 @@
 
 ## 1. 语义和边界
 
-TASK-08 在现有单体多模块中由 `task` 模块消费 TASK-07 的
-`RESERVATION_ACCEPTED` Stream 事件，把 Redis Reservation 转换为 MySQL 订单。它不发布
-RabbitMQ Outbox、不处理支付，也不解决订单超时与支付终态竞争；这些属于 TASK-09/TASK-10。
+本文记录 Stream 转单及后续集成的当前边界，由 `task` 模块消费
+`RESERVATION_ACCEPTED` Stream 事件，把 Redis Reservation 转换为 MySQL 订单。Stream 消费器只持久化 Outbox；独立 Outbox 发布器和 TASK-10 支付/超时消费者已接入，详见 [可靠消息](reliable-messaging.md) 与 [模拟支付](mock-payment.md)。
 实现不拆微服务、不使用数据库外键/级联删除、分布式锁或 Java 全局锁。
 
 本链路的公开语义是：
@@ -256,10 +255,8 @@ Reservation、Order 或 MySQL 活动/Catalog 库存。问题以稳定 `issue_key
 队列。人工处置前应同时核对 Stream 原文、Redis Hash/User 占位、处理账本、Reservation/Order/Outbox
 及审计记录；不得只看一侧状态。
 
-TASK-09 已删除普通订单的定时全表扫描、Redis 锁和旧 Rabbit 消费路径。唯一普通订单超时消费者在
-MySQL 事务中核验 `status='PENDING' AND reservation_id IS NULL`、数据库到期时间和完整消息事实；
-秒杀订单只记录幂等 no-op，绝不取消或回库。秒杀订单支付、超时关闭、Redis 资格释放和支付终态
-竞争仍留给 TASK-10。
+TASK-09 已删除普通订单的定时全表扫描、Redis 锁和旧 Rabbit 消费路径。当前订单超时消费者在
+MySQL 事务中核验订单 PENDING 状态、数据库到期时间和完整消息事实；当前同时处理普通及秒杀订单。秒杀超时在 MySQL 事务回库后通过 SECKILL_PAYMENT_EXPIRED 可靠事件更新 Redis 投影，详见 [模拟支付](mock-payment.md)。
 
 ## 11. 配置与指标
 
@@ -375,9 +372,14 @@ Principal；未知 Reservation 与他人 Reservation 统一返回 404，防止�
 
 已知限制：
 
-- TASK-08 的 Outbox 只持久化，不发布 RabbitMQ；
-- 支付、订单超时终态竞争和支付后状态推进未在本任务实现；
+- Stream 消费器只写 Outbox；发布与支付超时由独立路径处理，不能把局部完成当成全链路完成；
 - 原始 Stream 不自动截断；制定归档/保留策略前不得 `XDEL`；
 - 所有秒杀 v1 Key 使用一个全局 hash slot，后续分片需要升级 Key 与 Lua 协议；
 - dry-run 仍会写对账 issue、checkpoint 和指标，这些是观察性元数据，不是业务修复；
 - 自动修复默认关闭，且不包含库存差值修复、创建订单或覆盖冲突事实。
+
+## TASK-21：有界守恒扫描的当前实现
+
+`task/src/main/resources/redis/reconcile-conservation-page-v1.lua` 每页使用 `XRANGE COUNT`，以 `databaseVersion:inventoryRevision` 作为扫描 fence；实际改变有效占用量的写入推进 revision。持久 checkpoint 和无 TTL 的 seen hash 在同一 Lua 中维护，按 reservationNo 跨页去重；每个 delivery 仍需校验事实，不能用 eventId 不同重复计数。fence 改变、schema 旧或 seen 缺失会重启扫描；只有 COMPLETE 才使用完整守恒结果。持续写入可能持续重启，IN_PROGRESS 不得报告通过。分页限制单次读取，不保证 seen 总空间恒定，活动历史增长也增加完成时间。
+
+MySQL 守恒比较的是 V1.9 后同一行的实际与 expected 库存；合法扣减/恢复/调整同步维护 expected，不能按初始库存减累计历史订单简单解释。基线和同向篡改的局限见 [当前架构](current-state.md)。

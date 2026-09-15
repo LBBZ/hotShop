@@ -1,8 +1,9 @@
 # HotShop GitHub Actions CI
 
-本页描述 TASK-18 建立并由 TASK-19 扩展的持续集成边界。`dc779d5` 对应的托管 CI 全部通过只属于
-TASK-18 历史基线；当前未提交的 TASK-19 workflow 改动已在 Docker 内做本地策略与底层命令验证，尚无
-GitHub 托管运行，不把历史运行冒充本工作树结果。
+本页描述 TASK-18 建立并由 TASK-19 扩展的持续集成边界。TASK-21 已核实
+[run 34998695750](https://github.com/LBBZ/hotShop/actions/runs/34998695750) 对应
+`10d82528aab71766ab5aa6020180ae4935f96359`，8 jobs 成功。它是快速 CI，Web 为 mocked smoke；
+不能代替真实 Compose 浏览器、完整故障矩阵或长期压测。逐 job 与版本证据见[索引](evidence-index.md)。
 
 ## 工作流与职责
 

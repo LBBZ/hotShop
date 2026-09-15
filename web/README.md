@@ -29,6 +29,9 @@ fallback 不作为运行配置。
 
 ## 本地命令
 
+以下命令在 `web` 目录的 Bash 终端执行，Node22+、pnpm10.15.0。完整本地环境优先使用
+[根README](../README.md) 的PowerShell7隔离启动入口；Docker运行镜像无需宿主Node。
+
 ```bash
 pnpm install --frozen-lockfile
 pnpm dev
@@ -55,7 +58,14 @@ HOTSHOP_E2E_SHORT_TIMEOUT=1 \
 pnpm exec playwright test e2e/user-transaction-real.spec.ts
 ```
 
-The Compose services must set a 60-second User access TTL and short order/payment timeouts for the two explicit expiry/race proofs. Payment scenarios are initiated only through the User Mock Checkout API; delivery then follows Outbox → RabbitMQ → Task → signed callback → durable timeline → SSE.
+上述是历史手工接入示例，需要自行匹配真实端口与预置数据；当前完整入口为根目录
+`pwsh -NoProfile -File script/verify-task19-e2e.ps1`。其中User TTL=60s、普通订单timeout=10s，
+秒杀timeout保持默认；真实模式mobile项目只选择Agent/security规格。Payment scenarios are initiated
+only through the User Mock Checkout API; delivery follows Outbox → RabbitMQ → Task → signed callback → durable timeline → SSE.
+
+TASK-21新增 `playwright.delivery.config.ts`，直接验证已启动的Nginx运行镜像，默认18080，无Vite或route mock。
+从仓库根目录运行 `corepack pnpm@10.15.0 --dir web exec playwright test --config playwright.delivery.config.ts`。
+验证范围和实际结果见[TASK-21](../docs/quality/task-21-delivery.md)。
 
 ## Docker
 

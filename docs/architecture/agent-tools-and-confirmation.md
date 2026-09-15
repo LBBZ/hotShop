@@ -140,3 +140,38 @@ late event from updating a later request. The parser accepts only known event sh
 expected session/run/message and increasing sequence; malformed, oversized or extra-field events
 are discarded. Phase changes and failures are announced through `aria-live`, completion moves
 focus to the answer heading, and the layout retains keyboard, mobile and reduced-motion behavior.
+
+## Current tool, confirmation, and retrieval flow
+
+```mermaid
+sequenceDiagram
+    participant U as 用户浏览器
+    participant A as Python Agent
+    participant J as Java 权限与工具边界
+    participant Q as Qdrant
+    participant M as ModelProvider
+    U->>A: User Access 与消息
+    A->>J: User Access 与 Service assertion 换取 Delegation
+    alt 动态商品或本人交易事实
+        A->>J: 固定工具、严格参数、Delegation scope
+        J-->>A: 实时 DTO 或权限拒绝
+    else 静态 FAQ、政策、规则
+        A->>Q: 独立 EmbeddingProvider 向量与服务端过滤器
+        Q-->>A: 静态不可信证据
+        A->>M: 固定策略与证据，禁用该分支工具
+        M-->>A: 回答
+        A-->>U: 结构化引用与回答
+    end
+    opt 购买草稿
+        A->>J: create_purchase_draft
+        J-->>A: 价格快照、数量、有效期；不扣库存
+        A-->>U: 草稿与需要确认的说明
+        U->>J: 用户主动确认，签发一次性值
+        J-->>U: 明文只返回一次
+        U->>J: User Access 消费确认值
+        J->>J: 行锁、owner、digest、expiry；订单与 CONSUMED 同事务
+        J-->>U: 实时重验后的订单
+    end
+```
+
+The confirmation value never passes through Agent, model, SSE, or RAG. Code evidence: `agent/src/hotshop_agent/registry.py`, `agent/src/hotshop_agent/service.py`, and `domain/src/main/java/com/real/domain/agenttools/PurchaseConfirmationService.java`. The model does not authorize purchases; only the Java User confirmation transaction does.

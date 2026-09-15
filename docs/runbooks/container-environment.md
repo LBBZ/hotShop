@@ -1,8 +1,48 @@
 # HotShop 容器环境运行手册
 
-本文档覆盖 TASK-03 的本机数据基础设施及 TASK-02 的数据库迁移。默认 Compose 集合启动 MySQL、
-一次性 `database-migrator`、`redis-cache`、`redis-seckill` 和 RabbitMQ；三个 Java 进程位于
-`app` profile。
+## TASK-21 隔离演示入口（推荐）
+
+在仓库根目录使用 **PowerShell 7+**、Docker Desktop Linux containers 和 **Compose 2.24.4+**
+（覆盖端口依赖 `!override`）。不需要宿主 Java/Node/Python；Dockerfile 会安装锁定的构建依赖。
+首次拉取与构建需要网络，成本应与缓存后的日常启动分别记录。实际验证状态见
+[交付验收报告](../quality/task-21-delivery.md)，不代表另一台新机器已验证。
+
+```powershell
+Set-Location D:\Codex\Projects\hotShop-task21
+pwsh -NoProfile -File .\script\task21-demo.ps1 -Action Start -ProjectName hotshop-task21-demo0001
+# 浏览器打开 http://127.0.0.1:18080
+pwsh -NoProfile -File .\script\task21-demo.ps1 -Action Status -ProjectName hotshop-task21-demo0001
+pwsh -NoProfile -File .\script\task21-demo.ps1 -Action Stop -ProjectName hotshop-task21-demo0001
+pwsh -NoProfile -File .\script\task21-demo.ps1 -Action Restart -ProjectName hotshop-task21-demo0001
+```
+
+`demo0001` 必须未被使用；省略 `-ProjectName` 会生成随机名，记下输出供后续操作。
+`-WebPort 18081` 可避开前端端口冲突。所有映射仅绑定 loopback，其余端口随机分配，`Status`
+显示实际端口。脚本拒绝已有目录、项目资源和镜像标签；创建项目专有镜像标签、命名卷、随机基础设施
+密码、模拟支付 Secret 与四组 RSA 密钥。配置存于 Git 忽略的 `.local/keys/<project>/.env.demo`，
+不读取根 `.env`，清除并恢复 Compose 变量的继承覆盖。不要打印或提交该配置文件。
+
+启动顺序：生成密钥 → 构建真实 Java/Agent/nginx runtime 与依赖 → Flyway 成功 → HTTP 就绪 →
+首次测试 seed → Qdrant 知识索引 rebuild → 管理员装载秒杀活动。固定 `FakeModel` 和
+`deterministic` Embedding，不调用付费 Provider。Mock payment 只用于本机模拟，HTTP 本机演示
+将 Secure cookie 设为 false；时间统一 UTC。默认不启动 observability profile。
+
+- 管理员：`task13-admin` / `Task13Admin!2026`，公开的一次性本机演示账号。
+- 用户：浏览器注册页创建自己的用户名和密码，再登录。不会写入既有用户数据。
+- 商品 `913001`，活动 `913001` 正常、`913002` 售罄、`913003` 已结束。
+- seed 复用 `web/scripts/task-13-e2e-seed.sql`，只在全新项目执行一次，将其 30 分钟活动窗口延至
+  首次初始化后一日。`Restart` 不重置库存/版本/窗口；过期后用新的独立项目演示。
+- `Stop` 只停止这个项目，保留数据、容器、网络和镜像。失败时也保留资源供排障；不存在自动删除流程。
+- 启动失败先用 `Status`；日志用同一 project/env/两个 compose 文件，避免误查默认项目：
+
+```powershell
+$demoProject = 'hotshop-task21-demo0001'
+docker compose -p $demoProject --env-file ".local/keys/$demoProject/.env.demo" `
+  -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent logs --tail 100
+```
+
+以下为基础设施及各组件的手工操作参考。默认 Compose 集合启动 MySQL、一次性迁移、双 Redis 和
+RabbitMQ；`app` 为三个 Java 进程，`agent` 为 Agent + Qdrant，`observability` 为观测组件。
 
 ## 1. 前置条件与凭据
 
@@ -36,12 +76,15 @@ Linux/macOS 可把文件保存到 `~/.config/hotshop/compose.env`，并使用相
 
 ```powershell
 docker compose --env-file .env.example up -d --build --wait
-docker compose --env-file .env.example wait database-migrator
+$migratorIds = @(docker compose --env-file .env.example ps -a -q database-migrator)
+if ($LASTEXITCODE -ne 0 -or $migratorIds.Count -ne 1) { throw 'Cannot identify the migrator container' }
+$migrationExit = docker wait $migratorIds[0]
+if ($LASTEXITCODE -ne 0 -or "$migrationExit".Trim() -ne '0') { throw 'Database migration failed' }
 ```
 
 使用仓库外真实本机凭据时，将 `.env.example` 替换为上一节的 `$hotShopEnv`。默认集合不构建 Java
-应用镜像，因此不会被并行中的 Maven 改动阻塞。第二条命令必须返回 0；Compose 的 `up --wait`
-可能在一次性 migrator 尚未结束时返回，不能省略显式 `wait`。
+应用镜像，因此不会被并行中的 Maven 改动阻塞。必须核对 `docker wait` 输出的容器退出码为 0（其命令进程返回 0 不代表迁移成功）；Compose 的 `up --wait`
+可能在一次性 migrator 尚未结束时返回，不能省略显式退出码检查。Compose 某些版本的 `compose wait` 不包含已退出的一次性服务，因此使用 `ps -a` 找到容器后调用 `docker wait`。
 
 完整应用采用显式 `app` profile：
 
@@ -59,7 +102,7 @@ TASK-08 的 Redis Stream 消费者位于 `task` 容器。它依赖 MySQL 迁移�
 `redis-seckill` 健康；不依赖 RabbitMQ 完成 Outbox 发布。消费开关默认开启，对账默认 dry-run 且
 自动修复关闭。
 
-可观测与测试服务将分别由后续任务加入独立 profile；TASK-03 不提前添加占位容器。
+观测组件已提供独立 `observability` profile；测试入口见交付验收报告。
 
 ## 3. 服务用途与端口
 
@@ -191,31 +234,7 @@ docker compose --env-file .env.example stop
 docker compose --env-file .env.example up -d --wait
 ```
 
-可在停止前分别写入一个临时探针，恢复后读取并清理：
-
-```powershell
-docker compose --env-file .env.example exec -T mysql mysql -uroot "-pchange-me-local-mysql" -e "CREATE DATABASE IF NOT EXISTS task03_probe; CREATE TABLE IF NOT EXISTS task03_probe.marker(id INT PRIMARY KEY); INSERT IGNORE INTO task03_probe.marker VALUES (1);"
-docker compose --env-file .env.example exec -T redis-cache redis-cli SET task03:persistence:probe cache
-docker compose --env-file .env.example exec -T redis-seckill redis-cli SET task03:persistence:probe seckill
-docker compose --env-file .env.example exec -T rabbitmq rabbitmqctl add_vhost task03-probe
-
-docker compose --env-file .env.example stop
-docker compose --env-file .env.example up -d --wait
-
-docker compose --env-file .env.example exec -T mysql mysql -uroot "-pchange-me-local-mysql" -Nse "SELECT COUNT(*) FROM task03_probe.marker"
-docker compose --env-file .env.example exec -T redis-cache redis-cli GET task03:persistence:probe
-docker compose --env-file .env.example exec -T redis-seckill redis-cli GET task03:persistence:probe
-docker compose --env-file .env.example exec -T rabbitmq rabbitmqctl list_vhosts --silent
-
-docker compose --env-file .env.example exec -T mysql mysql -uroot "-pchange-me-local-mysql" -e "DROP DATABASE task03_probe"
-docker compose --env-file .env.example exec -T redis-cache redis-cli DEL task03:persistence:probe
-docker compose --env-file .env.example exec -T redis-seckill redis-cli DEL task03:persistence:probe
-docker compose --env-file .env.example exec -T rabbitmq rabbitmqctl delete_vhost task03-probe
-```
-
-若使用自定义 env 文件，请把示例中的 MySQL 密码替换为对应本机值；不要把真实密码粘贴进提交内容。
-`docker compose down` 只删除容器和网络，默认保留命名卷；除非明确要清空本机数据，不要使用
-`down --volumes`。
+持久性与隔离验证优先运行版本化脚本，并查看对应报告；不要对共享数据卷直接运行初始化或重置命令。
 
 ## 6. 常见问题
 
@@ -231,7 +250,7 @@ docker compose --env-file .env.example exec -T rabbitmq rabbitmqctl delete_vhost
 
 ## 7. TASK-09 可靠消息运行手册
 
-RabbitMQ wrapper 只继承官方 `rabbitmq:4.0.7-management-alpine`，不下载或启用第三方延迟插件。
+RabbitMQ wrapper 只继承官方 `rabbitmq:4.2.9-management-alpine`（基础 digest 以 `docker-compose.yml` 为准），不下载或启用第三方延迟插件。
 固定订单超时由 durable TTL 队列和 DLX 完成。Portal 不配置 RabbitMQ，也不依赖其健康状态；只要
 MySQL 可用，普通订单与两条 Outbox 可以提交。Task 才持有 RabbitMQ 连接，并使用 correlated
 publisher confirm、mandatory publish 和 publisher returns。

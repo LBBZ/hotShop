@@ -9,10 +9,10 @@ HotShop 固定使用 RS256，并维护四个互不复用的 key set：
 
 | key set | 私钥持有者 | 公钥持有者 | 用途 |
 | --- | --- | --- | --- |
-| User Access | portal | portal | 签发/验证 User Access |
-| Administrator Access | admin | admin | 签发/验证 Administrator Access |
+| User Access | portal | portal、Python Agent | 签发/验证 User Access |
+| Administrator Access | admin | admin、Python Agent | 签发/验证 Administrator Access |
 | Agent Delegation | portal token-exchange 边界 | portal | 签发/验证 Agent Delegation |
-| Agent Service assertion | 未来 Python Agent Service | portal | Agent Service 证明 Service Identity |
+| Agent Service assertion | Python Agent Service | portal | Agent Service 证明 Service Identity |
 
 portal 只配置 Agent Service 公钥，不持有其私钥。admin 不拿 User 或 Agent 私钥。仓库内 `task` 进程
 直接调用 Java service，不配置任何上述密钥，也不伪造 `/internal/**` HTTP 身份。若未来引入内部

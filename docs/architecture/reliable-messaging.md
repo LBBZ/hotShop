@@ -30,3 +30,26 @@ Administrators with `ROLE_ADMIN` list redacted failures at `/admin/api/v1/outbox
 Mock callback 与秒杀 Redis 投影都采用 `main -> TTL retry -> main` 的持久拓扑，并有各自的 DLQ。每次失败把递增 attempt header 写入新 persistent 消息，correlated confirm ACK 且无 return 后才 ACK 原消息；最终尝试直接 reject 到 DLQ。Schema/确定性事实冲突不重试。测试使用真实 RabbitMQ 证明持续 503/Redis 故障到达上限、队列清空，以及删除 retry exchange 产生 publish NACK 时原 delivery 不会提前 ACK。
 
 `SECKILL_PAYMENT_EXPIRED` 的 Lua 同时核对 Reservation、Order、Activity、User、Product 和 quantity。`COMPENSATED` 与 `IDEMPOTENT` ACK；Redis 瞬时异常进入 retry；事实冲突和毒消息进入 `hotshop.seckill.payment-expired.dead.v1`。这仍是 at-least-once + 幂等投影，不是 exactly-once 消息投递。
+
+## Delivery and recovery overview
+
+```mermaid
+flowchart TD
+    TX["MySQL 业务事务与 NEW Outbox"] --> CLAIM["短事务领取 PUBLISHING：lease token 与 version"]
+    CLAIM --> SEND["事务外 persistent publish"]
+    SEND --> CONF{"confirm ACK 且无 return"}
+    CONF -->|"是，且所有权匹配"| PUB["PUBLISHED"]
+    CONF -->|"否或结果未知"| RETRY["退避；租约过期可接管"]
+    RETRY --> CLAIM
+    RETRY -->|"达到上限"| FAIL["FAILED"]
+    FAIL -->|"管理员原因与审计"| TX
+    SEND --> Q["RabbitMQ durable queue"]
+    Q --> CON["订单超时消费：Inbox 唯一键与业务效果同一 MySQL 事务"]
+    CON -->|"commit 成功"| ACK["手动 ACK"]
+    CON -->|"瞬时失败"| PENDING["不提前 ACK；持久重试或再交付"]
+    CON -->|"毒消息或确定性冲突"| DLQ["隔离与调查"]
+```
+
+The generic diagram does not imply all consumers use the same retry implementation: timeout database failures remain unacknowledged; Mock callback and Redis payment-expiry projection use confirmed persistent retry publication. A broker ACK followed by publisher death before `PUBLISHED`, or a consumer commit followed by death before ACK, can both repeat delivery. Business idempotency depends on the retained Inbox/ledger and business keys, not on broker delivery uniqueness.
+
+Stream recovery is a separate path: pending ownership is reclaimed by `XAUTOCLAIM`, the MySQL processing ledger determines the next step, Redis finalize/compensation is checked idempotently, then `XACK` removes the pending entry. `XACK` does not delete the Stream record. See [Stream recovery matrix](stream-order-processing.md#9-崩溃恢复矩阵).

@@ -24,8 +24,8 @@ flowchart LR
 
 | Python API 边界 | 接受凭据 | 本地校验 | Token exchange | 工具注册表 |
 | --- | --- | --- | --- | --- |
-| `/api/v1/agent/**` | User Access | RS256、`kid`、issuer、audience、`typ`、时间和 User claims | 建会话时必须执行并复验 Delegation | 空 |
-| `/admin/api/v1/agent/**` | Administrator Access | 独立 RS256 key set、issuer、audience、`typ`、时间和 authorities | 禁止 | 空 |
+| `/api/v1/agent/**` | User Access | RS256、`kid`、issuer、audience、`typ`、时间和 User claims | 建会话时必须执行并复验 Delegation | 固定 User 工具，见下文 |
+| `/admin/api/v1/agent/**` | Administrator Access | 独立 RS256 key set、issuer、audience、`typ`、时间和 authorities | 禁止 | 固定低风险 Administrator 工具 |
 | Java exchange 返回 | Agent Delegation | 独立 key set、issuer、audience、`typ`、时间、`azp`、scope、无管理员 claims | 不适用 | 不适用 |
 
 三类 Token 不可互换。Python 只持有 Agent Service assertion 私钥和三类验证公钥。一次性 assertion
@@ -60,7 +60,7 @@ SSE 队列写入而不是 provider 内部，provider 的 `finally` 和并发 lim
 ## 模型与流
 
 LangGraph 负责在 User/Administrator 两条边界施加不同静态策略，再将模型输入交给
-`ModelProvider`。TASK-15 的两套 `ToolRegistry` 均为空，不接受 URL、SQL、Shell 或动态工具名。
+`ModelProvider`。两套 `ToolRegistry` 已实现固定用户查询/购买草稿及管理员低风险摘要/配置草稿工具，不接受 URL、SQL、Shell 或动态工具名；详见 [工具与确认](agent-tools-and-confirmation.md)。
 
 进程只从可信启动配置 `AGENT_MODEL_PROVIDER=fake|deepseek|qwen` 选择一个 Provider，不按请求切换，
 也不自动跨厂商 fallback。Container 只调用只读 factory；AgentService、LangGraph、RAG 和
@@ -70,7 +70,7 @@ DeepSeek 显式关闭 thinking，任何 `reasoning_content` 都在 transport 层
 
 运行 SSE 只允许：
 
-`session.created`、`message.started`、`message.delta`、`message.completed`、`usage`、`error`、`done`。
+`session.created`、`message.started`、`message.delta`、`message.completed`、`tool.started`、`tool.completed`、`tool.failed`、`purchase_draft.created`、`rag.completed`、`usage`、`error`、`done`。精确类型与字段见 [events.py](../../agent/src/hotshop_agent/events.py)。
 
 每类事件还有独立字段白名单。模型 delta 在输出前经过有状态 `StreamingSanitizer`。状态机只保留
 可能形成 Bearer/JWT、敏感赋值、私钥块或隐藏标签的未决候选；普通文本立即按顺序输出。候选缓冲上限

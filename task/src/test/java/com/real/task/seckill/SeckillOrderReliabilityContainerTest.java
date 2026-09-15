@@ -612,6 +612,7 @@ class SeckillOrderReliabilityContainerTest {
         long before = redisCommandCalls("hgetall");
         long fieldsBefore = redisCommandCalls("hmget");
         long membersBefore = redisCommandCalls("smembers");
+        long rangesBefore = redisCommandCalls("xrange");
         var connection = redis.getConnectionFactory().getConnection();
         connection.serverCommands().setConfig("slowlog-log-slower-than", "0");
         var nativeCommands = (io.lettuce.core.api.async.RedisAsyncCommands<byte[], byte[]>) connection.getNativeConnection();
@@ -631,7 +632,8 @@ class SeckillOrderReliabilityContainerTest {
             if (args.getFirst().equalsIgnoreCase("XRANGE")) ranges.add(args);
         }
         connection.serverCommands().setConfig("slowlog-log-slower-than", "10000");
-        assertThat(ranges).isNotEmpty();
+        assertThat(ranges).hasSize((int) (redisCommandCalls("xrange") - rangesBefore));
+        assertThat(ranges).anyMatch(args -> args.get(2).equals("(0-0"));
         int returnedRowsUpperBound = 0;
         for (List<String> args : ranges) {
             int count = -1;

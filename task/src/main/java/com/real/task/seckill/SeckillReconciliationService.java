@@ -715,13 +715,26 @@ public class SeckillReconciliationService {
     }
 
     private List<PendingEntry> pendingEntries(String stream, int count, String cursor) {
-        PendingMessages pending = redis.opsForStream().pending(
-                stream,
-                properties.getGroupName(),
-                cursor.isBlank() ? Range.unbounded()
-                        : Range.from(Range.Bound.exclusive(cursor)).to(Range.Bound.unbounded()),
-                count
-        );
+        PendingMessages pending;
+        try {
+            pending = redis.opsForStream().pending(
+                    stream,
+                    properties.getGroupName(),
+                    cursor.isBlank() ? Range.unbounded()
+                            : Range.from(Range.Bound.exclusive(cursor)).to(Range.Bound.unbounded()),
+                    count
+            );
+        } catch (org.springframework.dao.DataAccessException failure) {
+            Throwable cause = failure.getMostSpecificCause();
+            // Loading registers an activity before a consumer creates its group.
+            // With no group there is no PEL to inspect. Only this Redis error
+            // means an empty PEL; connectivity, timeout and WRONGTYPE still fail.
+            if (cause instanceof io.lettuce.core.RedisCommandExecutionException
+                    && cause.getMessage() != null && cause.getMessage().startsWith("NOGROUP ")) {
+                return List.of();
+            }
+            throw failure;
+        }
         List<PendingEntry> result = new ArrayList<>();
         if (pending != null) {
             for (PendingMessage entry : pending) {

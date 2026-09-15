@@ -12,6 +12,12 @@
     <artifactId>admin</artifactId>
 
     <dependencies>
+        <dependency>
+            <groupId>com.real</groupId>
+            <artifactId>task</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
         <!-- 依赖 security -->
         <dependency>
             <groupId>com.real</groupId>

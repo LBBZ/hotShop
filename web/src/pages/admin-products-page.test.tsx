@@ -11,7 +11,7 @@ const product = {
   name: "原商品",
   price: "10.00",
   stock: 100,
-  version: "9007199254740993",
+  version: "2147483644",
   category: "测试",
   description: "回归商品",
   createdAt: "2026-09-15T00:00:00Z",
@@ -22,15 +22,17 @@ describe("AdminProductsPage inventory boundaries", () => {
 
   it("a stale name-only form never sends its cached stock", async () => {
     let currentStock = 100;
-    vi.spyOn(adminApi, "products").mockImplementation(async () => ({
-      items: [{ ...product, stock: currentStock }],
-      hasMore: false,
-    }));
+    vi.spyOn(adminApi, "products").mockImplementation(() =>
+      Promise.resolve({
+        items: [{ ...product, stock: currentStock }],
+        hasMore: false,
+      }),
+    );
     const update = vi
       .spyOn(adminApi, "updateProduct")
-      .mockImplementation(async (_id, value) => {
+      .mockImplementation((_id, value) => {
         if ("stock" in value) currentStock = Number(value.stock);
-        return { ...product, ...value, stock: currentStock };
+        return Promise.resolve({ ...product, ...value, stock: currentStock });
       });
     const user = userEvent.setup();
     render(<AdminProductsPage />);
@@ -51,7 +53,7 @@ describe("AdminProductsPage inventory boundaries", () => {
       items: [product],
       hasMore: false,
     });
-    const current = { ...product, stock: 99, version: "9007199254740994" };
+    const current = { ...product, stock: 99, version: "2147483645" };
     const refresh = vi.spyOn(adminApi, "product").mockResolvedValue(current);
     const adjust = vi
       .spyOn(adminApi, "adjustStock")
@@ -73,7 +75,7 @@ describe("AdminProductsPage inventory boundaries", () => {
       .mockResolvedValueOnce({
         ...current,
         stock: 104,
-        version: "9007199254740995",
+        version: "2147483646",
       });
     const user = userEvent.setup();
     render(<AdminProductsPage />);
@@ -89,7 +91,7 @@ describe("AdminProductsPage inventory boundaries", () => {
     );
     expect(adjust).toHaveBeenNthCalledWith(1, "71", {
       delta: 5,
-      expectedVersion: "9007199254740993",
+      expectedVersion: "2147483644",
       reason: "实际补货五件",
     });
     expect(screen.getByRole("button", { name: "确认调整库存" })).toBeDisabled();
@@ -101,7 +103,7 @@ describe("AdminProductsPage inventory boundaries", () => {
     await waitFor(() =>
       expect(adjust).toHaveBeenNthCalledWith(2, "71", {
         delta: 5,
-        expectedVersion: "9007199254740994",
+        expectedVersion: "2147483645",
         reason: "实际补货五件",
       }),
     );

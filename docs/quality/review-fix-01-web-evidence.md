@@ -16,8 +16,8 @@ corepack pnpm@10.15.0 test src/pages/admin-products-page.test.tsx
 
 ## 修复
 
-普通资料编辑不显示可修改库存字段，页面和 API 封装只发送资料白名单。新增仍有初始库存。独立库存调整表单发送整数 `delta`、字符串 `expectedVersion`、原因；显示调整后的预期数量。发生 `STOCK_ADJUSTMENT_CONFLICT` 时说明本次未生效，禁止再次提交直到读取最新库存/版本，由管理员核对数量后显式重提。版本不经过 JavaScript number，避免 BIGINT 精度丢失。
+普通资料编辑不显示可修改库存字段，页面和 API 封装只发送资料白名单。新增仍有初始库存。独立库存调整表单发送整数 `delta`、字符串 `expectedVersion`、原因；显示调整后的预期数量。发生 `STOCK_ADJUSTMENT_CONFLICT` 时说明本次未生效，禁止再次提交直到读取最新库存/版本，由管理员核对数量后显式重提。版本按 API 契约使用字符串传递，不作数值转换；当前数据库 version 类型仍为 INT。
 
-新增回归覆盖：旧表单只改名称、独立调整及冲突刷新重提（版本大于 2^53）、零调整和减至负数的客户端拒绝。
+新增回归覆盖：旧表单只改名称、独立调整及冲突刷新重提（使用接近 INT 上限的版本）、零调整和减至负数的客户端拒绝。
 
 修复后同一测试命令 **3 passed**（22:23:14 +08:00，3.51 秒）；`corepack pnpm@10.15.0 typecheck` 退出 0。完整集成 HEAD 的前端门禁及运行时 OpenAPI/生成客户端验证由统一报告记录。原始本地日志位于集成 worktree 的 `target/review-fixes/web-red.log`、`web-green.log`。

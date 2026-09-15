@@ -16,7 +16,9 @@
 import * as runtime from '../runtime';
 import type {
   AdminOperationReasonRequest,
+  AdminProductEditRequest,
   AdminProductMutationRequest,
+  AdminStockAdjustmentRequest,
   ApiProblem,
   CursorPageResponseProductResponse,
   ProductResponse,
@@ -24,8 +26,12 @@ import type {
 import {
     AdminOperationReasonRequestFromJSON,
     AdminOperationReasonRequestToJSON,
+    AdminProductEditRequestFromJSON,
+    AdminProductEditRequestToJSON,
     AdminProductMutationRequestFromJSON,
     AdminProductMutationRequestToJSON,
+    AdminStockAdjustmentRequestFromJSON,
+    AdminStockAdjustmentRequestToJSON,
     ApiProblemFromJSON,
     ApiProblemToJSON,
     CursorPageResponseProductResponseFromJSON,
@@ -36,6 +42,13 @@ import {
 
 export interface AddProductRequest {
     adminProductMutationRequest: AdminProductMutationRequest;
+    xRequestId?: string;
+    traceparent?: string;
+}
+
+export interface AdjustStockRequest {
+    productId: string;
+    adminStockAdjustmentRequest: AdminStockAdjustmentRequest;
     xRequestId?: string;
     traceparent?: string;
 }
@@ -66,7 +79,7 @@ export interface SearchProductsRequest {
 
 export interface UpdateProductRequest {
     productId: string;
-    adminProductMutationRequest: AdminProductMutationRequest;
+    adminProductEditRequest: AdminProductEditRequest;
     xRequestId?: string;
     traceparent?: string;
 }
@@ -94,6 +107,24 @@ export interface AdminProductsApiInterface {
      * Create a Catalog Product
      */
     addProduct(requestParameters: AddProductRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProductResponse>;
+
+    /**
+     *
+     * @summary Adjust inventory by a signed delta with a current version and audit reason
+     * @param {string} productId
+     * @param {AdminStockAdjustmentRequest} adminStockAdjustmentRequest
+     * @param {string} [xRequestId] Caller-supplied correlation ID. Invalid values are replaced by the server.
+     * @param {string} [traceparent] W3C trace context. Its trace ID is distinct from X-Request-Id.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof AdminProductsApiInterface
+     */
+    adjustStockRaw(requestParameters: AdjustStockRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProductResponse>>;
+
+    /**
+     * Adjust inventory by a signed delta with a current version and audit reason
+     */
+    adjustStock(requestParameters: AdjustStockRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProductResponse>;
 
     /**
      *
@@ -155,9 +186,9 @@ export interface AdminProductsApiInterface {
 
     /**
      *
-     * @summary Replace a Catalog Product
+     * @summary Edit Catalog Product metadata without changing inventory
      * @param {string} productId
-     * @param {AdminProductMutationRequest} adminProductMutationRequest
+     * @param {AdminProductEditRequest} adminProductEditRequest
      * @param {string} [xRequestId] Caller-supplied correlation ID. Invalid values are replaced by the server.
      * @param {string} [traceparent] W3C trace context. Its trace ID is distinct from X-Request-Id.
      * @param {*} [options] Override http request option.
@@ -167,7 +198,7 @@ export interface AdminProductsApiInterface {
     updateProductRaw(requestParameters: UpdateProductRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProductResponse>>;
 
     /**
-     * Replace a Catalog Product
+     * Edit Catalog Product metadata without changing inventory
      */
     updateProduct(requestParameters: UpdateProductRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProductResponse>;
 
@@ -230,6 +261,69 @@ export class AdminProductsApi extends runtime.BaseAPI implements AdminProductsAp
      */
     async addProduct(requestParameters: AddProductRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProductResponse> {
         const response = await this.addProductRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Adjust inventory by a signed delta with a current version and audit reason
+     */
+    async adjustStockRaw(requestParameters: AdjustStockRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProductResponse>> {
+        if (requestParameters['productId'] == null) {
+            throw new runtime.RequiredError(
+                'productId',
+                'Required parameter "productId" was null or undefined when calling adjustStock().'
+            );
+        }
+
+        if (requestParameters['adminStockAdjustmentRequest'] == null) {
+            throw new runtime.RequiredError(
+                'adminStockAdjustmentRequest',
+                'Required parameter "adminStockAdjustmentRequest" was null or undefined when calling adjustStock().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xRequestId'] != null) {
+            headerParameters['X-Request-Id'] = String(requestParameters['xRequestId']);
+        }
+
+        if (requestParameters['traceparent'] != null) {
+            headerParameters['traceparent'] = String(requestParameters['traceparent']);
+        }
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("bearerAuth", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/admin/api/v1/products/{productId}/stock-adjustments`;
+        urlPath = urlPath.replace(`{${"productId"}}`, encodeURIComponent(String(requestParameters['productId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: AdminStockAdjustmentRequestToJSON(requestParameters['adminStockAdjustmentRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProductResponseFromJSON(jsonValue));
+    }
+
+    /**
+     * Adjust inventory by a signed delta with a current version and audit reason
+     */
+    async adjustStock(requestParameters: AdjustStockRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProductResponse> {
+        const response = await this.adjustStockRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -420,7 +514,7 @@ export class AdminProductsApi extends runtime.BaseAPI implements AdminProductsAp
     }
 
     /**
-     * Replace a Catalog Product
+     * Edit Catalog Product metadata without changing inventory
      */
     async updateProductRaw(requestParameters: UpdateProductRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProductResponse>> {
         if (requestParameters['productId'] == null) {
@@ -430,10 +524,10 @@ export class AdminProductsApi extends runtime.BaseAPI implements AdminProductsAp
             );
         }
 
-        if (requestParameters['adminProductMutationRequest'] == null) {
+        if (requestParameters['adminProductEditRequest'] == null) {
             throw new runtime.RequiredError(
-                'adminProductMutationRequest',
-                'Required parameter "adminProductMutationRequest" was null or undefined when calling updateProduct().'
+                'adminProductEditRequest',
+                'Required parameter "adminProductEditRequest" was null or undefined when calling updateProduct().'
             );
         }
 
@@ -468,14 +562,14 @@ export class AdminProductsApi extends runtime.BaseAPI implements AdminProductsAp
             method: 'PUT',
             headers: headerParameters,
             query: queryParameters,
-            body: AdminProductMutationRequestToJSON(requestParameters['adminProductMutationRequest']),
+            body: AdminProductEditRequestToJSON(requestParameters['adminProductEditRequest']),
         }, initOverrides);
 
         return new runtime.JSONApiResponse(response, (jsonValue) => ProductResponseFromJSON(jsonValue));
     }
 
     /**
-     * Replace a Catalog Product
+     * Edit Catalog Product metadata without changing inventory
      */
     async updateProduct(requestParameters: UpdateProductRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProductResponse> {
         const response = await this.updateProductRaw(requestParameters, initOverrides);

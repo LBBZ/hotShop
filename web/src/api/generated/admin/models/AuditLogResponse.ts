@@ -115,6 +115,7 @@ export const AuditLogResponseActionEnum = {
     AgentDelegationIssued: 'AGENT_DELEGATION_ISSUED',
     CatalogProductCreated: 'CATALOG_PRODUCT_CREATED',
     CatalogProductUpdated: 'CATALOG_PRODUCT_UPDATED',
+    CatalogStockAdjusted: 'CATALOG_STOCK_ADJUSTED',
     CatalogProductDeleted: 'CATALOG_PRODUCT_DELETED',
     FlashSaleActivityLoaded: 'FLASH_SALE_ACTIVITY_LOADED',
     OutboxReplay: 'OUTBOX_REPLAY',

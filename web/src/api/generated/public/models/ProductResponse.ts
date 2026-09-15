@@ -61,6 +61,12 @@ export interface ProductResponse {
      * @memberof ProductResponse
      */
     stock: number;
+    /**
+     *
+     * @type {string}
+     * @memberof ProductResponse
+     */
+    version: string;
 }
 
 /**
@@ -73,6 +79,7 @@ export function instanceOfProductResponse(value: object): value is ProductRespon
     if (!('price' in value) || value['price'] === undefined) return false;
     if (!('productId' in value) || value['productId'] === undefined) return false;
     if (!('stock' in value) || value['stock'] === undefined) return false;
+    if (!('version' in value) || value['version'] === undefined) return false;
     return true;
 }
 
@@ -93,6 +100,7 @@ export function ProductResponseFromJSONTyped(json: any, ignoreDiscriminator: boo
         'price': json['price'],
         'productId': json['productId'],
         'stock': json['stock'],
+        'version': json['version'],
     };
 }
 
@@ -114,5 +122,6 @@ export function ProductResponseToJSONTyped(value?: ProductResponse | null, ignor
         'price': value['price'],
         'productId': value['productId'],
         'stock': value['stock'],
+        'version': value['version'],
     };
 }

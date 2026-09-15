@@ -49,6 +49,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -772,6 +773,60 @@ class SeckillOrderReliabilityContainerTest {
         long reservationId = jdbc.queryForObject("SELECT reservation_id FROM sale_reservation WHERE reservation_no=?", Long.class, accepted.reservationNo());
         assertThat(jdbc.queryForObject("SELECT cursor_value FROM seckill_reconciliation_checkpoint WHERE checkpoint_name=?", String.class,
                 "stream-evidence-" + reservationId)).isEqualTo("0");
+    }
+
+    @Test
+    void review04LoadedActivitiesWithoutConsumerGroupStillAdvanceBoundedAudit() throws Exception {
+        loadActivityWithoutConsumer(127, 227);
+        loadActivityWithoutConsumer(128, 228);
+        Accepted last = null;
+        for (int i = 0; i < 5; i++) {
+            last = accepted(18000 + i, 128, 228, 28000 + i, 1, "1.00");
+            appendAccepted(last);
+        }
+        // No consumer.refreshStreams(): one loaded activity has no Stream yet,
+        // the other has accepted events but no group. Corrupt the final fact to
+        // prove all pages still receive the regular event checks.
+        redis.opsForHash().put(last.reservationKey(), "requestFingerprint", "0".repeat(64));
+        properties.setReconciliationBatch(2);
+        int checked = 0;
+        for (int i = 0; i < 6; i++) {
+            var report = reconciliationService.runBatch();
+            assertThat(report.checkedEvents()).isLessThanOrEqualTo(2);
+            checked += report.checkedEvents();
+        }
+        assertThat(checked).isEqualTo(5);
+        assertThat(redis.hasKey(SeckillRedisKeys.reservationStream(127))).isFalse();
+        assertThat(redis.opsForStream().groups(SeckillRedisKeys.reservationStream(128))).isEmpty();
+        assertThat(redis.opsForHash().get(SeckillRedisKeys.conservationCheckpoint(128), "lastCompletedQuantity"))
+                .isEqualTo("5");
+        assertThat(jdbc.queryForList("SELECT severity FROM seckill_reconciliation_issue WHERE issue_type='RESERVATION_FACT_CONFLICT' AND reservation_no=?",
+                last.reservationNo())).containsExactly(Map.of("severity", "CRITICAL"));
+    }
+
+    @Test
+    void review04PendingWrongTypeStillPropagatesRedisFailure() {
+        String stream = SeckillRedisKeys.reservationStream(129);
+        redis.opsForValue().set(stream, "not-a-stream");
+        assertThatThrownBy(() -> org.springframework.test.util.ReflectionTestUtils.invokeMethod(
+                reconciliationService, "pendingEntries", stream, 2, ""))
+                .isInstanceOf(org.springframework.dao.DataAccessException.class)
+                .hasRootCauseMessage("WRONGTYPE Operation against a key holding the wrong kind of value");
+    }
+
+    private void loadActivityWithoutConsumer(long activityId, long productId) throws Exception {
+        seedActivity(activityId, productId, 10, 10);
+        jdbc.update("UPDATE flash_sale_activity SET version=1 WHERE activity_id=?", activityId);
+        redis.delete(List.of(SeckillRedisKeys.activityMetadata(activityId), SeckillRedisKeys.availableStock(activityId)));
+        var factory = new org.mybatis.spring.SqlSessionFactoryBean();
+        factory.setDataSource(jdbc.getDataSource());
+        factory.setTypeAliasesPackage("com.real.domain.entity");
+        factory.setMapperLocations(new org.springframework.core.io.support.PathMatchingResourcePatternResolver()
+                .getResources("classpath*:com/real/domain/mapper/*.xml"));
+        var mapper = new org.mybatis.spring.SqlSessionTemplate(factory.getObject())
+                .getMapper(com.real.domain.mapper.FlashSaleActivityMapper.class);
+        var loader = new com.real.domain.service.seckill.FlashSaleActivityLoader(mapper, redis, Duration.ofDays(7));
+        assertThat(loader.load(activityId).code()).isEqualTo(com.real.domain.service.seckill.FlashSaleLoadCode.LOADED);
     }
 
     private long redisCommandCalls(String command) {

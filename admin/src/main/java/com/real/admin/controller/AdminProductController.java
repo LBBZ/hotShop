@@ -75,12 +75,12 @@ public class AdminProductController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiDtoMapper.toProductResponse(created));
     }
 
-    @Operation(summary = "Replace a Catalog Product")
+    @Operation(summary = "Edit Catalog Product metadata without changing inventory")
     @PutMapping("/{productId}")
     @PreAuthorize("hasAuthority('PERM_ADMIN_PRODUCT_WRITE')")
     public ResponseEntity<ProductResponse> updateProduct(
             @PathVariable @Min(1) Long productId,
-            @RequestBody @Valid AdminProductMutationRequest request,
+            @RequestBody @Valid com.real.common.api.dto.AdminProductEditRequest request,
             @AuthenticationPrincipal CustomUserDetails administrator,
             HttpServletRequest servletRequest
     ) {
@@ -92,6 +92,19 @@ public class AdminProductController {
                 request.reason(), servletRequest
         );
         return ResponseEntity.ok(ApiDtoMapper.toProductResponse(updated));
+    }
+
+    @Operation(summary = "Adjust inventory by a signed delta with a current version and audit reason")
+    @PostMapping("/{productId}/stock-adjustments")
+    @PreAuthorize("hasAuthority('PERM_ADMIN_PRODUCT_WRITE')")
+    public ResponseEntity<ProductResponse> adjustStock(
+            @PathVariable @Min(1) Long productId,
+            @RequestBody @Valid com.real.common.api.dto.AdminStockAdjustmentRequest request,
+            @AuthenticationPrincipal CustomUserDetails administrator,
+            HttpServletRequest servletRequest) {
+        return ResponseEntity.ok(ApiDtoMapper.toProductResponse(productAuditService.adjustStock(productId,
+                request.delta(), Long.parseLong(request.expectedVersion()), administrator.getUserId(),
+                request.reason(), servletRequest)));
     }
 
     @Operation(summary = "Soft-delete a Catalog Product")

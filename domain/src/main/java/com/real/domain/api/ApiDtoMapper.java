@@ -30,7 +30,7 @@ public final class ApiDtoMapper {
                 product.getStock(),
                 product.getCategory(),
                 product.getDescription(),
-                toInstant(product.getCreatedAt())
+                toInstant(product.getCreatedAt()), product.getVersion()
         );
     }
 

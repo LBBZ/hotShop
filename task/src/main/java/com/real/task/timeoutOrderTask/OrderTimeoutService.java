@@ -98,19 +98,19 @@ public class OrderTimeoutService {
         if (reservation == null) {
             restored = jdbc.update("""
                 UPDATE catalog_product p JOIN sales_order_item i ON i.product_id=p.product_id
-                   SET p.stock=p.stock+i.quantity,p.version=p.version+1
+                   SET p.stock=p.stock+i.quantity,p.expected_stock=p.expected_stock+i.quantity,p.version=p.version+1
                  WHERE i.order_id=?
                 """, event.orderId());
             if (restored != itemCount) {
                 throw new IllegalStateException("Inventory restoration row count mismatch");
             }
         } else {
-            restored = jdbc.update("UPDATE catalog_product SET stock=stock+?,version=version+1 WHERE product_id=?",
-                    reservation.quantity(), reservation.productId());
+            restored = jdbc.update("UPDATE catalog_product SET stock=stock+?,expected_stock=expected_stock+?,version=version+1 WHERE product_id=?",
+                    reservation.quantity(), reservation.quantity(), reservation.productId());
             int activity = jdbc.update("""
-                UPDATE flash_sale_activity SET available_stock=available_stock+?,version=version+1
+                UPDATE flash_sale_activity SET available_stock=available_stock+?,expected_available_stock=expected_available_stock+?,version=version+1
                  WHERE activity_id=? AND available_stock+?<=total_stock
-                """, reservation.quantity(), reservation.activityId(), reservation.quantity());
+                """, reservation.quantity(), reservation.quantity(), reservation.activityId(), reservation.quantity());
             int terminal = jdbc.update("""
                 UPDATE sale_reservation SET status='CANCELED',version=version+1
                  WHERE reservation_id=? AND status='ORDER_CREATED'

@@ -27,6 +27,9 @@ public record ProductResponse(
         String category,
         String description,
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
-        Instant createdAt
+        Instant createdAt,
+        @JsonSerialize(using = ToStringSerializer.class)
+        @Schema(type = "string", pattern = "^[0-9]+$", requiredMode = Schema.RequiredMode.REQUIRED)
+        Long version
 ) {
 }

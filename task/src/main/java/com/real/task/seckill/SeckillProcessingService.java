@@ -894,12 +894,12 @@ public class SeckillProcessingService {
     private void deductActivityStock(ReservationAcceptedEvent event) {
         int updated = jdbc.update("""
                 UPDATE flash_sale_activity
-                   SET available_stock = available_stock - ?,
+                   SET available_stock = available_stock - ?, expected_available_stock = expected_available_stock - ?,
                        version = version + 1
                  WHERE activity_id = ?
                    AND product_id = ?
                    AND available_stock >= ?
-                """, event.quantity(), event.activityId(), event.productId(), event.quantity());
+                """, event.quantity(), event.quantity(), event.activityId(), event.productId(), event.quantity());
         if (updated == 1) {
             return;
         }
@@ -920,11 +920,11 @@ public class SeckillProcessingService {
     private void deductCatalogStock(ReservationAcceptedEvent event) {
         int updated = jdbc.update("""
                 UPDATE catalog_product
-                   SET stock = stock - ?,
+                   SET stock = stock - ?, expected_stock = expected_stock - ?,
                        version = version + 1
                  WHERE product_id = ?
                    AND stock >= ?
-                """, event.quantity(), event.productId(), event.quantity());
+                """, event.quantity(), event.quantity(), event.productId(), event.quantity());
         if (updated == 1) {
             return;
         }

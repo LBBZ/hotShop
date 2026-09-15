@@ -15,36 +15,36 @@
     </update>
     <update id="update" parameterType="Product">
         UPDATE catalog_product
-        SET name = #{name}, price = #{price}, stock = #{stock}, category = #{category}, description = #{description}
+        SET name = #{name}, price = #{price}, category = #{category}, description = #{description}
         WHERE product_id = #{productId} AND deleted_at IS NULL
     </update>
     <update id="reduceStock" parameterType="Product">
         UPDATE catalog_product
-        SET stock = stock - #{quantity}
+        SET stock = stock - #{quantity}, expected_stock = expected_stock - #{quantity}, version = version + 1
         WHERE product_id = #{productId} AND deleted_at IS NULL
           AND #{quantity} > 0
           AND stock >= #{quantity}
     </update>
     <update id="increaseStock" parameterType="Product">
         UPDATE catalog_product
-        SET stock = stock + #{quantity}
+        SET stock = stock + #{quantity}, expected_stock = expected_stock + #{quantity}, version = version + 1
         WHERE product_id = #{productId}
           AND #{quantity} > 0
           AND deleted_at IS NULL
     </update>
 
     <select id="selectById" resultType="Product">
-        SELECT product_id, name, price, stock, category, description, created_at
+        SELECT product_id, name, price, stock, version, category, description, created_at
         FROM catalog_product
         WHERE product_id = #{productId} AND deleted_at IS NULL
     </select>
     <select id="selectAll" resultType="Product">
-        SELECT product_id, name, price, stock, category, description, created_at
+        SELECT product_id, name, price, stock, version, category, description, created_at
         FROM catalog_product
         WHERE deleted_at IS NULL
     </select>
     <select id="selectByCategory" resultType="Product">
-        SELECT product_id, name, price, stock, category, description, created_at
+        SELECT product_id, name, price, stock, version, category, description, created_at
         FROM catalog_product
         WHERE category = #{category} AND deleted_at IS NULL
     </select>
@@ -54,6 +54,7 @@
             name,
             price,
             stock,
+            version,
             category,
             description,
             created_at
@@ -80,6 +81,7 @@
             name,
             price,
             stock,
+            version,
             category,
             description,
             created_at

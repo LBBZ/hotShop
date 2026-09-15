@@ -1,7 +1,6 @@
 package com.real.domain.entity;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -9,7 +8,6 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
-@AllArgsConstructor
 @NoArgsConstructor
 @Schema(description = "商品实体")
 public class Product {
@@ -33,4 +31,10 @@ public class Product {
 
     @Schema(description = "创建时间", example = "2023-10-01T12:00:00")
     private LocalDateTime createdAt;
+    private Long version = 0L;
+    public Product(Long productId, String name, BigDecimal price, Integer stock,
+                   String category, String description, LocalDateTime createdAt) {
+        this.productId = productId; this.name = name; this.price = price; this.stock = stock;
+        this.category = category; this.description = description; this.createdAt = createdAt;
+    }
 }

@@ -11,6 +11,7 @@ public sealed interface AuditStateSummary permits
         InventoryCompensationAuditState,
         PaymentCallbackAuditState,
         AdminProductMutationAuditState,
+        StockAdjustmentAuditState,
         AdminFlashSaleActivityLoadAuditState,
         AdminOperationFailureAuditState {
     // Administrator operation summaries are separate DTOs so reasons can be audited

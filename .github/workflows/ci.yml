@@ -67,6 +67,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           & ./script/ci/tests/test_native_cleanup.ps1
+          & ./script/ci/tests/test_task19_native_preference.ps1
           & ./script/ci/tests/test_compose_cleanup_ownership.ps1
           & ./script/ci/tests/test_task19_resource_ownership.ps1
       - name: Validate workflow syntax

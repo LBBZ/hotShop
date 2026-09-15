@@ -12,6 +12,9 @@ function Assert-Task19ProjectName([string]$ProjectName) {
 
 function Invoke-Task19Docker {
     param([Parameter(Mandatory = $true)][string[]]$Arguments, [switch]$AllowFailure)
+    # Function-local: expected nonzero probes must reach our explicit exit-code
+    # policy even when the caller enables native error promotion (GitHub CI).
+    $PSNativeCommandUseErrorActionPreference = $false
     $output = @(& docker @Arguments 2>&1)
     $exitCode = $LASTEXITCODE
     if (-not $AllowFailure -and $exitCode -ne 0) { throw "Docker command failed with exit $exitCode" }

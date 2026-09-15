@@ -275,10 +275,7 @@ async def test_tool_response_removes_sensitive_values(
     token = issue_token(
         IdentityKind.DELEGATION,
         claim_overrides={
-            "scope": (
-                "catalog:read orders:self:read reservations:self:read "
-                "purchase-drafts:create"
-            )
+            "scope": ("catalog:read orders:self:read reservations:self:read purchase-drafts:create")
         },
     )
     try:
@@ -367,10 +364,7 @@ async def test_transport_failure_retries_only_safe_get_tools(
     token = issue_token(
         IdentityKind.DELEGATION,
         claim_overrides={
-            "scope": (
-                "catalog:read orders:self:read reservations:self:read "
-                "purchase-drafts:create"
-            )
+            "scope": ("catalog:read orders:self:read reservations:self:read purchase-drafts:create")
         },
     )
     try:

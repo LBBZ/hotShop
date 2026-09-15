@@ -888,14 +888,18 @@ class ReliableMessagingContainerTest {
                     json, new MockPaymentProvider(properties), properties, rabbit);
             rabbit.send(RabbitMQConfig.MOCK_CALLBACK_EXCHANGE, RabbitMQConfig.MOCK_CALLBACK_ROUTING_KEY,
                     new Message(callbackEnvelope()));
-            var connection = rabbitConnection.createConnection();
-            var channel = connection.createChannel(false);
-            GetResponse original = awaitGet(channel, RabbitMQConfig.MOCK_CALLBACK_QUEUE);
-            admin.deleteExchange(RabbitMQConfig.MOCK_CALLBACK_RETRY_EXCHANGE);
-            assertThatThrownBy(() -> consumer.consume(springMessage(original), channel))
-                    .isInstanceOf(RuntimeException.class);
-            ((ChannelProxy) channel).getTargetChannel().abort();
-            connection.close();
+            // This consumer channel is deliberately aborted to force redelivery.
+            // Keep it outside Spring's publisher/channel cache: aborting a cached
+            // target leaves a stale proxy that topology recovery can reuse.
+            try (var connection = rabbitConnection.getRabbitConnectionFactory().newConnection()) {
+                var channel = connection.createChannel();
+                GetResponse original = awaitGet(channel, RabbitMQConfig.MOCK_CALLBACK_QUEUE);
+                admin.deleteExchange(RabbitMQConfig.MOCK_CALLBACK_RETRY_EXCHANGE);
+                assertThatThrownBy(() -> consumer.consume(springMessage(original), channel))
+                        .isInstanceOf(RuntimeException.class);
+                channel.abort();
+                assertThat(channel.isOpen()).isFalse();
+            }
 
             admin.declareExchange(topology.mockCallbackRetryExchange());
             admin.declareBinding(topology.mockCallbackRetryBinding());

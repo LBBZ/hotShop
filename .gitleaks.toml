@@ -4,6 +4,16 @@ title = "HotShop gitleaks configuration"
 useDefault = true
 
 [[rules]]
+id = "generic-api-key"
+
+  [[rules.allowlists]]
+  description = "Exact deterministic reconciliation issue hash in retained red-test evidence; not a credential."
+  condition = "AND"
+  regexTarget = "secret"
+  regexes = ['''^2f692a21a1252fc75d9f7945c29094133bf7cb40e55acf4e6e3818558567b5cc$''']
+  paths = ['''^docs/quality/review-fixes-2026-09-15/ir03-ir04-before\.txt$''']
+
+[[rules]]
 id = "private-key"
 
   [[rules.allowlists]]

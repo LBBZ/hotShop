@@ -1,0 +1,35 @@
+Integration d534c86: third full verify -fae attempt; genuine response/audit cache regression plus Portal migration fixture mismatch.
+[ERROR] Tests run: 1, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 30.70 s <<< FAILURE! -- in com.real.portal.agenttools.AgentToolsAndPurchaseConfirmationIntegrationTest
+[ERROR] com.real.portal.agenttools.AgentToolsAndPurchaseConfirmationIntegrationTest -- Time elapsed: 30.70 s <<< FAILURE!
+[ERROR] Tests run: 1, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 13.74 s <<< FAILURE! -- in com.real.portal.IdentitySecurityTest
+[ERROR] com.real.portal.IdentitySecurityTest -- Time elapsed: 13.74 s <<< FAILURE!
+[ERROR] Failures:
+[ERROR]   IdentitySecurityTest.migrateAndSeed:150
+[ERROR]   AgentToolsAndPurchaseConfirmationIntegrationTest.migrateAndSeedRealDatabase:153
+[ERROR] Tests run: 62, Failures: 2, Errors: 0, Skipped: 0
+[ERROR] Tests run: 3, Failures: 2, Errors: 0, Skipped: 0, Time elapsed: 11.01 s <<< FAILURE! -- in com.real.admin.InventoryReconciliationJointContainerTest
+[ERROR] com.real.admin.InventoryReconciliationJointContainerTest.failedAdjustmentAuditRollsBackStockBalanceAndVersionTogether -- Time elapsed: 0.228 s <<< FAILURE!
+[ERROR] com.real.admin.InventoryReconciliationJointContainerTest.realAdminOrdersTimeoutsAndTwoActivityLoadsConserveInventoryAndDetectTampering -- Time elapsed: 0.125 s <<< FAILURE!
+[ERROR] Failures:
+[ERROR]   InventoryReconciliationJointContainerTest.failedAdjustmentAuditRollsBackStockBalanceAndVersionTogether:219 JSON path "stock" expected:<105> but was:<100>
+[ERROR]   InventoryReconciliationJointContainerTest.realAdminOrdersTimeoutsAndTwoActivityLoadsConserveInventoryAndDetectTampering:237 JSON path "stock" expected:<110> but was:<100>
+[ERROR] Tests run: 50, Failures: 2, Errors: 0, Skipped: 0
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.5.4:test (default-test) on project portal: There are test failures.
+[ERROR]
+[ERROR] See /workspace/portal/target/surefire-reports for the individual test results.
+[ERROR] See dump files (if any exist) [date].dump, [date]-jvmRun[N].dump and [date].dumpstream.
+[ERROR] -> [Help 1]
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.5.4:test (default-test) on project admin: There are test failures.
+[ERROR]
+[ERROR] See /workspace/admin/target/surefire-reports for the individual test results.
+[ERROR] See dump files (if any exist) [date].dump, [date]-jvmRun[N].dump and [date].dumpstream.
+[ERROR] -> [Help 1]
+[ERROR]
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR]
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException
+[ERROR]
+[ERROR] After correcting the problems, you can resume the build with the command
+[ERROR]   mvn <args> -rf :portal

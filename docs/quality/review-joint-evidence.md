@@ -29,7 +29,13 @@ docker run --rm --name hotshop-review-joint-red --mount type=bind,source=D:/Code
 
 ## 修复后绿测
 
-待联合功能版本执行后补记实际结果；此段当前不代表通过。
+### 集成发现并修正的附加缺陷
+
+主 agent 首次在合并后的 `d534c86` 执行全 reactor `verify -fae`，联合类为 **3 tests / 2 failures**：调整 +10 响应期望 110、实际 100，审计故障撤除后重提 +5 响应期望 105、实际 100。根因是 `AdminProductAuditService` 的 JDBC 调整没有清除 MyBatis 事务一级缓存，第二次 `requireProduct` 返回调整前对象，成功审计也取到旧 after 值。修复 `92f7c2d` 将该操作的前后快照均经同一 JDBC 事务查询，使用 FOR UPDATE 当前读，保留原 CAS、审计及所有库存断言；没有全局关闭 MyBatis 缓存。
+
+最初局部复跑（加 FOR UPDATE 前的同等 JDBC 读路径）得到 **3 tests / 0 failures / 1 error**，真实审计存储失败回滚测试及陈旧普通订单表单测试均通过。完整业务测试通过调整响应后，在首次对账遇到 `XPENDING NOGROUP`：新活动已由生产 loader 注册，但生产 consumer 尚未发现并创建 group。未通过在测试中提前 refresh consumer 绕开；为对账的这一合法启动窗口另补正式红绿回归及局部处理。
+
+原始失败摘要见 [首次联合失败](review-fixes-2026-09-15/integration-joint-before.txt) 和 [启动窗口错误](review-fixes-2026-09-15/integration-joint-intermediate.txt)。完整原始日志保存在集成 worktree 的 `target/review-fixes/integration-java-third-attempt.log`、`joint-cache-fix.log`。最终完整通过结果在联合修复合并后补记。
 
 ## 复验命令与资源
 

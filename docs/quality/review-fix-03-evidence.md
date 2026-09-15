@@ -89,6 +89,8 @@ REVIEW_BUDGET B=3 HGETALL=4 HMGET=3 XRANGE_COUNT_SUM=6 XRANGE_COMMANDS=2
 
 编译入口（两次已成功）：`sh ./mvnw -B -pl task -am -DskipTests test`，使用同一 Java21 容器与 Maven3.9.16 wrapper。Windows PowerShell 的 Maven `-D` 含点参数需整体引用；容器日志和业务时间采用 UTC，宿主时区 Asia/Shanghai。新增/修改文本已严格 UTF-8 解码检查，报告显式写 UTF-8/LF；证据仅清理尾部空白以通过 diff --check。
 
+集成时主 agent 实跑补丁预检发现 Windows checkout 将 `.patch` 转成 CRLF，使 `git apply --check` 报 `corrupt patch at line 62`。改回 LF 后同一基线预检通过；该证据目录新增仅约束此补丁的 `.gitattributes`，确保后续 checkout 保留可应用的 LF。未改全局 Git 配置、补丁测试内容或业务源码，未实际应用到用户原工作区。
+
 ## 资源与尚未执行范围
 
 - 本分支两轮整类 green 尝试和一轮 red 的 MySQL/Redis/Ryuk 临时容器已由 Testcontainers 删除，green runner 使用 --rm 删除。最终 `docker ps` 中仅剩其他任务的 `hotshop-ir01-http`，未操作它。

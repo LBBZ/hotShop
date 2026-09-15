@@ -612,11 +612,12 @@ class SeckillOrderReliabilityContainerTest {
         long before = redisCommandCalls("hgetall");
         var connection = redis.getConnectionFactory().getConnection();
         connection.serverCommands().setConfig("slowlog-log-slower-than", "0");
-        connection.execute("SLOWLOG", "RESET".getBytes(StandardCharsets.UTF_8));
+        var nativeCommands = (io.lettuce.core.api.async.RedisAsyncCommands<byte[], byte[]>) connection.getNativeConnection();
+        nativeCommands.slowlogReset().toCompletableFuture().join();
 
         reconciliationService.runBatch();
 
-        var log = (List<?>) connection.execute("SLOWLOG", "GET".getBytes(StandardCharsets.UTF_8), "128".getBytes(StandardCharsets.UTF_8));
+        var log = nativeCommands.slowlogGet(128).toCompletableFuture().join();
         List<List<String>> ranges = new ArrayList<>();
         for (Object item : log) {
             var entry = (List<?>) item;

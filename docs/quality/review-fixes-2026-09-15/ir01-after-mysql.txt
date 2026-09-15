@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.real.task.seckill.InventoryEditContainerTest
+-------------------------------------------------------------------------------
+Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 32.88 s -- in com.real.task.seckill.InventoryEditContainerTest

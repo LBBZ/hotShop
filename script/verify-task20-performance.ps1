@@ -424,6 +424,8 @@ function Invoke-K6Scenario([string]$Scenario, [int]$ScenarioRate, [int]$Scenario
         http5xxRatio = if (($http2xx+$http4xx+$http5xx+$httpOther) -gt 0) { [Math]::Round($http5xx / ($http2xx+$http4xx+$http5xx+$httpOther), 6) } else { 0 }
         duration = $ScenarioDuration; warmup = $Warmup; activityId = $activityId
         users = $ScenarioUsers; inventory = $ScenarioInventory; vus = $ScenarioVUs
+        identityPreparation = if ($Profile -eq 'target-5k') { 'unique-user-login-per-iteration' } else { 'setup-token-pool' }
+        throughputDenominatorSeconds = $durationSeconds
         p95Ms = $p95; p99Ms = $p99; droppedIterations = $dropped
         systemErrors = $systemErrors; checksFailed = $checksFailed; k6ExitCode = $k6Exit
         evidenceComplete = ($null -ne $k6Summary -and (Test-Path $summaryPath) -and $resourceSummary.sampleCount -gt 0)

@@ -4,6 +4,7 @@ import { check, sleep } from 'k6';
 import { Trend } from 'k6/metrics';
 import { config, tags, username } from '../lib/config.js';
 import { newIntentKey } from '../lib/identity.js';
+import { identityPool, loginIdentity } from '../lib/identity-pool.js';
 import {
   accepted, agentAttempts, agentFailures, agentRuns, assertResponse, classifyReservation, jsonHeaders, newIntents, parseJson,
   scenarioIterations,
@@ -79,6 +80,8 @@ export function setup() {
     throw new Error(`inventory refusal: ${required} new intents exceed inventory ${config.inventory}`);
   }
 
+  if (config.profile === 'target-5k') return identityPool(required);
+
   const tokens = [];
   for (let offset = 0; offset < required; offset += loginBatchSize) {
     const requests = [];
@@ -109,6 +112,23 @@ function seconds(value) {
 }
 
 function tokenAt(data, index) {
+  if (data.mode === 'iteration-login') {
+    try {
+      return loginIdentity(data, index, (identityIndex) => {
+        const response = http.post(`${config.baseUrl}/api/v1/auth/login`,
+          JSON.stringify({ username: username(identityIndex), password: config.password }),
+          { headers: { 'Content-Type': 'application/json' }, tags: tags('prepare', 'login', 'read'), redirects: 0 });
+        const body = parseJson(response);
+        if (response.status !== 200 || !body || !body.accessToken) {
+          throw new Error('iteration login failed; response intentionally omitted');
+        }
+        return body.accessToken;
+      });
+    } catch (_) {
+      check(null, { 'unique identity login succeeds': () => false });
+      exec.test.abort('identity preparation failed closed; credentials omitted');
+    }
+  }
   if (index >= data.tokens.length) throw new Error(`unique user pool exhausted at iteration ${index}`);
   return data.tokens[index];
 }
@@ -170,9 +190,9 @@ export function warmupRead() {
 }
 
 export function seckillNewIntent(data) {
-  scenarioIterations.add(1, tags(config.scenario, 'reservation-create', 'new'));
   const index = exec.scenario.iterationInTest;
   const response = reservationRequest(tokenAt(data, index), index, config.scenario, 'new');
+  scenarioIterations.add(1, tags(config.scenario, 'reservation-create', 'new'));
   const result = classifyReservation(response, config.scenario, 'new');
   check(response, {
     'new intent has no idempotency conflict': () => result.problemCode !== 'IDEMPOTENCY_KEY_CONFLICT',

@@ -32,6 +32,9 @@ foreach ($stage in @($baseline | Where-Object scenario -eq 'seckill-new-intent')
 $target = @(Get-Task20RunPlan -Profile target-5k)
 Assert-Equal $target[0].rate 5000 'Target default rate'
 Assert-Equal $target[0].users 50001 'Target pool must be rate times duration plus boundary identity'
+Assert-Equal $target[0].inventory 50001 'Target inventory stays unchanged'
+Assert-Equal $target[0].duration '10s' 'Target default duration stays unchanged'
+Assert-Equal $target[0].vus 1000 'Target default VU budget stays unchanged'
 
 $agent = @(Get-Task20RunPlan -Profile agent-isolation)
 Assert-Equal $agent[0].rate 20 'Agent-isolation transaction rate'

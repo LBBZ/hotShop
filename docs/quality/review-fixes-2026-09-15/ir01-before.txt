@@ -1,0 +1,24 @@
+-------------------------------------------------------------------------------
+Test set: com.real.task.seckill.InventoryEditContainerTest
+-------------------------------------------------------------------------------
+Tests run: 2, Failures: 2, Errors: 0, Skipped: 0, Time elapsed: 28.25 s <<< FAILURE! -- in com.real.task.seckill.InventoryEditContainerTest
+com.real.task.seckill.InventoryEditContainerTest.staleMetadataEditPreservesCommittedPurchase -- Time elapsed: 1.233 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: 
+
+expected: 99
+ but was: 100
+	at com.real.task.seckill.InventoryEditContainerTest.staleMetadataEditPreservesCommittedPurchase(InventoryEditContainerTest.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+
+com.real.task.seckill.InventoryEditContainerTest.staleMetadataEditPreservesCommittedRestoration -- Time elapsed: 0.098 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: 
+
+expected: 100
+ but was: 99
+	at com.real.task.seckill.InventoryEditContainerTest.staleMetadataEditPreservesCommittedRestoration(InventoryEditContainerTest.java:52)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+

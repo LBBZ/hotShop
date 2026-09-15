@@ -82,7 +82,7 @@ public class AdminOperationsRepository {
             java.math.BigDecimal maxPrice, Long afterId, int limit
     ) {
         StringBuilder sql = new StringBuilder("""
-                SELECT product_id,name,price,stock,category,description,created_at
+                SELECT product_id,name,price,stock,category,description,created_at,version
                   FROM catalog_product
                  WHERE deleted_at IS NULL
                 """);
@@ -101,7 +101,7 @@ public class AdminOperationsRepository {
                 rs.getLong("product_id"), rs.getString("name"),
                 rs.getBigDecimal("price").setScale(2, RoundingMode.UNNECESSARY),
                 rs.getInt("stock"), rs.getString("category"), rs.getString("description"),
-                instant(rs.getTimestamp("created_at"))
+                instant(rs.getTimestamp("created_at")), rs.getLong("version")
         ), args.toArray());
     }
 

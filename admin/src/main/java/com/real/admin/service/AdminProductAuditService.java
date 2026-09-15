@@ -26,7 +26,7 @@ import java.util.List;
 @Service
 public class AdminProductAuditService {
     private static final List<String> PRODUCT_FIELDS =
-            List.of("name", "price", "stock", "category", "description");
+            List.of("name", "price", "category", "description");
 
     private final ProductService productService;
     private final AdminProductMutationRepository mutationRepository;
@@ -55,7 +55,7 @@ public class AdminProductAuditService {
                     AuditAction.CATALOG_PRODUCT_CREATED,
                     product.getProductId(),
                     AuditResult.SUCCESS,
-                    new AdminProductMutationAuditState(PRODUCT_FIELDS, "ACTIVE", reason),
+                    new AdminProductMutationAuditState(List.of("name", "price", "stock", "category", "description"), "ACTIVE", reason),
                     request
             ));
             return created;
@@ -103,6 +103,29 @@ public class AdminProductAuditService {
                     exception,
                     request
             );
+            throw exception;
+        }
+    }
+
+    @Transactional
+    public Product adjustStock(long productId, int delta, long expectedVersion, long administratorId,
+                               String reason, HttpServletRequest request) {
+        try {
+            lockProduct(productId);
+            Product before = requireProduct(productId);
+            if (before.getVersion() != expectedVersion) {
+                throw ApiException.conflict("STOCK_ADJUSTMENT_CONFLICT", "库存已变化，请刷新当前库存和版本后重试。");
+            }
+            if (delta == 0 || mutationRepository.adjustStock(productId, delta, expectedVersion) != 1) {
+                throw ApiException.conflict("STOCK_ADJUSTMENT_INVALID", "调整数量必须非零，调整后库存必须在有效范围内。");
+            }
+            Product after = requireProduct(productId);
+            auditLogWriter.append(event(administratorId, AuditAction.CATALOG_STOCK_ADJUSTED, productId,
+                    AuditResult.SUCCESS, new com.real.common.audit.StockAdjustmentAuditState(delta,
+                            before.getStock(), after.getStock(), before.getVersion(), after.getVersion(), reason), request));
+            return after;
+        } catch (RuntimeException exception) {
+            appendFailure(administratorId, AuditAction.CATALOG_STOCK_ADJUSTED, productId, reason, exception, request);
             throw exception;
         }
     }

@@ -610,13 +610,20 @@ class SeckillOrderReliabilityContainerTest {
         consumer.refreshStreams();
         properties.setReconciliationBatch(3);
         long before = redisCommandCalls("hgetall");
+        long fieldsBefore = redisCommandCalls("hmget");
+        long membersBefore = redisCommandCalls("smembers");
+        long rangesBefore = redisCommandCalls("xrange");
         var connection = redis.getConnectionFactory().getConnection();
         connection.serverCommands().setConfig("slowlog-log-slower-than", "0");
-        connection.execute("SLOWLOG", "RESET".getBytes(StandardCharsets.UTF_8));
+        var nativeCommands = (io.lettuce.core.api.async.RedisAsyncCommands<byte[], byte[]>) connection.getNativeConnection();
+        nativeCommands.slowlogReset().toCompletableFuture().join();
 
         reconciliationService.runBatch();
 
-        var log = (List<?>) connection.execute("SLOWLOG", "GET".getBytes(StandardCharsets.UTF_8), "128".getBytes(StandardCharsets.UTF_8));
+        var log = nativeCommands.slowlogGet(128).toCompletableFuture().join();
+        assertThat(nativeCommands.slowlogLen().toCompletableFuture().join())
+                .as("Command capture must not have truncated at Redis' 128-entry slowlog limit")
+                .isLessThan(128L);
         List<List<String>> ranges = new ArrayList<>();
         for (Object item : log) {
             var entry = (List<?>) item;
@@ -625,16 +632,30 @@ class SeckillOrderReliabilityContainerTest {
             if (args.getFirst().equalsIgnoreCase("XRANGE")) ranges.add(args);
         }
         connection.serverCommands().setConfig("slowlog-log-slower-than", "10000");
-        assertThat(ranges).isNotEmpty();
+        assertThat(ranges).hasSize((int) (redisCommandCalls("xrange") - rangesBefore));
+        assertThat(ranges).anyMatch(args -> args.get(2).equals("(0-0"));
+        int returnedRowsUpperBound = 0;
         for (List<String> args : ranges) {
             int count = -1;
             for (int i = 0; i < args.size(); i++) if (args.get(i).equalsIgnoreCase("COUNT")) count = i;
             assertThat(count).as("Every actual XRANGE, including Lua, must carry COUNT: %s", args).isGreaterThan(0);
-            assertThat(Integer.parseInt(args.get(count + 1))).isLessThanOrEqualTo(3);
+            int limit = Integer.parseInt(args.get(count + 1));
+            assertThat(limit).isLessThanOrEqualTo(properties.getReconciliationBatch());
+            returnedRowsUpperBound += limit;
         }
+        int budget = properties.getReconciliationBatch();
+        // Sum all captured COUNTs, including the Lua page: actual returned rows
+        // cannot exceed this conservative bound. Repeating many bounded commands
+        // would fail even if each individual command used a legal COUNT.
+        assertThat(returnedRowsUpperBound).isLessThanOrEqualTo(4 * budget);
         assertThat(redisCommandCalls("hgetall") - before)
-                .as("Actual reservation reads must be bounded by the configured page, independently of history")
-                .isLessThanOrEqualTo(16);
+                .as("Actual reservation reads must satisfy event + PEL pages plus one metadata hash")
+                .isLessThanOrEqualTo(2L * budget + 1);
+        assertThat(redisCommandCalls("hmget") - fieldsBefore).isLessThanOrEqualTo(budget);
+        assertThat(redisCommandCalls("smembers") - membersBefore).isZero();
+        System.out.printf("REVIEW_BUDGET B=%d HGETALL=%d HMGET=%d XRANGE_COUNT_SUM=%d XRANGE_COMMANDS=%d%n",
+                budget, redisCommandCalls("hgetall") - before, redisCommandCalls("hmget") - fieldsBefore,
+                returnedRowsUpperBound, ranges.size());
     }
 
     @Test
@@ -661,7 +682,7 @@ class SeckillOrderReliabilityContainerTest {
             long hashes = redisCommandCalls("hgetall");
             long fields = redisCommandCalls("hmget");
             restarted.runBatch();
-            assertThat(redisCommandCalls("hgetall") - hashes).isLessThanOrEqualTo(16);
+            assertThat(redisCommandCalls("hgetall") - hashes).isLessThanOrEqualTo(2L * properties.getReconciliationBatch() + 1);
             assertThat(redisCommandCalls("hmget") - fields).isLessThanOrEqualTo(3);
         }
         assertThat(persistedCursor).isNotEqualTo("0-0");

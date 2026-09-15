@@ -1,0 +1,7 @@
+-------------------------------------------------------------------------------
+Test set: com.real.task.seckill.SeckillOrderReliabilityContainerTest
+-------------------------------------------------------------------------------
+Tests run: 21, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 120.9 s -- in com.real.task.seckill.SeckillOrderReliabilityContainerTest
+
+REVIEW_BUDGET B=3 HGETALL=4 HMGET=3 XRANGE_COUNT_SUM=6 XRANGE_COMMANDS=2
+BUILD SUCCESS; 2026-09-15T14:52:20Z; total 02:35; tested HEAD 9247ae4

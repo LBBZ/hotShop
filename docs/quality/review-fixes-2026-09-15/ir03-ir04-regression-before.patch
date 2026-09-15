@@ -1,0 +1,63 @@
+--- a/task/src/test/java/com/real/task/seckill/SeckillOrderReliabilityContainerTest.java
++++ b/task/src/test/java/com/real/task/seckill/SeckillOrderReliabilityContainerTest.java
+@@ -106,6 +106,7 @@
+     void resetPersistentState() {
+         failpoint.clear();
+         properties.setReconciliationDryRun(true);
++        properties.setReconciliationBatch(200);
+         properties.setAutoRepair(false);
+         redis.getConnectionFactory().getConnection().serverCommands().flushDb();
+         await().atMost(Duration.ofSeconds(30)).ignoreExceptions().untilAsserted(() -> {
+@@ -582,6 +583,52 @@
+         assertThat(redis.opsForValue().get(SeckillRedisKeys.availableStock(111))).isEqualTo("77");
+         assertThat(count("sales_order")).isEqualTo(1);
+         assertThat(count("outbox_event")).isEqualTo(2);
++    }
++
++    @Test
++    void review03OrdinaryPurchaseAfterActivityLoadDoesNotRaiseConservationIssue() throws Exception {
++        seedActivity(121, 221, 100, 100);
++        redis.opsForSet().add(SeckillRedisKeys.reservationStreamRegistry(), SeckillRedisKeys.reservationStream(121));
++        consumer.refreshStreams();
++        assertThat(productMapper().reduceStock(221L, 1)).isEqualTo(1);
++
++        reconciliationService.runBatch();
++
++        assertThat(jdbc.queryForList("SELECT * FROM seckill_reconciliation_issue WHERE issue_type = 'MYSQL_STOCK_CONSERVATION_VIOLATION'"))
++                .as("Ordinary purchase must be inside product inventory conservation boundary").isEmpty();
++    }
++
++    @Test
++    void review04HistoricalReservationsRespectActualRedisReadBudget() {
++        seedActivity(122, 222, 100, 100);
++        for (int i = 0; i < 37; i++) {
++            appendAccepted(accepted(12000 + i, 122, 222, 22000 + i, 1, "1.00"));
++        }
++        consumer.refreshStreams();
++        properties.setReconciliationBatch(3);
++        long before = redisCommandCalls("hgetall");
++
++        reconciliationService.runBatch();
++
++        assertThat(redisCommandCalls("hgetall") - before)
++                .as("Actual reservation reads must be bounded by the configured page, independently of history")
++                .isLessThanOrEqualTo(16);
++    }
++
++    private long redisCommandCalls(String command) {
++        String stats = redis.getConnectionFactory().getConnection().serverCommands()
++                .info("commandstats").getProperty("cmdstat_" + command, "calls=0");
++        return Long.parseLong(stats.substring(6).split(",")[0]);
++    }
++
++    private com.real.domain.mapper.ProductMapper productMapper() throws Exception {
++        var factory = new org.mybatis.spring.SqlSessionFactoryBean();
++        factory.setDataSource(jdbc.getDataSource());
++        factory.setTypeAliasesPackage("com.real.domain.entity");
++        factory.setMapperLocations(new org.springframework.core.io.support.PathMatchingResourcePatternResolver()
++                .getResources("classpath*:com/real/domain/mapper/*.xml"));
++        return new org.mybatis.spring.SqlSessionTemplate(factory.getObject())
++                .getMapper(com.real.domain.mapper.ProductMapper.class);
+     }
+
+     private void seedActivity(

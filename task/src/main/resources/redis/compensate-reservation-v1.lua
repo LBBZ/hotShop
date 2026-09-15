@@ -1,5 +1,6 @@
 -- Atomically compensates one accepted Reservation exactly once.
 -- KEYS: 1 Reservation hash, 2 available stock string, 3 User reservation string
+-- KEYS: 4 activity metadata (inventory revision fence)
 -- ARGV: reservationNo, activityId, userId, quantity, compensationId,
 --       reasonCode, compensatedAtMs
 
@@ -14,7 +15,8 @@ end
 
 if not valid_type(KEYS[1], 'hash', false)
         or not valid_type(KEYS[2], 'string', false)
-        or not valid_type(KEYS[3], 'string', true) then
+        or not valid_type(KEYS[3], 'string', true)
+        or not valid_type(KEYS[4], 'hash', false) then
     return result('INVALID_TYPE')
 end
 
@@ -60,6 +62,11 @@ end
 local quantity = tonumber(ARGV[4])
 if not quantity or quantity <= 0 then
     return result('FACT_CONFLICT')
+end
+
+local revision = redis.pcall('HINCRBY', KEYS[4], 'inventoryRevision', 1)
+if type(revision) == 'table' and revision['err'] then
+    return result('STORAGE_ERROR')
 end
 
 -- Allocate every final hash field before touching stock. If Redis is out of

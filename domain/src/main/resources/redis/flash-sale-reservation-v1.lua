@@ -124,6 +124,13 @@ if reservationRetention == nil or reservationRetention <= 0
 end
 local reservationTtl = math.floor((endsAtMs - nowMs + 999) / 1000) + reservationRetention
 
+-- Fence reconciliation before any effective reservation mutation. A failed
+-- attempt may also advance the revision; that only restarts an audit scan.
+local revision = redis.pcall('HINCRBY', KEYS[1], 'inventoryRevision', 1)
+if type(revision) == 'table' and revision['err'] then
+    return result('INTERNAL_STATE_INVALID')
+end
+
 local reservationWrite = redis.pcall(
     'HSET', KEYS[5],
     'schemaVersion', '1',

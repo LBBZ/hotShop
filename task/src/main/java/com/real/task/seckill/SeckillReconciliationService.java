@@ -11,17 +11,21 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 @Service
 public class SeckillReconciliationService {
+    private static final DefaultRedisScript<List> CONSERVATION_PAGE = new DefaultRedisScript<>();
+    static {
+        CONSERVATION_PAGE.setLocation(new ClassPathResource("redis/reconcile-conservation-page-v1.lua"));
+        CONSERVATION_PAGE.setResultType(List.class);
+    }
     private static final String REGISTRY_CHECKPOINT =
             "reservation-stream-registry";
     private static final Set<String> EFFECTIVE_REDIS_STATUSES =
@@ -69,29 +73,35 @@ public class SeckillReconciliationService {
     }
 
     public ReconciliationReport runBatch() {
-        Set<String> registered = redis.opsForSet().members(SeckillRedisKeys.reservationStreamRegistry());
-        List<String> streams = registered == null
-                ? List.of()
-                : registered.stream()
-                        .filter(key -> SeckillRedisKeys.activityIdFromReservationStream(key) != null)
-                        .sorted(Comparator.naturalOrder())
-                        .toList();
-        List<String> orderedStreams = rotateAfter(streams, namedCheckpoint(REGISTRY_CHECKPOINT));
+        // One activity per invocation: even an empty/invalid stream consumes its
+        // turn. Lexicographic keyset discovery is independent of registry size.
+        String index = SeckillRedisKeys.reconciliationStreamIndex();
+        long indexed = java.util.Objects.requireNonNullElse(redis.opsForZSet().zCard(index), 0L);
+        long registered = java.util.Objects.requireNonNullElse(
+                redis.opsForSet().size(SeckillRedisKeys.reservationStreamRegistry()), 0L);
         int checked = 0;
         int findings = 0;
         int repairs = 0;
-        for (String stream : orderedStreams) {
-            StreamResult result = reconcileStream(
-                    stream,
-                    Math.max(0, properties.getReconciliationBatch() - checked)
-            );
-            checked += result.checked();
+        if (indexed != registered) {
+            finding("RECONCILIATION_INDEX_UPGRADE_REQUIRED", "CRITICAL", null, null, null, null,
+                    Map.of("schemaVersion", 1, "registeredStreams", registered,
+                            "indexedStreams", indexed));
+            findings++;
+        }
+        String after = namedCheckpoint(REGISTRY_CHECKPOINT);
+        Range<String> range = after.isBlank() ? Range.unbounded()
+                : Range.from(Range.Bound.exclusive(after)).to(Range.Bound.unbounded());
+        Set<String> selected = redis.opsForZSet().rangeByLex(index, range, Limit.limit().count(1));
+        if ((selected == null || selected.isEmpty()) && !after.isBlank()) {
+            selected = redis.opsForZSet().rangeByLex(index, Range.unbounded(), Limit.limit().count(1));
+        }
+        if (selected != null && !selected.isEmpty()) {
+            String stream = selected.iterator().next();
+            StreamResult result = reconcileStream(stream, properties.getReconciliationBatch());
+            checked = result.checked();
             findings += result.findings();
             repairs += result.repairs();
             updateNamedCheckpoint(REGISTRY_CHECKPOINT, stream);
-            if (checked >= properties.getReconciliationBatch()) {
-                break;
-            }
         }
         MysqlReverseResult mysqlReverse =
                 reconcileMysqlFacts(properties.getReconciliationBatch());
@@ -101,7 +111,7 @@ public class SeckillReconciliationService {
             metrics.reconciliationFindings().increment(findings);
         }
         return new ReconciliationReport(
-                streams.size(),
+                (int) Math.min(Integer.MAX_VALUE, indexed),
                 checked,
                 findings,
                 repairs,
@@ -114,21 +124,23 @@ public class SeckillReconciliationService {
         long cursor = parseLong(namedCheckpoint("mysql-seckill-reservations"));
         List<Map<String, Object>> reservations = jdbc.queryForList("""
                 SELECT r.reservation_id, r.reservation_no, r.activity_id, r.status,
-                       r.order_id,
+                       r.order_id, r.request_fingerprint,
                        COUNT(DISTINCT o.order_id) AS order_count,
                        COUNT(DISTINCT i.order_item_id) AS item_count,
-                       COUNT(DISTINCT p.processing_id) AS processing_count
-                  FROM sale_reservation r
+                       EXISTS(SELECT 1 FROM seckill_event_processing p
+                               WHERE p.reservation_no = r.reservation_no) AS processing_count
+                  FROM (SELECT reservation_id, reservation_no, activity_id, status, order_id, request_fingerprint
+                          FROM sale_reservation
+                         WHERE reservation_id > ?
+                         ORDER BY reservation_id LIMIT ?) r
                   LEFT JOIN sales_order o ON o.reservation_id = r.reservation_id
-                  LEFT JOIN sales_order_item i ON i.order_id = o.order_id
-                  LEFT JOIN seckill_event_processing p
-                    ON p.reservation_no = r.reservation_no
-                 WHERE r.reservation_id > ?
-                   AND r.request_fingerprint IS NOT NULL
+                  LEFT JOIN LATERAL (
+                       SELECT si.order_item_id FROM sales_order_item si
+                        WHERE si.order_id = o.order_id LIMIT 2
+                  ) i ON TRUE
                  GROUP BY r.reservation_id, r.reservation_no, r.activity_id,
-                          r.status, r.order_id
+                          r.status, r.order_id, r.request_fingerprint
                  ORDER BY r.reservation_id
-                 LIMIT ?
                 """, cursor, batchSize);
         if (reservations.isEmpty() && cursor > 0) {
             updateNamedCheckpoint("mysql-seckill-reservations", "0");
@@ -138,13 +150,17 @@ public class SeckillReconciliationService {
         int findings = 0;
         for (Map<String, Object> row : reservations) {
             long reservationId = ((Number) row.get("reservation_id")).longValue();
+            if (row.get("request_fingerprint") == null) {
+                updateNamedCheckpoint("mysql-seckill-reservations", Long.toString(reservationId));
+                continue;
+            }
             String reservationNo = String.valueOf(row.get("reservation_no"));
             Long activityId = ((Number) row.get("activity_id")).longValue();
             String status = String.valueOf(row.get("status"));
             long orderCount = ((Number) row.get("order_count")).longValue();
             long itemCount = ((Number) row.get("item_count")).longValue();
             long processingCount = ((Number) row.get("processing_count")).longValue();
-            boolean orderFactsValid = "ORDER_CREATED".equals(status)
+            boolean orderFactsValid = Set.of("ORDER_CREATED", "CANCELED").contains(status)
                     ? orderCount == 1 && itemCount == 1 && row.get("order_id") != null
                     : orderCount == 0 && row.get("order_id") == null;
             if (!orderFactsValid) {
@@ -159,7 +175,7 @@ public class SeckillReconciliationService {
                                 "schemaVersion", 1,
                                 "reservationStatus", status,
                                 "orderCount", orderCount,
-                                "itemCount", itemCount
+                                "itemCountUpToTwo", itemCount
                         )
                 );
                 findings++;
@@ -178,7 +194,7 @@ public class SeckillReconciliationService {
                         )
                 );
                 findings++;
-            } else if (!hasMatchingStreamEvidence(reservationNo)) {
+            } else if (streamEvidence(reservationId, reservationNo) == EvidenceResult.MISSING) {
                 finding(
                         "MYSQL_RESERVATION_WITHOUT_STREAM_EVIDENCE",
                         "CRITICAL",
@@ -199,63 +215,64 @@ public class SeckillReconciliationService {
             );
         }
 
-        Long orphanOrders = jdbc.queryForObject("""
-                SELECT COUNT(*)
+        // Reverse orphan audit also has a keyset cursor; never COUNT all orders.
+        String orderCursor = namedCheckpoint("mysql-seckill-orphan-orders");
+        List<Map<String, Object>> orderPage = jdbc.queryForList("""
+                SELECT o.order_id, o.reservation_id, r.reservation_id AS matched_reservation_id
                   FROM sales_order o
-                  LEFT JOIN sale_reservation r
-                    ON r.reservation_id = o.reservation_id
-                 WHERE o.reservation_id IS NOT NULL
-                   AND r.reservation_id IS NULL
-                """, Long.class);
-        if (orphanOrders != null && orphanOrders > 0) {
-            finding(
-                    "MYSQL_ORDER_WITHOUT_RESERVATION",
-                    "CRITICAL",
-                    null,
-                    null,
-                    null,
-                    null,
-                    Map.of(
-                            "schemaVersion", 1,
-                            "orphanOrderCount", orphanOrders
-                    )
-            );
-            findings++;
+                  LEFT JOIN sale_reservation r ON r.reservation_id = o.reservation_id
+                 WHERE o.order_id > ?
+                 ORDER BY o.order_id LIMIT ?
+                """, orderCursor, batchSize);
+        for (Map<String, Object> order : orderPage) {
+            if (order.get("reservation_id") != null && order.get("matched_reservation_id") == null) {
+                finding("MYSQL_ORDER_WITHOUT_RESERVATION", "CRITICAL", null, null, null, null,
+                        Map.of("schemaVersion", 1, "orderId", String.valueOf(order.get("order_id"))));
+                findings++;
+            }
+            updateNamedCheckpoint("mysql-seckill-orphan-orders", String.valueOf(order.get("order_id")));
         }
+        if (orderPage.isEmpty()) updateNamedCheckpoint("mysql-seckill-orphan-orders", "");
         return new MysqlReverseResult(findings, 0);
     }
 
-    private boolean hasMatchingStreamEvidence(String reservationNo) {
+    private EvidenceResult streamEvidence(long reservationId, String reservationNo) {
+        // Processing stream references are immutable in the production ledger.
+        // Inspect one candidate per reservation per round. Missing evidence is
+        // reported only after the entire candidate range was exhausted, never
+        // merely because a matching entry did not fit in this invocation.
+        String name = "stream-evidence-" + reservationId;
+        long cursor = parseLong(namedCheckpoint(name));
         List<Map<String, Object>> ledgers = jdbc.queryForList("""
-                SELECT stream_key, stream_entry_id
+                SELECT processing_id, stream_key, stream_entry_id
                   FROM seckill_event_processing
-                 WHERE reservation_no = ?
-                 ORDER BY processing_id
-                 LIMIT ?
-                """, reservationNo, properties.getReconciliationBatch());
-        for (Map<String, Object> ledger : ledgers) {
-            String stream = String.valueOf(ledger.get("stream_key"));
-            String entryId = String.valueOf(ledger.get("stream_entry_id"));
-            if (SeckillRedisKeys.activityIdFromReservationStream(stream) == null) {
-                continue;
-            }
-            List<MapRecord<String, Object, Object>> records =
-                    redis.opsForStream().range(stream, Range.closed(entryId, entryId));
+                 WHERE reservation_no = ? AND processing_id > ?
+                 ORDER BY processing_id LIMIT 1
+                """, reservationNo, cursor);
+        if (ledgers.isEmpty()) {
+            updateNamedCheckpoint(name, "0");
+            return EvidenceResult.MISSING;
+        }
+        Map<String, Object> ledger = ledgers.getFirst();
+        String stream = String.valueOf(ledger.get("stream_key"));
+        String entryId = String.valueOf(ledger.get("stream_entry_id"));
+        if (SeckillRedisKeys.activityIdFromReservationStream(stream) != null) {
+            List<MapRecord<String, Object, Object>> records = redis.opsForStream().range(
+                    stream, Range.closed(entryId, entryId), Limit.limit().count(1));
             if (records != null && records.size() == 1) {
-                ReservationAcceptedEvent.ParseResult parsed =
-                        ReservationAcceptedEvent.parse(
-                                stream,
-                                entryId,
-                                records.get(0).getValue()
-                        );
-                if (parsed.valid()
-                        && reservationNo.equals(parsed.event().reservationNo())) {
-                    return true;
+                ReservationAcceptedEvent.ParseResult parsed = ReservationAcceptedEvent.parse(
+                        stream, entryId, records.getFirst().getValue());
+                if (parsed.valid() && reservationNo.equals(parsed.event().reservationNo())) {
+                    updateNamedCheckpoint(name, "0");
+                    return EvidenceResult.MATCH;
                 }
             }
         }
-        return false;
+        updateNamedCheckpoint(name, String.valueOf(ledger.get("processing_id")));
+        return EvidenceResult.IN_PROGRESS;
     }
+
+    private enum EvidenceResult { MATCH, MISSING, IN_PROGRESS }
 
     private StreamResult reconcileStream(String stream, int remainingBatch) {
         if (remainingBatch <= 0) {
@@ -287,11 +304,6 @@ public class SeckillReconciliationService {
             return new StreamResult(0, 1, 0);
         }
 
-        List<MapRecord<String, Object, Object>> all =
-                redis.opsForStream().range(stream, Range.unbounded());
-        if (all == null) {
-            all = List.of();
-        }
         String checkpoint = checkpoint(stream);
         Range<String> remaining = "0-0".equals(checkpoint)
                 ? Range.unbounded()
@@ -306,7 +318,7 @@ public class SeckillReconciliationService {
         if (batch == null) {
             batch = List.of();
         }
-        if (batch.isEmpty() && !all.isEmpty() && !"0-0".equals(checkpoint)) {
+        if (batch.isEmpty() && !"0-0".equals(checkpoint)) {
             updateCheckpoint(stream, "0-0");
             batch = redis.opsForStream().range(
                     stream,
@@ -349,7 +361,7 @@ public class SeckillReconciliationService {
             checkedCheckpoint(stream, record.getId().getValue());
         }
 
-        ConservationResult conservation = conservation(activityId, stream, metadata, stockRaw, all);
+        ConservationResult conservation = conservation(activityId, stream);
         findings += conservation.findings();
         repairs += conservation.repairs();
         PendingResult pending = terminalPending(stream);
@@ -387,7 +399,7 @@ public class SeckillReconciliationService {
         );
         boolean slotExpected = EFFECTIVE_REDIS_STATUSES.contains(proof.status());
         if ((slotExpected && !event.reservationNo().equals(userReservation))
-                || (!slotExpected && userReservation != null)) {
+                || (!slotExpected && event.reservationNo().equals(userReservation))) {
             finding(
                     "REDIS_USER_SLOT_CONFLICT",
                     "CRITICAL",
@@ -552,125 +564,66 @@ public class SeckillReconciliationService {
         return new EventResult(findings, repairs);
     }
 
-    private ConservationResult conservation(
-            long activityId,
-            String stream,
-            Map<Object, Object> metadata,
-            String stockRaw,
-            List<MapRecord<String, Object, Object>> all
-    ) {
-        long effectiveQuantity = 0;
-        Set<String> reservations = new HashSet<>();
+    private ConservationResult conservation(long activityId, String stream) {
         int findings = 0;
-        for (MapRecord<String, Object, Object> record : all) {
-            ReservationAcceptedEvent.ParseResult parsed =
-                    ReservationAcceptedEvent.parse(stream, record.getId().getValue(), record.getValue());
-            if (!parsed.valid() || !reservations.add(parsed.event().reservationNo())) {
-                continue;
-            }
-            Map<Object, Object> reservation = redis.opsForHash().entries(
-                    SeckillRedisKeys.reservation(
-                            activityId,
-                            parsed.event().reservationNo()
-                    )
-            );
-            String status = value(reservation, "status");
-            if (EFFECTIVE_REDIS_STATUSES.contains(status)) {
-                effectiveQuantity += parsed.event().quantity();
-            }
-            if ("COMPENSATED".equals(status)
-                    && (!"1".equals(value(reservation, "stockRestored"))
-                    || value(reservation, "compensationId") == null)) {
-                finding(
-                        "COMPENSATION_EVIDENCE_INVALID",
-                        "CRITICAL",
-                        activityId,
-                        parsed.event().reservationNo(),
-                        stream,
-                        record.getId().getValue(),
-                        Map.of(
-                                "schemaVersion", 1,
-                                "stockRestored", value(reservation, "stockRestored") != null,
-                                "compensationIdPresent",
-                                value(reservation, "compensationId") != null
-                        )
-                );
+        List<?> page = redis.execute(CONSERVATION_PAGE,
+                List.of(SeckillRedisKeys.activityMetadata(activityId),
+                        SeckillRedisKeys.availableStock(activityId), stream,
+                        SeckillRedisKeys.conservationCheckpoint(activityId)),
+                Integer.toString(properties.getReconciliationBatch()),
+                SeckillRedisKeys.reservation(activityId, ""));
+        if (page == null || page.size() != 8) throw new IllegalStateException("Invalid conservation page");
+        updateNamedCheckpoint("conservation-" + activityId,
+                page.get(0) + ";fence=" + page.get(6) + ";scanned=" + page.get(1)
+                        + ";restarted=" + page.get(7));
+        // IN_PROGRESS is persisted and observable; it is never a successful audit.
+        // A busy activity may restart until a complete unchanged writer epoch fits.
+        if ("COMPLETE".equals(page.get(0).toString())) {
+            long quantity = number(page.get(2).toString());
+            long initial = number(page.get(3).toString());
+            long current = number(page.get(4).toString());
+            long invalid = number(page.get(5).toString());
+            if (invalid > 0 || !nonNegative(page.get(3).toString())
+                    || !nonNegative(page.get(4).toString()) || initial - current != quantity) {
+                finding("REDIS_STOCK_CONSERVATION_VIOLATION", "CRITICAL", activityId,
+                        null, stream, null, Map.of("schemaVersion", 2,
+                                "initialAvailableStock", initial, "currentStock", current,
+                                "effectiveReservedQuantity", quantity, "invalidFacts", invalid,
+                                "inventoryFence", page.get(6).toString(),
+                                "equationHolds", initial - current == quantity));
                 findings++;
             }
         }
-        long initial = number(value(metadata, "initialAvailableStock"));
-        long current = number(stockRaw);
-        if (current < 0 || initial - current != effectiveQuantity) {
-            finding(
-                    "REDIS_STOCK_CONSERVATION_VIOLATION",
-                    "CRITICAL",
-                    activityId,
-                    null,
-                    stream,
-                    null,
-                    Map.of(
-                            "schemaVersion", 1,
-                            "initialAvailableStock", initial,
-                            "currentStock", current,
-                            "effectiveReservedQuantity", effectiveQuantity,
-                            "equationHolds", initial - current == effectiveQuantity
-                    )
-            );
-            findings++;
-        }
 
-        List<Map<String, Object>> mysqlStocks = jdbc.queryForList("""
-                SELECT a.available_stock, a.product_id, p.stock
+        // Product inventory and activity quota each have their own migration-time
+        // accounting baseline. Every authorized stock delta updates the matching
+        // expected balance in the same row/transaction. Read both together: no
+        // activity-load snapshot, historical SUM, or cross-page MySQL snapshot.
+        List<Map<String, Object>> stocks = jdbc.queryForList("""
+                SELECT a.available_stock, a.expected_available_stock,
+                       p.stock, p.expected_stock, a.product_id
                   FROM flash_sale_activity a
                   JOIN catalog_product p ON p.product_id = a.product_id
                  WHERE a.activity_id = ?
                 """, activityId);
-        if (mysqlStocks.size() == 1) {
-            long productId = ((Number) mysqlStocks.get(0).get("product_id")).longValue();
-            Long activitySuccessfulQuantity = jdbc.queryForObject("""
-                    SELECT COALESCE(SUM(r.quantity), 0)
-                      FROM sale_reservation r
-                      JOIN sales_order o ON o.reservation_id = r.reservation_id
-                     WHERE r.activity_id = ?
-                       AND r.status = 'ORDER_CREATED'
-                    """, Long.class, activityId);
-            Long productSuccessfulQuantity = jdbc.queryForObject("""
-                    SELECT COALESCE(SUM(r.quantity), 0)
-                      FROM sale_reservation r
-                      JOIN sales_order o ON o.reservation_id = r.reservation_id
-                     WHERE r.product_id = ?
-                       AND r.status = 'ORDER_CREATED'
-                    """, Long.class, productId);
-            long activitySuccessful =
-                    activitySuccessfulQuantity == null ? 0 : activitySuccessfulQuantity;
-            long productSuccessful =
-                    productSuccessfulQuantity == null ? 0 : productSuccessfulQuantity;
-            long activityStock = ((Number) mysqlStocks.get(0).get("available_stock")).longValue();
-            long initialCatalog = number(value(metadata, "initialCatalogStock"));
-            long catalogStock = ((Number) mysqlStocks.get(0).get("stock")).longValue();
-            boolean activityHolds = activityStock == initial - activitySuccessful;
-            boolean catalogHolds =
-                    initialCatalog == 0 || catalogStock == initialCatalog - productSuccessful;
-            if (!activityHolds || !catalogHolds) {
-                finding(
-                        "MYSQL_STOCK_CONSERVATION_VIOLATION",
-                        "CRITICAL",
-                        activityId,
-                        null,
-                        stream,
-                        null,
-                        Map.of(
-                                "schemaVersion", 1,
-                                "initialActivityStock", initial,
-                                "activityStock", activityStock,
-                                "initialCatalogStock", initialCatalog,
-                                "catalogStock", catalogStock,
-                                "activitySuccessfulQuantity", activitySuccessful,
-                                "productSuccessfulQuantity", productSuccessful,
-                                "activityEquationHolds", activityHolds,
-                                "catalogEquationHolds", catalogHolds
-                        )
-                );
+        if (stocks.isEmpty()) {
+            finding("MYSQL_ACTIVITY_FACT_MISSING", "CRITICAL", activityId, null, stream, null,
+                    Map.of("schemaVersion", 1, "activityId", activityId));
+            findings++;
+        } else {
+            Map<String, Object> row = stocks.getFirst();
+            long activityStock = ((Number) row.get("available_stock")).longValue();
+            long activityExpected = ((Number) row.get("expected_available_stock")).longValue();
+            long stock = ((Number) row.get("stock")).longValue();
+            long expected = ((Number) row.get("expected_stock")).longValue();
+            if (stock != expected || activityStock != activityExpected) {
+                finding("MYSQL_STOCK_CONSERVATION_VIOLATION", "CRITICAL", activityId,
+                        null, stream, null, Map.of("schemaVersion", 2,
+                                "productId", row.get("product_id"),
+                                "catalogStock", stock, "expectedCatalogStock", expected,
+                                "activityStock", activityStock, "expectedActivityStock", activityExpected,
+                                "catalogEquationHolds", stock == expected,
+                                "activityEquationHolds", activityStock == activityExpected));
                 findings++;
             }
         }
@@ -678,10 +631,14 @@ public class SeckillReconciliationService {
     }
 
     private PendingResult terminalPending(String stream) {
-        List<PendingEntry> pending = pendingEntries(stream, properties.getReconciliationBatch());
+        String pendingName = "pending-" + SeckillRedisKeys.activityIdFromReservationStream(stream);
+        String pendingCursor = namedCheckpoint(pendingName);
+        List<PendingEntry> pending = pendingEntries(stream, properties.getReconciliationBatch(), pendingCursor);
+        if (pending.isEmpty()) updateNamedCheckpoint(pendingName, "");
         int findings = 0;
         int repairs = 0;
         for (PendingEntry entry : pending) {
+            updateNamedCheckpoint(pendingName, entry.entryId());
             List<Map<String, Object>> rows = jdbc.queryForList("""
                     SELECT status, payload_hash
                       FROM seckill_event_processing
@@ -736,7 +693,7 @@ public class SeckillReconciliationService {
             return true;
         }
         List<MapRecord<String, Object, Object>> records =
-                redis.opsForStream().range(stream, Range.closed(entryId, entryId));
+                redis.opsForStream().range(stream, Range.closed(entryId, entryId), Limit.limit().count(1));
         if (records == null || records.size() != 1) {
             return false;
         }
@@ -757,11 +714,12 @@ public class SeckillReconciliationService {
                 && "COMPENSATED".equals(proof.status())));
     }
 
-    private List<PendingEntry> pendingEntries(String stream, int count) {
+    private List<PendingEntry> pendingEntries(String stream, int count, String cursor) {
         PendingMessages pending = redis.opsForStream().pending(
                 stream,
                 properties.getGroupName(),
-                Range.unbounded(),
+                cursor.isBlank() ? Range.unbounded()
+                        : Range.from(Range.Bound.exclusive(cursor)).to(Range.Bound.unbounded()),
                 count
         );
         List<PendingEntry> result = new ArrayList<>();
@@ -837,20 +795,6 @@ public class SeckillReconciliationService {
     private String checkpointName(String stream) {
         Long activityId = SeckillRedisKeys.activityIdFromReservationStream(stream);
         return "reservation-stream-" + activityId;
-    }
-
-    private static List<String> rotateAfter(List<String> streams, String previous) {
-        if (streams.isEmpty() || previous == null || previous.isBlank()) {
-            return streams;
-        }
-        int index = streams.indexOf(previous);
-        if (index < 0 || index == streams.size() - 1) {
-            return streams;
-        }
-        List<String> rotated = new ArrayList<>(streams.size());
-        rotated.addAll(streams.subList(index + 1, streams.size()));
-        rotated.addAll(streams.subList(0, index + 1));
-        return List.copyOf(rotated);
     }
 
     private boolean repairEnabled() {

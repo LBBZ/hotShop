@@ -21,6 +21,9 @@ if current_status ~= 'ORDER_CREATED' or current_order ~= ARGV[2]
 end
 local current_stock = tonumber(redis.call('GET', stock))
 if current_stock == nil then return {'STOCK_INVALID'} end
+if redis.call('TYPE', KEYS[4]).ok ~= 'hash' then return {'INVALID_TYPE'} end
+local revision = redis.pcall('HINCRBY', KEYS[4], 'inventoryRevision', 1)
+if type(revision) == 'table' and revision['err'] then return {'STOCK_INVALID'} end
 local next_stock = current_stock + tonumber(ARGV[6])
 redis.call('SET', stock, tostring(next_stock), 'KEEPTTL')
 redis.call('HSET', reservation, 'status', 'PAYMENT_EXPIRED',

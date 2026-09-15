@@ -38,6 +38,15 @@ public final class SeckillRedisKeys {
         return PREFIX + ":registry:reservation-streams";
     }
 
+    /** Lexicographic index for bounded reconciliation discovery; consumer SET remains intact. */
+    public static String reconciliationStreamIndex() {
+        return PREFIX + ":registry:reconciliation-streams";
+    }
+
+    public static String conservationCheckpoint(long activityId) {
+        return activity(activityId) + ":reconciliation:conservation";
+    }
+
     public static String loadStagingMetadata(long activityId, String loadId) {
         return activity(activityId) + ":load:" + loadId + ":meta";
     }

@@ -20,7 +20,8 @@ if not valid_type(KEYS[1], 'hash', true)
         or not valid_type(KEYS[3], 'stream', true)
         or not valid_type(KEYS[4], 'hash', true)
         or not valid_type(KEYS[5], 'string', true)
-        or not valid_type(KEYS[6], 'set', true) then
+        or not valid_type(KEYS[6], 'set', true)
+        or not valid_type(KEYS[7], 'zset', true) then
     return output('INTERNAL_STATE_INVALID')
 end
 
@@ -69,13 +70,13 @@ if metadataExists then
             end
         end
         local catalogStock = redis.call('HGET', KEYS[1], 'initialCatalogStock')
-        if catalogStock and catalogStock ~= ARGV[12] then
-            return output('INTERNAL_STATE_INVALID', currentVersionRaw, currentStock, eventCount)
-        end
+        -- Catalog inventory is independent of activity loading and may change
+        -- through ordinary orders or audited adjustments at the same version.
         if not catalogStock then
             redis.call('HSET', KEYS[1], 'initialCatalogStock', ARGV[12])
         end
         redis.call('SADD', KEYS[6], KEYS[3])
+        redis.call('ZADD', KEYS[7], 0, KEYS[3])
         return output('IDEMPOTENT', currentVersionRaw, currentStock, eventCount)
     end
     if eventCount > 0 then
@@ -96,7 +97,8 @@ local stagedMeta = redis.pcall(
     'status', ARGV[7],
     'startsAtMs', ARGV[8],
     'endsAtMs', ARGV[9],
-    'databaseVersion', ARGV[10]
+    'databaseVersion', ARGV[10],
+    'inventoryRevision', '0'
 )
 if type(stagedMeta) == 'table' and stagedMeta['err'] then
     redis.pcall('DEL', KEYS[4], KEYS[5])
@@ -121,4 +123,5 @@ end
 redis.call('EXPIREAT', KEYS[1], ARGV[11])
 redis.call('EXPIREAT', KEYS[2], ARGV[11])
 redis.call('SADD', KEYS[6], KEYS[3])
+        redis.call('ZADD', KEYS[7], 0, KEYS[3])
 return output('LOADED', ARGV[10], ARGV[5], eventCount)

@@ -71,7 +71,8 @@ public class FlashSaleActivityLoader {
                 SeckillRedisKeys.reservationStream(activityId),
                 SeckillRedisKeys.loadStagingMetadata(activityId, loadId),
                 SeckillRedisKeys.loadStagingStock(activityId, loadId),
-                SeckillRedisKeys.reservationStreamRegistry()
+                SeckillRedisKeys.reservationStreamRegistry(),
+                SeckillRedisKeys.reconciliationStreamIndex()
         );
         long expireAt = fact.endsAt()
                 .toInstant(ZoneOffset.UTC)

@@ -85,7 +85,8 @@ public class SeckillRedisReservationGateway {
                 List.of(
                         SeckillRedisKeys.reservation(event.activityId(), event.reservationNo()),
                         SeckillRedisKeys.availableStock(event.activityId()),
-                        SeckillRedisKeys.userReservation(event.activityId(), event.userId())
+                        SeckillRedisKeys.userReservation(event.activityId(), event.userId()),
+                        SeckillRedisKeys.activityMetadata(event.activityId())
                 ),
                 event.reservationNo(),
                 Long.toString(event.activityId()),

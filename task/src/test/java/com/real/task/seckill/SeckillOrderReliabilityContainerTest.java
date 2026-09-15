@@ -106,6 +106,7 @@ class SeckillOrderReliabilityContainerTest {
     void resetPersistentState() {
         failpoint.clear();
         properties.setReconciliationDryRun(true);
+        properties.setReconciliationBatch(200);
         properties.setAutoRepair(false);
         redis.getConnectionFactory().getConnection().serverCommands().flushDb();
         await().atMost(Duration.ofSeconds(30)).ignoreExceptions().untilAsserted(() -> {
@@ -180,6 +181,8 @@ class SeckillOrderReliabilityContainerTest {
         redis.opsForValue().decrement(
                 SeckillRedisKeys.availableStock(event.activityId()), event.quantity());
         redis.opsForSet().add(SeckillRedisKeys.reservationStreamRegistry(), event.stream());
+        redis.opsForZSet().add(SeckillRedisKeys.reconciliationStreamIndex(), event.stream(), 0);
+        redis.opsForHash().increment(SeckillRedisKeys.activityMetadata(event.activityId()), "inventoryRevision", 1);
         appendRaw(event.stream(), fields);
 
         Tracer brokenTracer = mock(Tracer.class);
@@ -584,6 +587,188 @@ class SeckillOrderReliabilityContainerTest {
         assertThat(count("outbox_event")).isEqualTo(2);
     }
 
+    @Test
+    void review03OrdinaryPurchaseAfterActivityLoadDoesNotRaiseConservationIssue() throws Exception {
+        seedActivity(121, 221, 100, 100);
+        redis.opsForSet().add(SeckillRedisKeys.reservationStreamRegistry(), SeckillRedisKeys.reservationStream(121));
+        redis.opsForZSet().add(SeckillRedisKeys.reconciliationStreamIndex(), SeckillRedisKeys.reservationStream(121), 0);
+        consumer.refreshStreams();
+        assertThat(productMapper().reduceStock(221L, 1)).isEqualTo(1);
+
+        reconciliationService.runBatch();
+
+        assertThat(jdbc.queryForList("SELECT * FROM seckill_reconciliation_issue WHERE issue_type = 'MYSQL_STOCK_CONSERVATION_VIOLATION'"))
+                .as("Ordinary purchase must be inside product inventory conservation boundary").isEmpty();
+    }
+
+    @Test
+    void review04HistoricalReservationsRespectActualRedisReadBudget() {
+        seedActivity(122, 222, 100, 100);
+        for (int i = 0; i < 37; i++) {
+            appendAccepted(accepted(12000 + i, 122, 222, 22000 + i, 1, "1.00"));
+        }
+        consumer.refreshStreams();
+        properties.setReconciliationBatch(3);
+        long before = redisCommandCalls("hgetall");
+        var connection = redis.getConnectionFactory().getConnection();
+        connection.serverCommands().setConfig("slowlog-log-slower-than", "0");
+        connection.execute("SLOWLOG", "RESET".getBytes(StandardCharsets.UTF_8));
+
+        reconciliationService.runBatch();
+
+        var log = (List<?>) connection.execute("SLOWLOG", "GET".getBytes(StandardCharsets.UTF_8), "128".getBytes(StandardCharsets.UTF_8));
+        List<List<String>> ranges = new ArrayList<>();
+        for (Object item : log) {
+            var entry = (List<?>) item;
+            var command = (List<?>) entry.get(3);
+            List<String> args = command.stream().map(value -> new String((byte[]) value, StandardCharsets.UTF_8)).toList();
+            if (args.getFirst().equalsIgnoreCase("XRANGE")) ranges.add(args);
+        }
+        connection.serverCommands().setConfig("slowlog-log-slower-than", "10000");
+        assertThat(ranges).isNotEmpty();
+        for (List<String> args : ranges) {
+            int count = -1;
+            for (int i = 0; i < args.size(); i++) if (args.get(i).equalsIgnoreCase("COUNT")) count = i;
+            assertThat(count).as("Every actual XRANGE, including Lua, must carry COUNT: %s", args).isGreaterThan(0);
+            assertThat(Integer.parseInt(args.get(count + 1))).isLessThanOrEqualTo(3);
+        }
+        assertThat(redisCommandCalls("hgetall") - before)
+                .as("Actual reservation reads must be bounded by the configured page, independently of history")
+                .isLessThanOrEqualTo(16);
+    }
+
+    @Test
+    void review04PagesResumeAfterServiceRestartAndRotateAcrossActivities() {
+        seedActivity(123, 223, 100, 100);
+        seedActivity(124, 224, 100, 100);
+        for (int i = 0; i < 37; i++) {
+            appendAccepted(accepted(13000 + i, 123, 223, 23000 + i, 1, "1.00"));
+            appendAccepted(accepted(14000 + i, 124, 224, 24000 + i, 1, "1.00"));
+        }
+        consumer.refreshStreams();
+        properties.setReconciliationBatch(3);
+        reconciliationService.runBatch();
+        reconciliationService.runBatch();
+        assertThat(redis.opsForHash().get(SeckillRedisKeys.conservationCheckpoint(123), "state"))
+                .isEqualTo("IN_PROGRESS");
+        assertThat(redis.opsForHash().get(SeckillRedisKeys.conservationCheckpoint(124), "state"))
+                .isEqualTo("IN_PROGRESS");
+        String persistedCursor = String.valueOf(redis.opsForHash().get(
+                SeckillRedisKeys.conservationCheckpoint(123), "cursor"));
+        var restarted = new SeckillReconciliationService(redis, jdbc, properties,
+                reservationGateway, processingService, metrics);
+        for (int i = 0; i < 24; i++) {
+            long hashes = redisCommandCalls("hgetall");
+            long fields = redisCommandCalls("hmget");
+            restarted.runBatch();
+            assertThat(redisCommandCalls("hgetall") - hashes).isLessThanOrEqualTo(16);
+            assertThat(redisCommandCalls("hmget") - fields).isLessThanOrEqualTo(3);
+        }
+        assertThat(persistedCursor).isNotEqualTo("0-0");
+        for (long activity : List.of(123L, 124L)) {
+            String key = SeckillRedisKeys.conservationCheckpoint(activity);
+            assertThat(redis.opsForHash().get(key, "completedScans")).isEqualTo("1");
+            assertThat(redis.opsForHash().get(key, "lastCompletedQuantity")).isEqualTo("37");
+        }
+        assertThat(jdbc.queryForList("SELECT * FROM seckill_reconciliation_issue")).isEmpty();
+    }
+
+    @Test
+    void review04CompensationBetweenPagesRestartsSnapshotAndStillFindsRealTampering() {
+        seedActivity(125, 225, 100, 100);
+        Accepted first = accepted(15000, 125, 225, 25000, 1, "1.00");
+        appendAccepted(first);
+        for (int i = 1; i < 8; i++) appendAccepted(accepted(15000 + i, 125, 225, 25000 + i, 1, "1.00"));
+        consumer.refreshStreams();
+        properties.setReconciliationBatch(3);
+        reconciliationService.runBatch();
+        var parsed = ReservationAcceptedEvent.parse(first.stream(), "1-0", new LinkedHashMap<Object, Object>(first.fields()));
+        assertThat(parsed.valid()).isTrue();
+        assertThat(reservationGateway.compensate(parsed.event(), "review-compensation", "INVENTORY_SHORTAGE").successful()).isTrue();
+        // A new reservation by the same user legally owns the restored user slot.
+        appendAccepted(accepted(16000, 125, 225, 25000, 1, "1.00"));
+        for (int i = 0; i < 4; i++) reconciliationService.runBatch();
+        assertThat(redis.opsForHash().get(SeckillRedisKeys.conservationCheckpoint(125), "restarts"))
+                .isEqualTo("1");
+        assertThat(redis.opsForHash().get(SeckillRedisKeys.conservationCheckpoint(125), "lastCompletedQuantity"))
+                .isEqualTo("8");
+        assertThat(jdbc.queryForList("SELECT * FROM seckill_reconciliation_issue")).isEmpty();
+
+        redis.opsForValue().increment(SeckillRedisKeys.availableStock(125));
+        for (int i = 0; i < 4; i++) reconciliationService.runBatch();
+        var issues = jdbc.queryForList("SELECT severity, evidence_summary FROM seckill_reconciliation_issue WHERE issue_type='REDIS_STOCK_CONSERVATION_VIOLATION'");
+        assertThat(issues).hasSize(1);
+        assertThat(issues.getFirst().get("severity")).isEqualTo("CRITICAL");
+        assertThat(issues.getFirst().get("evidence_summary").toString()).contains("\"currentStock\": 93", "\"effectiveReservedQuantity\": 8");
+        assertThat(redis.opsForValue().get(SeckillRedisKeys.availableStock(125))).isEqualTo("93");
+    }
+
+    @Test
+    void review04LegacyRegistryUpgradeIsExplicitResumableAndPreservesOrphanStreams() {
+        // More than Redis' compact-set threshold; the upgrade returns its actual
+        // work count and stores its SSCAN cursor, independent of runBatch.
+        for (long i = 300; i < 460; i++) redis.opsForSet().add(
+                SeckillRedisKeys.reservationStreamRegistry(), SeckillRedisKeys.reservationStream(i));
+        reconciliationService.runBatch();
+        assertThat(jdbc.queryForList("SELECT * FROM seckill_reconciliation_issue WHERE issue_type='RECONCILIATION_INDEX_UPGRADE_REQUIRED'")).hasSize(1);
+        assertThat(redis.opsForZSet().zCard(SeckillRedisKeys.reconciliationStreamIndex())).isZero();
+        var upgrade = new org.springframework.data.redis.core.script.DefaultRedisScript<List>();
+        upgrade.setLocation(new org.springframework.core.io.ClassPathResource("redis/upgrade-reconciliation-index-v1.lua"));
+        upgrade.setResultType(List.class);
+        String checkpoint = SeckillRedisKeys.reconciliationStreamIndex() + ":upgrade";
+        List<?> result;
+        int steps = 0;
+        do {
+            result = redis.execute(upgrade, List.of(SeckillRedisKeys.reservationStreamRegistry(),
+                    SeckillRedisKeys.reconciliationStreamIndex(), checkpoint), "3");
+            assertThat(result).hasSize(3);
+            assertThat(redis.opsForHash().get(checkpoint, "cursor")).isEqualTo(result.getFirst().toString());
+            steps++;
+        } while (!"0".equals(result.getFirst().toString()) && steps < 200);
+        assertThat(steps).isBetween(2, 199);
+        assertThat(redis.opsForZSet().zCard(SeckillRedisKeys.reconciliationStreamIndex())).isEqualTo(160);
+        assertThat(redis.opsForSet().size(SeckillRedisKeys.reservationStreamRegistry())).isEqualTo(160);
+        reconciliationService.runBatch();
+        assertThat(jdbc.queryForList("SELECT * FROM seckill_reconciliation_issue WHERE issue_type='REDIS_ACTIVITY_FACT_INVALID' AND activity_id=300")).hasSize(1);
+    }
+
+    @Test
+    void review04ReverseEvidenceContinuesPastTwoInvalidCandidatesWithoutFalseIssue() {
+        seedActivity(126, 226, 100, 100);
+        Accepted accepted = accepted(17000, 126, 226, 27000, 1, "1.00");
+        appendAccepted(accepted);
+        for (int i = 1; i <= 2; i++) {
+            jdbc.update("""
+                    INSERT INTO seckill_event_processing(event_id,stream_key,stream_entry_id,
+                        reservation_no,activity_id,payload_hash,status)
+                    VALUES(?,?,?,?,?,?,'MANUAL_REVIEW')
+                    """, "review-fake-" + i, accepted.stream(), i + "-0", accepted.reservationNo(), 126, "0".repeat(64));
+        }
+        consumer.refreshStreams();
+        pollUntilOrders(1);
+        for (int i = 0; i < 5; i++) reconciliationService.runBatch();
+        assertThat(jdbc.queryForList("SELECT * FROM seckill_reconciliation_issue WHERE issue_type='MYSQL_RESERVATION_WITHOUT_STREAM_EVIDENCE'")).isEmpty();
+        long reservationId = jdbc.queryForObject("SELECT reservation_id FROM sale_reservation WHERE reservation_no=?", Long.class, accepted.reservationNo());
+        assertThat(jdbc.queryForObject("SELECT cursor_value FROM seckill_reconciliation_checkpoint WHERE checkpoint_name=?", String.class,
+                "stream-evidence-" + reservationId)).isEqualTo("0");
+    }
+
+    private long redisCommandCalls(String command) {
+        String stats = redis.getConnectionFactory().getConnection().serverCommands()
+                .info("commandstats").getProperty("cmdstat_" + command, "calls=0");
+        return Long.parseLong(stats.substring(6).split(",")[0]);
+    }
+
+    private com.real.domain.mapper.ProductMapper productMapper() throws Exception {
+        var factory = new org.mybatis.spring.SqlSessionFactoryBean();
+        factory.setDataSource(jdbc.getDataSource());
+        factory.setTypeAliasesPackage("com.real.domain.entity");
+        factory.setMapperLocations(new org.springframework.core.io.support.PathMatchingResourcePatternResolver()
+                .getResources("classpath*:com/real/domain/mapper/*.xml"));
+        return new org.mybatis.spring.SqlSessionTemplate(factory.getObject())
+                .getMapper(com.real.domain.mapper.ProductMapper.class);
+    }
+
     private void seedActivity(
             long activityId,
             long productId,
@@ -628,6 +813,8 @@ class SeckillOrderReliabilityContainerTest {
 
     private void appendAccepted(Accepted event) {
         redis.opsForSet().add(SeckillRedisKeys.reservationStreamRegistry(), event.stream());
+        redis.opsForZSet().add(SeckillRedisKeys.reconciliationStreamIndex(), event.stream(), 0);
+        redis.opsForHash().increment(SeckillRedisKeys.activityMetadata(event.activityId()), "inventoryRevision", 1);
         redis.opsForHash().putAll(event.reservationKey(), event.reservationHash());
         redis.opsForValue().set(event.userKey(), event.reservationNo());
         redis.opsForValue().decrement(

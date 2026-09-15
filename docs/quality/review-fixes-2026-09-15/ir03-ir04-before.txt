@@ -1,0 +1,25 @@
+-------------------------------------------------------------------------------
+Test set: com.real.task.seckill.SeckillOrderReliabilityContainerTest
+-------------------------------------------------------------------------------
+Tests run: 2, Failures: 2, Errors: 0, Skipped: 0, Time elapsed: 55.37 s <<< FAILURE! -- in com.real.task.seckill.SeckillOrderReliabilityContainerTest
+com.real.task.seckill.SeckillOrderReliabilityContainerTest.review04HistoricalReservationsRespectActualRedisReadBudget -- Time elapsed: 10.82 s <<< FAILURE!
+java.lang.AssertionError: 
+[Actual reservation reads must be bounded by the configured page, independently of history] 
+Expecting actual:
+  41L
+to be less than or equal to:
+  16L 
+	at com.real.task.seckill.SeckillOrderReliabilityContainerTest.review04HistoricalReservationsRespectActualRedisReadBudget(SeckillOrderReliabilityContainerTest.java:615)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+
+com.real.task.seckill.SeckillOrderReliabilityContainerTest.review03OrdinaryPurchaseAfterActivityLoadDoesNotRaiseConservationIssue -- Time elapsed: 3.111 s <<< FAILURE!
+java.lang.AssertionError: 
+[Ordinary purchase must be inside product inventory conservation boundary] 
+Expecting empty but was: [{"activity_id"=121L, "evidence_summary"="{"catalogStock": 99, "activityStock": 100, "schemaVersion": 1, "initialCatalogStock": 100, "catalogEquationHolds": false, "initialActivityStock": 100, "activityEquationHolds": true, "productSuccessfulQuantity": 0, "activitySuccessfulQuantity": 0}", "evidence_version"=1, "first_seen_at"=2026-09-15T14:18:14.965132 (java.time.LocalDateTime), "issue_id"=1L, "issue_key"="2f692a21a1252fc75d9f7945c29094133bf7cb40e55acf4e6e3818558567b5cc", "issue_type"="MYSQL_STOCK_CONSERVATION_VIOLATION", "last_seen_at"=2026-09-15T14:18:14.965132 (java.time.LocalDateTime), "occurrences"=1, "reservation_no"=null, "resolved_at"=null, "severity"="CRITICAL", "status"="OPEN", "stream_entry_id"=null, "stream_key"="hotshop:seckill:v1:{hotshop-seckill-v1}:activity:121:reservations", "version"=0}]
+	at com.real.task.seckill.SeckillOrderReliabilityContainerTest.review03OrdinaryPurchaseAfterActivityLoadDoesNotRaiseConservationIssue(SeckillOrderReliabilityContainerTest.java:598)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+

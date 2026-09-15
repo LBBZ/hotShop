@@ -80,7 +80,8 @@ public class SeckillPaymentExpiredProjectionConsumer {
             List<?> result = redis.execute(SCRIPT, List.of(
                             SeckillRedisKeys.reservation(event.activityId(), event.reservationNo()),
                             SeckillRedisKeys.availableStock(event.activityId()),
-                            SeckillRedisKeys.userReservation(event.activityId(), event.userId())),
+                            SeckillRedisKeys.userReservation(event.activityId(), event.userId()),
+                            SeckillRedisKeys.activityMetadata(event.activityId())),
                     event.reservationNo(), event.orderId(), Long.toString(event.activityId()),
                     Long.toString(event.userId()), Long.toString(event.productId()),
                     Integer.toString(event.quantity()),

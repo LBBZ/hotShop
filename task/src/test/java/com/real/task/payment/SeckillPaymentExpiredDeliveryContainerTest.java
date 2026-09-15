@@ -262,6 +262,7 @@ class SeckillPaymentExpiredDeliveryContainerTest {
         Fixture fixture = new Fixture("ord_" + suffix, "rsv_" + suffix,
                 activityId, userId, productId, 1);
         redis.opsForValue().set(SeckillRedisKeys.availableStock(activityId), "9");
+        redis.opsForHash().put(SeckillRedisKeys.activityMetadata(activityId), "inventoryRevision", "0");
         redis.opsForValue().set(SeckillRedisKeys.userReservation(activityId, userId), fixture.reservationNo());
         redis.opsForHash().putAll(SeckillRedisKeys.reservation(activityId, fixture.reservationNo()), Map.of(
                 "reservationNo", fixture.reservationNo(),

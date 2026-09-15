@@ -64,7 +64,8 @@ class LegacyTakeoverTest {
                 .validateMigrationNaming(true)
                 .cleanDisabled(true)
                 .load();
-        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(4);
+        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(6);
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1.10");
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
 
         try (Connection connection = DriverManager.getConnection(
@@ -74,6 +75,14 @@ class LegacyTakeoverTest {
                     .isEqualTo(1);
             assertThat(singleInt(statement, "SELECT COUNT(*) FROM catalog_product WHERE sku = 'LEGACY-1'"))
                     .isEqualTo(1);
+            assertThat(singleInt(statement, "SELECT COUNT(*) FROM catalog_product WHERE sku = 'LEGACY-1' AND expected_stock = stock"))
+                    .isEqualTo(1);
+            assertThat(singleString(statement, """
+                    SELECT GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',')
+                      FROM information_schema.statistics
+                     WHERE table_schema=DATABASE() AND table_name='seckill_event_processing'
+                       AND index_name='idx_seckill_processing_reservation_cursor'
+                    """)).isEqualTo("reservation_no,processing_id");
             assertThat(singleInt(statement, "SELECT COUNT(*) FROM sales_order WHERE order_id = 'legacy-order'"))
                     .isEqualTo(1);
             assertThat(singleInt(statement, "SELECT COUNT(*) FROM sales_order_item WHERE order_id = 'legacy-order'"))

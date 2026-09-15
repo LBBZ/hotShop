@@ -58,8 +58,10 @@ class SchemaConstraintTest {
 
     @Test
     void emptyDatabaseMigratesToLatestAndValidates() {
-        assertThat(initialMigrationCount).isEqualTo(9);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1.8");
+        assertThat(initialMigrationCount).isEqualTo(11);
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1.10");
+        assertThat(flyway.info().applied()).extracting(info -> info.getVersion().getVersion())
+                .containsExactly("1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10");
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
     }
 

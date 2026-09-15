@@ -150,7 +150,8 @@ class AgentToolsAndPurchaseConfirmationIntegrationTest {
                 .validateMigrationNaming(true)
                 .cleanDisabled(true)
                 .load();
-        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(9);
+        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(11);
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1.10");
         assertThat(flyway.migrate().migrationsExecuted).isZero();
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
 

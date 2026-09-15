@@ -109,7 +109,8 @@ SET password_hash='$adminPasswordHash', status='ACTIVE', deleted_at=NULL,
 WHERE username='dev-admin';
 UPDATE flash_sale_activity
 SET status='ACTIVE', starts_at=UTC_TIMESTAMP(6)-INTERVAL 1 MINUTE,
-    ends_at=UTC_TIMESTAMP(6)+INTERVAL 30 MINUTE, available_stock=total_stock,
+    ends_at=UTC_TIMESTAMP(6)+INTERVAL 30 MINUTE,
+    expected_available_stock=expected_available_stock+total_stock-available_stock, available_stock=total_stock,
     version=version+1, updated_at=UTC_TIMESTAMP(6)
 WHERE activity_id=900001;
 "@

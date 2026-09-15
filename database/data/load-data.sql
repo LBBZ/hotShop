@@ -70,7 +70,9 @@ FROM hotshop_load_number
 WHERE n <= @hotshop_product_count
 ON DUPLICATE KEY UPDATE
     price = VALUES(price),
+    expected_stock = expected_stock + VALUES(stock) - stock,
     stock = VALUES(stock),
+    version = version + 1,
     status = 'ACTIVE',
     deleted_at = NULL;
 

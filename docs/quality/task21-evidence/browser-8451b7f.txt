@@ -1,0 +1,77 @@
+
+Running 6 tests using 1 worker
+
+(node:4740) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:4740) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 1 e2e\task-21-delivery-real.spec.ts:42:1 › built application: purchase, Mock payment, reservation and Agent confirmation (12.8s)
+  ok 2 e2e\task-21-delivery-real.spec.ts:91:1 › built admin: metadata preserves a purchase and stale stock adjustment conflicts (5.3s)
+  ok 3 e2e\task-21-delivery-real.spec.ts:135:1 › built admin: high-risk Agent action is refused without a tool call (2.1s)
+  x  4 e2e\task-21-delivery-real.spec.ts:149:1 › built admin: audit remains readable after Agent tools and confirmation (6.1s)
+(node:26672) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:26672) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x  5 e2e\task-21-delivery-real.spec.ts:161:1 › built Agent: Chinese static question returns a citation (9.2s)
+(node:25328) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:25328) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 6 e2e\task-21-delivery-real.spec.ts:173:1 › built Agent: English static question returns a citation (4.2s)
+
+
+  1) e2e\task-21-delivery-real.spec.ts:149:1 › built admin: audit remains readable after Agent tools and confirmation
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: getByRole('cell', { name: 'CATALOG_STOCK_ADJUSTED', exact: true }).first()
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 5000ms[22m
+    [2m  - waiting for getByRole('cell', { name: 'CATALOG_STOCK_ADJUSTED', exact: true }).first()[22m
+
+
+      156 |       .getByRole("cell", { name: "CATALOG_STOCK_ADJUSTED", exact: true })
+      157 |       .first(),
+    > 158 |   ).toBeVisible();
+          |     ^
+      159 | });
+      160 |
+      161 | test("built Agent: Chinese static question returns a citation", async ({
+        at D:\Codex\Projects\hotShop-task21\web\e2e\task-21-delivery-real.spec.ts:158:5
+
+    Error Context: test-results\task-21-delivery-real-buil-edca0-gent-tools-and-confirmation\error-context.md
+
+  2) e2e\task-21-delivery-real.spec.ts:161:1 › built Agent: Chinese static question returns a citation
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: getByRole('list', { name: '引用资料' })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 5000ms[22m
+    [2m  - waiting for getByRole('list', { name: '引用资料' })[22m
+
+
+      168 |     page.locator('[data-agent-event="rag.completed"]'),
+      169 |   ).toBeVisible();
+    > 170 |   await expect(page.getByRole("list", { name: "引用资料" })).toBeVisible();
+          |                                                          ^
+      171 | });
+      172 |
+      173 | test("built Agent: English static question returns a citation", async ({
+        at D:\Codex\Projects\hotShop-task21\web\e2e\task-21-delivery-real.spec.ts:170:58
+
+    Error Context: test-results\task-21-delivery-real-buil-61281-question-returns-a-citation\error-context.md
+
+  2 failed
+    e2e\task-21-delivery-real.spec.ts:149:1 › built admin: audit remains readable after Agent tools and confirmation
+    e2e\task-21-delivery-real.spec.ts:161:1 › built Agent: Chinese static question returns a citation
+  4 passed (46.7s)

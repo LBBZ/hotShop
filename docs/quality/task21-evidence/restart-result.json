@@ -1,0 +1,5 @@
+{
+  "note": "existing containers/images/volumes restart, product and Agent HTTP readiness only",
+  "readiness": true,
+  "seconds": 24.96
+}

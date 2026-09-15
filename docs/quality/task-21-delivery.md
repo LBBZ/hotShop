@@ -135,3 +135,35 @@ version=12；CATALOG_STOCK_ADJUSTED有2条SUCCESS和2条FAILURE。该单次余�
 **严格验收判定**：README/架构/ADR/证据/简历/面试/优化清单已完成；本机隔离启动已成功；
 核心用户、模拟支付、秒杀、Agent确认、英文RAG和权限拒绝已实测；后台审计展示未完成；
 原中文引用演示未满足预期，脚本明确展示拒答限制；另一台新机器验收未执行。因此TASK-21总体只能报告部分完成。
+
+## 提交定位与最终复验
+
+交付实现提交：`8451b7ff21c130e091b237d436b6b2aefccd47fd`（分支`task-21-delivery`）。
+上述隔离空卷Start在提交前工作树执行，其最终脚本内容包含于该提交；Java/Python业务实现仍与起始基线一致。
+在该提交的干净工作树上再次执行专用浏览器套件和脚本回归，结果如下。
+本节及归档证据由后续文档提交补录，不将文档提交虚称为重新构建验证的应用镜像版本。
+
+| 验证 | 最终实际结果 | 版本化证据 |
+| --- | --- | --- |
+| 专用真实浏览器套件，同一隔离project继续使用前次测试数据 | **4 passed / 2 failed，46.7s，退出1，6项无skip、无retry**；审计与中文引用失败不变 | [完整控制台结果](task21-evidence/browser-8451b7f.txt)，不与前次49.0s的运行相加 |
+| 启动脚本安全及migrator退出码回归 | PASS，退出0 | [脚本结果](task21-evidence/script-regression-8451b7f.txt) |
+| Stop后Restart，再轮询商品API和Agent readiness | 24.96s内均HTTP成功；只测已有容器、镜像、卷的日常重启与HTTP就绪，未再次跑浏览器 | [重启计时](task21-evidence/restart-result.json) |
+| 重启前后只读SQL | 订单均15条；913001商品stock=expected_stock=41、version=18；仅单点持久化观察 | [之前](task21-evidence/before-restart.txt)、[之后](task21-evidence/after-restart.txt) |
+| 旧TASK19失败后的定向清理 | 此隔离project的资源计数均0，clean=true；不表示验证成功 | [清理报告](task21-evidence/task19-cleanup.json) |
+| 实现提交的暂存diff敏感信息扫描 | 固定镜像Gitleaks扫描185682 bytes，no leaks found | [扫描结果](task21-evidence/implementation-secret-scan.txt) |
+
+补充真实环境：Windows11 build26200、Intel Core i9-13900HX（24核/32线程），宿主可见内存16510840KiB；
+Java运行镜像为21.0.12+8。Docker VM可用内存与宿主内存不是同一口径。
+最终只Stop本任务两个demo项目，容器、卷、镜像及忽略的本地密钥目录保留供复验；
+没有删除用户历史容器或证据。两个项目均停止，原有两只历史容器仍停止，见[容器状态快照](task21-evidence/final-containers.txt)。
+task-service停止后记录退出137，不能据此宣称优雅停机已验证；本次Restart后HTTP与上述持久化观察通过。
+
+复验前先用`docker ps`确认18080空闲，或按README指定空闲WebPort并设置`HOTSHOP_DELIVERY_URL`。
+完整启动、测试命令见上方“复验命令”；在当前业务基线下专用套件预计仍以两项失败退出1。
+验证后使用Start打印的project执行`pwsh -NoProfile -File script/task21-demo.ps1 -Action Stop -ProjectName <实际项目名>`。
+本轮发现的下一步工作统一进入[按优先级排序的优化清单](../delivery/next-iteration.md)。
+
+最终`node script/verify-task21-docs.mjs`检查258个本地文件链接、在Chromium渲染10张Mermaid图，failures为空；
+摘要归档于`docs/quality/task21-evidence/document-check.json`。远程URL与所有锚点不属于该脚本覆盖范围。
+`git diff --check`与最终暂存diff检查通过，补录证据也经过固定Gitleaks镜像的stdin扫描。
+最终变更复核没有Java/Python业务代码、数据库迁移或用户性能证据改动；主仓库仍为干净master和原始基线。

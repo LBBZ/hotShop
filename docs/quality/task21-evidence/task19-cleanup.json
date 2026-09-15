@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "2.0",
+  "project": "hotshop-task19-delivery091601",
+  "verificationPassed": false,
+  "containers": 0,
+  "volumes": 0,
+  "networks": 0,
+  "images": 0,
+  "untrackedProjectResources": {
+    "containers": [],
+    "volumes": [],
+    "networks": []
+  },
+  "temporaryKeyDirectories": 0,
+  "failures": [],
+  "clean": true
+}

@@ -1,0 +1,2 @@
+PASS: existing project refusal; Docker query failure fails closed; shell restored; no files created.
+PASS: exited migrator success; container exit 7 rejected despite docker exit 0; missing and ambiguous IDs rejected.

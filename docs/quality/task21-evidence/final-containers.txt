@@ -1,0 +1,26 @@
+hotshop-task21-demo091602-web-demo-1|Exited (0) 12 seconds ago
+hotshop-task21-demo091602-admin-service-1|Exited (143) 11 seconds ago
+hotshop-task21-demo091602-agent-service-1|Exited (0) 10 seconds ago
+hotshop-task21-demo091602-portal-service-1|Exited (143) 11 seconds ago
+hotshop-task21-demo091602-task-service-1|Exited (137) 2 seconds ago
+hotshop-task21-demo091602-database-migrator-1|Exited (0) 2 minutes ago
+hotshop-task21-demo091602-redis-cache-1|Exited (0) 2 seconds ago
+hotshop-task21-demo091602-qdrant-1|Exited (143) 10 seconds ago
+hotshop-task21-demo091602-redis-seckill-1|Exited (0) 2 seconds ago
+hotshop-task21-demo091602-rabbitmq-1|Exited (0) 1 second ago
+hotshop-task21-demo091602-java-key-material-init-1|Exited (0) 2 minutes ago
+hotshop-task21-demo091602-mysql-1|Exited (0) Less than a second ago
+hotshop-task21-demo091601-web-demo-1|Exited (0) 24 minutes ago
+hotshop-task21-demo091601-portal-service-1|Exited (143) 24 minutes ago
+hotshop-task21-demo091601-admin-service-1|Exited (143) 24 minutes ago
+hotshop-task21-demo091601-task-service-1|Exited (137) 24 minutes ago
+hotshop-task21-demo091601-agent-service-1|Exited (0) 24 minutes ago
+hotshop-task21-demo091601-database-migrator-1|Exited (0) 25 minutes ago
+hotshop-task21-demo091601-redis-cache-1|Exited (0) 24 minutes ago
+hotshop-task21-demo091601-redis-seckill-1|Exited (0) 24 minutes ago
+hotshop-task21-demo091601-rabbitmq-1|Exited (0) 24 minutes ago
+hotshop-task21-demo091601-qdrant-1|Exited (143) 24 minutes ago
+hotshop-task21-demo091601-java-key-material-init-1|Exited (0) 26 minutes ago
+hotshop-task21-demo091601-mysql-1|Exited (0) 24 minutes ago
+dreamy_robinson|Exited (255) 6 weeks ago
+codex-docker-test|Exited (0) 7 weeks ago

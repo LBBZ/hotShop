@@ -569,7 +569,8 @@ public class SeckillReconciliationService {
         List<?> page = redis.execute(CONSERVATION_PAGE,
                 List.of(SeckillRedisKeys.activityMetadata(activityId),
                         SeckillRedisKeys.availableStock(activityId), stream,
-                        SeckillRedisKeys.conservationCheckpoint(activityId)),
+                        SeckillRedisKeys.conservationCheckpoint(activityId),
+                        SeckillRedisKeys.conservationSeen(activityId)),
                 Integer.toString(properties.getReconciliationBatch()),
                 SeckillRedisKeys.reservation(activityId, ""));
         if (page == null || page.size() != 8) throw new IllegalStateException("Invalid conservation page");

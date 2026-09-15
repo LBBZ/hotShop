@@ -887,6 +887,92 @@ class SeckillOrderReliabilityContainerTest {
         );
     }
 
+    @Test
+    void reviewDedupRepeatedEventAndReservationAcrossPagesSurviveRestart() {
+        seedActivity(181, 281, 100, 100);
+        Accepted first = accepted(81000, 181, 281, 91000, 2, "1.00");
+        appendAccepted(first);
+        appendRaw(first.stream(), first.fields()); // Same eventId in the first page.
+        appendAccepted(accepted(81001, 181, 281, 91001, 3, "1.00"));
+        var anotherEvent = new LinkedHashMap<>(first.fields());
+        anotherEvent.put("eventId", eventId(81999));
+        appendRaw(first.stream(), anotherEvent); // Different eventId, same reservationNo, next page.
+        appendRaw(first.stream(), first.fields()); // Same eventId again on a later page.
+        consumer.refreshStreams();
+        properties.setReconciliationBatch(2);
+        reconciliationService.runBatch();
+        String key = SeckillRedisKeys.conservationCheckpoint(181);
+        assertThat(redis.opsForHash().get(key, "quantity")).isEqualTo("2");
+        var restarted = new SeckillReconciliationService(redis, jdbc, properties,
+                reservationGateway, processingService, metrics);
+        restarted.runBatch();
+        assertThat(redis.opsForHash().get(key, "quantity")).isEqualTo("5");
+        restarted.runBatch();
+        assertThat(redis.opsForHash().get(key, "lastCompletedQuantity")).isEqualTo("5");
+        assertThat(jdbc.queryForList("SELECT * FROM seckill_reconciliation_issue WHERE issue_type='REDIS_STOCK_CONSERVATION_VIOLATION'"))
+                .isEmpty();
+        // A new scan must forget the previous cycle's seen set, and still detect tampering.
+        redis.opsForValue().increment(SeckillRedisKeys.availableStock(181));
+        for (int i = 0; i < 3; i++) restarted.runBatch();
+        assertThat(redis.opsForHash().get(key, "lastCompletedQuantity")).isEqualTo("5");
+        var issues = jdbc.queryForList("SELECT severity, evidence_summary FROM seckill_reconciliation_issue WHERE issue_type='REDIS_STOCK_CONSERVATION_VIOLATION'");
+        assertThat(issues).hasSize(1);
+        assertThat(issues.getFirst().get("severity")).isEqualTo("CRITICAL");
+        assertThat(issues.getFirst().get("evidence_summary").toString())
+                .contains("\"currentStock\": 96", "\"effectiveReservedQuantity\": 5");
+        assertThat(redis.opsForValue().get(SeckillRedisKeys.availableStock(181))).isEqualTo("96");
+    }
+
+    @Test
+    void reviewDedupLegacyCheckpointAndLostSeenStateRestartBoundedly() {
+        seedActivity(182, 282, 100, 100);
+        Accepted first = accepted(82000, 182, 282, 92000, 2, "1.00");
+        appendAccepted(first);
+        appendRaw(first.stream(), first.fields());
+        appendAccepted(accepted(82001, 182, 282, 92001, 3, "1.00"));
+        consumer.refreshStreams();
+        properties.setReconciliationBatch(2);
+        reconciliationService.runBatch();
+        String key = SeckillRedisKeys.conservationCheckpoint(182);
+        // Simulate the deployed old checkpoint with an already overcounted sum.
+        redis.opsForHash().delete(key, "schemaVersion");
+        redis.opsForHash().put(key, "quantity", "4");
+        reconciliationService.runBatch();
+        assertThat(redis.opsForHash().get(key, "state")).isEqualTo("IN_PROGRESS");
+        assertThat(redis.opsForHash().get(key, "quantity")).isEqualTo("2");
+        assertThat(redis.opsForHash().get(key, "lastScanned")).isEqualTo("2");
+        // Losing the companion dedup state cannot continue a partial aggregate.
+        redis.delete(key + ":seen");
+        reconciliationService.runBatch();
+        assertThat(redis.opsForHash().get(key, "quantity")).isEqualTo("2");
+        assertThat(redis.opsForHash().get(key, "state")).isEqualTo("IN_PROGRESS");
+        reconciliationService.runBatch();
+        assertThat(redis.opsForHash().get(key, "lastCompletedQuantity")).isEqualTo("5");
+        assertThat(redis.hasKey(key + ":seen")).isFalse();
+        assertThat(jdbc.queryForList("SELECT * FROM seckill_reconciliation_issue WHERE issue_type='REDIS_STOCK_CONSERVATION_VIOLATION'"))
+                .isEmpty();
+    }
+
+    @Test
+    void reviewDedupWriterFenceRestartRecountsPreviouslySeenReservations() {
+        seedActivity(183, 283, 100, 100);
+        Accepted first = accepted(83000, 183, 283, 93000, 2, "1.00");
+        appendAccepted(first);
+        appendRaw(first.stream(), first.fields());
+        appendAccepted(accepted(83001, 183, 283, 93001, 3, "1.00"));
+        consumer.refreshStreams();
+        properties.setReconciliationBatch(2);
+        reconciliationService.runBatch();
+        var parsed = ReservationAcceptedEvent.parse(first.stream(), "1-0", new LinkedHashMap<Object, Object>(first.fields()));
+        assertThat(reservationGateway.compensate(parsed.event(), "dedup-restart", "INVENTORY_SHORTAGE").successful()).isTrue();
+        for (int i = 0; i < 2; i++) reconciliationService.runBatch();
+        String key = SeckillRedisKeys.conservationCheckpoint(183);
+        assertThat(redis.opsForHash().get(key, "restarts")).isEqualTo("1");
+        assertThat(redis.opsForHash().get(key, "lastCompletedQuantity")).isEqualTo("3");
+        assertThat(jdbc.queryForList("SELECT * FROM seckill_reconciliation_issue WHERE issue_type='REDIS_STOCK_CONSERVATION_VIOLATION'"))
+                .isEmpty();
+    }
+
     private void appendAccepted(Accepted event) {
         redis.opsForSet().add(SeckillRedisKeys.reservationStreamRegistry(), event.stream());
         redis.opsForZSet().add(SeckillRedisKeys.reconciliationStreamIndex(), event.stream(), 0);

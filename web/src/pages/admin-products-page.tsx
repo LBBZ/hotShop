@@ -4,6 +4,7 @@ import { Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { findApiProblemError } from "@/api/core/problem";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { StockAdjustmentEditor } from "@/features/admin/stock-adjustment-editor";
 import {
   adminApi,
   type AdminProduct,
@@ -56,8 +57,15 @@ function ProductEditor({
     setBusy(true);
     setError(undefined);
     try {
-      if (product) await adminApi.updateProduct(product.productId, draft);
-      else await adminApi.createProduct(draft);
+      if (product) {
+        await adminApi.updateProduct(product.productId, {
+          name: draft.name,
+          price: draft.price,
+          category: draft.category,
+          description: draft.description,
+          reason: draft.reason,
+        });
+      } else await adminApi.createProduct(draft);
       onSaved();
     } catch (caught) {
       const problem = findApiProblemError(caught)?.problem;
@@ -124,17 +132,23 @@ function ProductEditor({
             onChange={(event) => update("price", event.target.value)}
           />
         </label>
-        <label className="field">
-          <span>库存</span>
-          <input
-            required
-            type="number"
-            min={0}
-            step={1}
-            value={draft.stock}
-            onChange={(event) => update("stock", Number(event.target.value))}
-          />
-        </label>
+        {product ? (
+          <p className="field">
+            打开时库存：{product.stock}。调整库存请使用商品列表中的“调整库存”。
+          </p>
+        ) : (
+          <label className="field">
+            <span>初始库存</span>
+            <input
+              required
+              type="number"
+              min={0}
+              step={1}
+              value={draft.stock}
+              onChange={(event) => update("stock", Number(event.target.value))}
+            />
+          </label>
+        )}
         <label className="field admin-field-wide">
           <span>描述</span>
           <textarea
@@ -178,6 +192,7 @@ export function AdminProductsPage() {
   const [keyword, setKeyword] = useState("");
   const [cursor, setCursor] = useState<string>();
   const [editing, setEditing] = useState<AdminProduct | "new">();
+  const [adjusting, setAdjusting] = useState<AdminProduct>();
   const [deleteTarget, setDeleteTarget] = useState<AdminProduct>();
   const [deleteReason, setDeleteReason] = useState("");
   const [deleteError, setDeleteError] = useState<string>();
@@ -188,6 +203,7 @@ export function AdminProductsPage() {
   );
   const finishMutation = () => {
     setEditing(undefined);
+    setAdjusting(undefined);
     setCursor(undefined);
     resource.reload();
   };
@@ -218,7 +234,13 @@ export function AdminProductsPage() {
         title="商品管理"
         description="查询与写入都使用真实 Admin API；金额、库存和原因由后端再次校验。"
         actions={
-          <Button type="button" onClick={() => setEditing("new")}>
+          <Button
+            type="button"
+            onClick={() => {
+              setAdjusting(undefined);
+              setEditing("new");
+            }}
+          >
             <Plus aria-hidden="true" />
             新增商品
           </Button>
@@ -229,6 +251,14 @@ export function AdminProductsPage() {
           product={editing === "new" ? undefined : editing}
           onClose={() => setEditing(undefined)}
           onSaved={finishMutation}
+        />
+      ) : null}
+      {adjusting ? (
+        <StockAdjustmentEditor
+          key={adjusting.productId}
+          product={adjusting}
+          onSaved={finishMutation}
+          onClose={() => setAdjusting(undefined)}
         />
       ) : null}
       {deleteTarget ? (
@@ -340,10 +370,24 @@ export function AdminProductsPage() {
                               type="button"
                               variant="ghost"
                               size="sm"
-                              onClick={() => setEditing(product)}
+                              onClick={() => {
+                                setAdjusting(undefined);
+                                setEditing(product);
+                              }}
                             >
                               <Pencil aria-hidden="true" />
                               编辑
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setEditing(undefined);
+                                setAdjusting(product);
+                              }}
+                            >
+                              调整库存
                             </Button>
                             <Button
                               type="button"

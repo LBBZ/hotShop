@@ -42,6 +42,7 @@ export interface AdminProduct {
   name: string;
   price: string;
   stock: number;
+  version: string;
   category: string;
   description?: string;
   createdAt: string | Date;
@@ -53,6 +54,14 @@ export interface ProductMutation {
   stock: number;
   category: string;
   description?: string;
+  reason: string;
+}
+
+export type ProductEdit = Omit<ProductMutation, "stock">;
+
+export interface StockAdjustment {
+  delta: number;
+  expectedVersion: string;
   reason: string;
 }
 
@@ -199,14 +208,29 @@ export const adminApi = {
       headers: jsonHeaders,
       body: JSON.stringify(value),
     }),
-  updateProduct: (productId: string, value: ProductMutation) =>
+  updateProduct: (productId: string, value: ProductEdit) =>
     json<AdminProduct>(
       `/admin/api/v1/products/${encodeURIComponent(productId)}`,
       {
         method: "PUT",
         headers: jsonHeaders,
-        body: JSON.stringify(value),
+        body: JSON.stringify({
+          name: value.name,
+          price: value.price,
+          category: value.category,
+          description: value.description,
+          reason: value.reason,
+        }),
       },
+    ),
+  product: (productId: string) =>
+    json<AdminProduct>(
+      `/admin/api/v1/products/${encodeURIComponent(productId)}`,
+    ),
+  adjustStock: (productId: string, value: StockAdjustment) =>
+    json<AdminProduct>(
+      `/admin/api/v1/products/${encodeURIComponent(productId)}/stock-adjustments`,
+      { method: "POST", headers: jsonHeaders, body: JSON.stringify(value) },
     ),
   deleteProduct: (productId: string, reason: string) =>
     voidRequest(`/admin/api/v1/products/${encodeURIComponent(productId)}`, {

@@ -182,6 +182,47 @@ class InventoryReconciliationJointContainerTest {
     }
 
     @Test
+    void failedAdjustmentAuditRollsBackStockBalanceAndVersionTogether() throws Exception {
+        authenticate();
+        long product = createProduct();
+        String version = jdbc.queryForObject(
+                "SELECT CAST(version AS CHAR) FROM catalog_product WHERE product_id=?", String.class, product);
+        String request = json.writeValueAsString(Map.of(
+                "delta", 5, "expectedVersion", version, "reason", "audit rollback verification"));
+        // Fail only the success audit in this disposable database. The production
+        // REQUIRES_NEW failure audit must survive while the stock transaction rolls back.
+        jdbc.execute("""
+                CREATE TRIGGER review_reject_stock_audit BEFORE INSERT ON audit_log FOR EACH ROW
+                BEGIN
+                  IF NEW.action='CATALOG_STOCK_ADJUSTED' AND NEW.result='SUCCESS' THEN
+                    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='review injected audit storage failure';
+                  END IF;
+                END
+                """);
+        try {
+            mvc.perform(post("/admin/api/v1/products/{id}/stock-adjustments", product)
+                            .contentType(MediaType.APPLICATION_JSON).content(request))
+                    .andExpect(status().isInternalServerError());
+            assertStock(product, 100);
+            assertThat(jdbc.queryForObject(
+                    "SELECT CAST(version AS CHAR) FROM catalog_product WHERE product_id=?", String.class, product))
+                    .isEqualTo(version);
+            assertThat(number("SELECT COUNT(*) FROM audit_log WHERE action='CATALOG_STOCK_ADJUSTED' "
+                    + "AND result='FAILURE' AND resource_id=?", Long.toString(product))).isOne();
+            assertThat(number("SELECT COUNT(*) FROM audit_log WHERE action='CATALOG_STOCK_ADJUSTED' "
+                    + "AND result='SUCCESS' AND resource_id=?", Long.toString(product))).isZero();
+        } finally {
+            jdbc.execute("DROP TRIGGER review_reject_stock_audit");
+        }
+        mvc.perform(post("/admin/api/v1/products/{id}/stock-adjustments", product)
+                        .contentType(MediaType.APPLICATION_JSON).content(request))
+                .andExpect(status().isOk()).andExpect(jsonPath("stock").value(105));
+        assertStock(product, 105);
+        assertThat(number("SELECT COUNT(*) FROM audit_log WHERE action='CATALOG_STOCK_ADJUSTED' "
+                + "AND result='SUCCESS' AND resource_id=?", Long.toString(product))).isOne();
+    }
+
+    @Test
     void realAdminOrdersTimeoutsAndTwoActivityLoadsConserveInventoryAndDetectTampering() throws Exception {
         authenticate();
         long product = createProduct();

@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.real.task.seckill.SeckillOrderReliabilityContainerTest
+-------------------------------------------------------------------------------
+Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 46.77 s -- in com.real.task.seckill.SeckillOrderReliabilityContainerTest

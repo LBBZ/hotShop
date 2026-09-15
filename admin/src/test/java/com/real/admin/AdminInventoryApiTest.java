@@ -65,6 +65,26 @@ class AdminInventoryApiTest {
         verify(audit).update(eq(1L),capture.capture(),eq(7L),eq("rename only"),any());
         assertThat(capture.getValue().getStock()).isNull();
     }
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"1.5", "\"5\"", "true"})
+    void deltaMustBeAJsonInteger(String delta) throws Exception {
+        when(audit.adjustStock(eq(1L),anyInt(),eq(0L),eq(7L),eq("restock goods"),any())).thenReturn(product());
+        mvc.perform(post("/admin/api/v1/products/1/stock-adjustments").contentType("application/json")
+                .content("{\"delta\":" + delta + ",\"expectedVersion\":\"0\",\"reason\":\"restock goods\"}"))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(audit);
+    }
+
+    @Test void signedIntegerDeltaPreservesItsValue() throws Exception {
+        when(audit.adjustStock(eq(1L),eq(-5),eq(0L),eq(7L),eq("remove damaged"),any())).thenReturn(product());
+        mvc.perform(post("/admin/api/v1/products/1/stock-adjustments").contentType("application/json")
+                .content("""
+                    {"delta":-5,"expectedVersion":"0","reason":"remove damaged"}
+                    """))
+                .andExpect(status().isOk());
+        verify(audit).adjustStock(eq(1L),eq(-5),eq(0L),eq(7L),eq("remove damaged"),any());
+    }
+
     @Test void adjustmentConflictIsAnUnderstandable409() throws Exception {
         when(audit.adjustStock(eq(1L),eq(5),eq(0L),eq(7L),eq("restock goods"),any()))
                 .thenThrow(ApiException.conflict("STOCK_ADJUSTMENT_CONFLICT","库存已变化，请刷新当前库存和版本后重试。"));

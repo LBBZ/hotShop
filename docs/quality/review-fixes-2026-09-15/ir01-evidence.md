@@ -48,3 +48,19 @@ docker run --rm --name hotshop-ir01-maven -v /var/run/docker.sock:/var/run/docke
 Exit 0. InventoryEditContainerTest: **5 passed, 0 skipped**, 32.88 seconds. AdminInventoryApiTest: **3 passed, 0 skipped**, 24.60 seconds. Saved Surefire summaries alongside this report. Previously executed existing AdminApiContractTest: **7 passed**, 69.43 seconds. The final standalone run did not rerun that unchanged existing Spring Boot contract class.
 
 `git diff --check` succeeded. After test exit, `docker ps --format '{{.Names}} {{.Status}}'` returned no containers; temporary MySQL and Ryuk were removed automatically. No volume cleanup or user-data operation occurred. The shared Maven dependency cache remains intact. Load-seed full performance orchestration and the complete observability script were not executed here; their relevant SQL delta pattern matches the tested development seed. Integration branch must still perform combined service, frontend and reconciliation validation; these feature results are not the final integrated acceptance.
+
+## Additional signed-delta input regression
+
+Integration review identified that Jackson's default integer coercion would accept fractional or quoted deltas. Added parameterized HTTP cases for `1.5`, `"5"`, and `true`, plus a valid negative delta. On implementation commit `df65ef7`, the first two cases failed (expected HTTP 400, actual 200); boolean was already rejected. Red-test commit `3eb4a22`, **7 tests, 2 failures**, original output `ir01-delta-before.txt`. This is an additional defect found before integration acceptance, not an alteration of the original IR-01 report.
+
+The fix attaches `StrictSignedIntegerDeserializer` only to AdminStockAdjustmentRequest.delta. It requires an integer JSON token, checks signed-int range through Jackson's getIntValue, preserves negative integer values and leaves zero rejection to the existing stock-adjustment business validation. Global Jackson behavior and OpenAPI's integer schema are unchanged.
+
+Both red and green command:
+
+```powershell
+docker run --rm --name hotshop-ir01-http -v D:/Codex/Projects/hotShop-review-01:/workspace -v hotshop-task04-m2:/root/.m2 -w /workspace maven:3.9-eclipse-temurin-21 sh ./mvnw -pl admin -am test '-Dtest=AdminInventoryApiTest' '-Dsurefire.failIfNoSpecifiedTests=false' '-DfailIfNoTests=false' -q
+```
+
+This DTO-only regression run starts no MySQL or other service container and does not modify OpenAPI definitions or generated clients.
+
+Signed-delta green result: exit 0, **7 passed, 0 failures, 0 errors, 0 skipped**; see `ir01-delta-after.txt`. All signed-delta changed files strictly decode as UTF-8, and `git diff --check` passed.

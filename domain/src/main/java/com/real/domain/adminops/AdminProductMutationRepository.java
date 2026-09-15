@@ -1,5 +1,7 @@
 package com.real.domain.adminops;
 
+import com.real.domain.entity.Product;
+import org.springframework.jdbc.core.BeanPropertyRowMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -9,6 +11,14 @@ public class AdminProductMutationRepository {
 
     public AdminProductMutationRepository(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
+    }
+
+    /** Read alongside JDBC writes, without a stale MyBatis transaction-local cache. */
+    public Product currentActiveProduct(long productId) {
+        return jdbc.queryForObject("""
+                SELECT product_id, name, price, stock, version, category, description, created_at
+                  FROM catalog_product WHERE product_id=? AND deleted_at IS NULL FOR UPDATE
+                """, BeanPropertyRowMapper.newInstance(Product.class), productId);
     }
 
     /** Compare the version read by the administrator; a signed delta is never an absolute overwrite. */

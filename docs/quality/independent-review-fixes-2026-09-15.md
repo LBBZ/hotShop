@@ -1,5 +1,7 @@
 # 独立复核修复与联合验证（2026-09-15）
 
+> 2026-09-16 追加：分页守恒重复预占计数补修见本文末节。此前验证结果仍对应原有 SHA，不代表本次补修重跑结果。
+
 ## 范围与工作区保护
 
 本次只处理 IR-01、IR-02、IR-03、IR-04，不表示完成全项目终验。
@@ -157,3 +159,38 @@ git status --short
 ```
 
 运行时导出脚本会创建隔离 MySQL/network 并回收容器/network；其现有清理流程可能遗留 MySQL 匿名卷。复验时记录该次容器 Mounts，仅回收经确认属于该次调用且无容器引用的卷，不能全局 prune。主 agent 本次的归属核验和清理结果见集成结果。
+
+## 2026-09-16 追加：分页守恒预占号去重
+
+**根因**：此前 IR-04 改为分页累加时遗漏了原守恒核算的 reservationNo 去重。相同 eventId 重投和不同 eventId 指向同一预占都可能重复累计，造成正常库存的 CRITICAL 误报。本次恢复业务预占号去重，保持有界扫描和真实异常检测。
+
+**实现**：每活动新增与 checkpoint 同槽的持久化 seen hash，逐条校验事实后通过 HSETNX 只计一次有效预占。跨页/跨次运行使用同一去重状态；fence 变化、遗留 checkpoint 或 seen 丢失时，从首个有界页面重算。checkpoint schemaVersion=2；完成或重启使用 UNLINK 回收 seen，不读取/遍历全部历史。无 API、数据库 migration、客户端、前端或 Agent 变更。部署时整体替换对账 worker，避免不识别去重状态的旧代码混跑。
+
+设计、三个新增真实回归的详细断言及修复前命令见 [补修设计与红测证据](review-fixes-2026-09-15/dedup-design.md)。测试覆盖同 eventId、不同 eventId 同 reservationNo、跨页重复、服务重建、旧 checkpoint、丢失 seen、写入 fence 重启；断言累计量、无虚假守恒告警，下一轮真实篡改仍产生 CRITICAL 且不错误修复库存。原有实际 Redis 命令预算、多活动推进、补偿并发测试一并保留。
+
+### 提交与验证边界
+
+- 补修基线：`ff7e65ff6c1a1a03f70b5b6d0f6906b3d849397a`。
+- 功能分支 `review-fix-conservation-dedup`，独立 worktree `D:/Codex/Projects/hotShop-review-dedup`；提交 `687ae9a058c2bec2b2686601afb6e307473de6a3`。
+- 集成分支仍为 `review-fixes-integration`；本次受测代码合并 SHA：`12015becabecf2a2bf2fb010a7ff3f8c68df3ed9`。之后仅更新报告/文本证据，交付 SHA 见交接消息及本地 `target/review-dedup/final-delivery.json`。
+- 修复前 3 tests / 2 failures / 0 errors：quantity 期望2实际4；遗留 checkpoint 期望 IN_PROGRESS 实际 COMPLETE。见 [红测摘录](review-fixes-2026-09-15/dedup-red.txt)（摘录仅清除行尾空白，原始日志保留）。
+- 功能分支整组首次执行 26 tests / 0 failures / 1 error：既有 `emptyCarrierWithBrokenTracerCannotLeakWorkerTraceIntoTimelineOrOutbox` 在读取数据库断言时连接超时，根因栈为 SocketTimeoutException；三个新增回归均通过。见 [首次执行摘录](review-fixes-2026-09-15/dedup-green-attempt1.txt)。未调整配置/断言，原样重跑 26 / 0 / 0 / 0，BUILD SUCCESS（UTC 16:20:36）。见 [功能分支绿测](review-fixes-2026-09-15/dedup-green.txt)。不能由重跑成功确定网络故障根因。
+- 真实 Redis 命令预算 B=3：HGETALL=4、HMGET=3、XRANGE_COUNT_SUM=6、XRANGE_COMMANDS=2；所有 XRANGE 均带 COUNT 且总读取预算受限，无 SMEMBERS。
+
+### 本次集成复验命令
+
+在 `D:/Codex/Projects/hotShop-review-integration` 执行；Maven Wrapper 3.9.16 / Temurin 21，真实隔离 MySQL、Redis、RabbitMQ Testcontainers。主机 Asia/Shanghai、容器 UTC，未改变测试环境或时区。
+
+```powershell
+docker run --rm --name hotshop-review-dedup-integration --mount type=bind,source=D:/Codex/Projects/hotShop-review-integration,target=/workspace --mount type=volume,source=hotshop-task04-m2,target=/root/.m2 --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal -w /workspace eclipse-temurin:21-jdk sh ./mvnw -B -ntp '-Dtest=SeckillOrderReliabilityContainerTest,InventoryReconciliationJointContainerTest,InventoryEditContainerTest,SeckillPaymentExpiredDeliveryContainerTest' '-Dsurefire.failIfNoSpecifiedTests=false' verify
+git diff --check ff7e65ff6c1a1a03f70b5b6d0f6906b3d849397a HEAD
+git status --short
+```
+
+上述命令也是原验收对话的最小独立复验入口（必须在当前集成分支执行）。本次未重跑前端、Agent、OpenAPI 全链门禁，也未运行完整故障矩阵、Qdrant、浏览器或长时压测；这些代码/契约本次无变更，不将此前执行结果冒称为本次结果。没有全项目终验声明。
+
+剩余限制：seen 的空间随本轮唯一有效预占数增长，单次处理记录数仍有界；持续写入可导致反复重启，完整核算仍需稳定窗口。已产生的历史误报告警不自动删除，以保留审计历史；新扫描正确去重，不再新建同类虚假告警。
+
+**集成实际结果**：上述命令在 `12015becabecf2a2bf2fb010a7ff3f8c68df3ed9` 执行成功，40 tests / 0 failures / 0 errors / 0 skipped（可靠性26、库存编辑5、秒杀超时回补6、后台库存调整与对账联合3）；BUILD SUCCESS，耗时4:17，UTC 2026-09-15 16:25:19。见 [集成结果摘录](review-fixes-2026-09-15/dedup-integration.txt)，完整日志在集成 worktree 的 `target/review-dedup/integration.log`。已复核实际 diff、红测原因及命令预算，并完成独立只读代码审查。
+
+**收尾**：相对原报告基线及本次补修基线的 `git diff --check` 通过。仅修改去重实现、对应测试和本任务报告/证据；无无关代码变更，未执行 clean。测试使用独立 Testcontainers，容器由测试生命周期回收；保留既有缓存、worktree 及两只历史停止容器，未全局清理。原工作区仍为 master / `a3e7a6c55040bbebc8760750af4b5cfcfd0406aa`，原未跟踪报告及附件目录保留。集成分支与补修功能分支提交后 `git status --short` 为空；最终交付状态和 SHA 记录于本地 JSON。未合并 master、未推送。

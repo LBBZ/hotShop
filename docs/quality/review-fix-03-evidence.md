@@ -11,7 +11,7 @@
 docker run --rm --name hotshop-review03-red -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal --mount type=bind,source=D:/Codex/Projects/hotShop-review-03,target=/workspace --mount type=volume,source=hotshop-task04-m2,target=/root/.m2 --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock -w /workspace eclipse-temurin:21-jdk sh ./mvnw -B -pl task -am '-Dtest=SeckillOrderReliabilityContainerTest#review03*+review04*' '-Dsurefire.failIfNoSpecifiedTests=false' test
 ```
 
-结果：2 tests, **2 failures, 0 errors, 0 skipped**，退出码 1。原始失败摘录：[ir03-ir04-before.txt](review-fixes-2026-09-15/ir03-ir04-before.txt)。
+结果：2 tests, **2 failures, 0 errors, 0 skipped**，退出码 1。原始失败摘录：[ir03-ir04-before.txt](review-fixes-2026-09-15/ir03-ir04-before.txt)。另提供可在报告基线应用的[仅回归测试补丁](review-fixes-2026-09-15/ir03-ir04-regression-before.patch)，对基线原文件执行 `git apply --check` 已通过；可在隔离基线 worktree 应用后使用上列命令重现，不能把该红测退出码当修复通过。
 
 - `review03OrdinaryPurchaseAfterActivityLoadDoesNotRaiseConservationIssue`：真实 ProductMapper.reduceStock 后商品库存 99，活动装载快照 100，对账实际插入 `MYSQL_STOCK_CONSERVATION_VIOLATION / CRITICAL`，证据 `catalogEquationHolds=false`。此红测验证真实 Mapper 与对账 issue；完整普通订单/后台调整/超时服务链另由联合测试验证。
 - `review04HistoricalReservationsRespectActualRedisReadBudget`：37 条历史，B=3，Redis commandstats 实际 HGETALL 增加 **41**，超过测试预算 16；不是仅检查 report.checkedEvents。
@@ -27,7 +27,7 @@ docker run --rm --name hotshop-review03-red -e TESTCONTAINERS_HOST_OVERRIDE=host
 
 秒杀 Redis 是活动配额投影，基准为该活动装载的 `initialAvailableStock`。有效数量是 RESERVED / ORDER_CREATED / COMPENSATING 数量；COMPENSATED 和 PAYMENT_EXPIRED 不再占配额。数据库 CANCELED 保留订单、明细与 order_id 是合法事实，反向审计已修正；Redis 异步尚未收到超时投影期间，两个存储分别按自己的事实守恒。
 
-`initialCatalogStock` 保留用于兼容旧装载元数据，已退出商品守恒及同版本装载的库存相等要求。
+`initialCatalogStock` 保留用于兼容旧装载元数据，已退出商品守恒及同版本装载的库存相等要求。Java 初装校验 `totalStock <= catalogStock` 仍保留：如果活动原配额正好等于商品初始库存，普通购买降低商品库存后再调用同版本 load，仍可能在该校验处返回 ACTIVITY_INVALID。本轮没有扩大初装/重载业务规则，也不宣称所有重载边界已通过；联合测试验证的是不同活动在不同时间以合法额度装载。
 
 ## IR-04 实际工作预算与恢复
 
@@ -56,10 +56,48 @@ Redis checkpoint 持久化 cursor、累计数量、fence、state、重启次数�
 
 每步仅一次 SSCAN，将返回条目 ZADD 和 cursor 原子持久化；工具输出实际 visited 数，可重复运行至 COMPLETE，不移除原 SET。**SSCAN COUNT 是软提示**，此一次兼容升级不承诺硬记录预算；MaxSeconds 在两次 Redis 调用之间检查，不能抢占一条正在运行的命令。日常 runBatch 绝不调用此升级扫描，使用严格 LIMIT。升级中 loader 双写，完整 SSCAN 保留旧成员并捕获新成员；完成后核对两者 cardinality，已有升级告警需按正常流程人工确认解决。
 
-## 验证状态
+## 修复后执行结果
 
-- 两项基线业务失败已执行并保留。
-- 编译检查已执行一次成功；实现追加测试后的编译/真实绿测正在执行，结果完成后补写。
-- 新增正式测试包含实际 Redis SLOWLOG 的 XRANGE COUNT（含 Lua）、commandstats HGETALL/HMGET、74 条历史与 B=3 多轮完成、服务实例重建恢复、两活动公平、跨页真实补偿与新预占、篡改报警证据、160 个旧 SET 成员显式升级与孤儿检测、第三条 processing 候选才有证据。
-- 原有真实秒杀故障矩阵以及 PAYMENT_EXPIRED 投影受 Lua keys 变更影响，完成后补记实际执行范围。
-- 不运行根 Maven clean；所有容器仅 Testcontainers 临时容器，不触碰既有数据卷、无全局 prune、无远端发布。
+生产与测试实现 SHA：`9247ae4223b4cdbb95e7337bcb644d075258f38e`。该 HEAD 在本功能分支实际执行完整受影响类：
+
+```powershell
+docker run --rm --name hotshop-review03-green -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal --mount type=bind,source=D:/Codex/Projects/hotShop-review-03,target=/workspace --mount type=volume,source=hotshop-task04-m2,target=/root/.m2 --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock -w /workspace eclipse-temurin:21-jdk sh ./mvnw -B -pl task -am '-Dtest=SeckillOrderReliabilityContainerTest' '-Dsurefire.failIfNoSpecifiedTests=false' test
+```
+
+**21 tests, 0 failures, 0 errors, 0 skipped；BUILD SUCCESS，退出码 0**。2026-09-15 14:52:20 UTC，Maven 总耗时 02:35，测试耗时 120.9 秒。包括原有 15 项和新增 6 项。MySQL 实际成功迁移全部 11 条（含 V1_9/V1_10），LATERAL LIMIT 和有界索引查询均真实执行成功。摘录：[ir03-ir04-after.txt](review-fixes-2026-09-15/ir03-ir04-after.txt)。
+
+实际 Redis 取证输出：
+
+```text
+REVIEW_BUDGET B=3 HGETALL=4 HMGET=3 XRANGE_COUNT_SUM=6 XRANGE_COMMANDS=2
+```
+
+测试断言 HGETALL <= 2B+1、HMGET <= B、SMEMBERS 增量为 0；SLOWLOG 捕获的 XRANGE 数量必须等于 commandstats 增量，必须包含 Lua 内 `(0-0` 范围，捕获不能达到 128 项截断上限。所有 XRANGE 的 COUNT 总和 <= 4B，构成实际返回记录的保守上界，不是只验证单个分页命令。
+
+新增正式回归：
+
+| 测试 | 真实验证事实 |
+| --- | --- |
+| review03OrdinaryPurchaseAfterActivityLoadDoesNotRaiseConservationIssue | ProductMapper 扣减后实际 MySQL issue 表无库存误报 |
+| review04HistoricalReservationsRespectActualRedisReadBudget | 37 历史/B=3，核对实际 Redis 命令和整体预算 |
+| review04PagesResumeAfterServiceRestartAndRotateAcrossActivities | 两活动共 74 历史、B=3、多次运行完整覆盖，重建服务恢复，checkpoint 各完成总量37，实际 issue 表为空 |
+| review04CompensationBetweenPagesRestartsSnapshotAndStillFindsRealTampering | 真实补偿 Lua 与新预占改变 fence，累计重启；同用户新 slot 合法；稳定后全量无误报，随后 Redis stock 篡改生成 CRITICAL 及数量证据，不修补该差额 |
+| review04LegacyRegistryUpgradeIsExplicitResumableAndPreservesOrphanStreams | 160 个旧 SET 成员，空索引明确告警；一次升级步进可恢复，成员全部保留，孤儿活动仍受检 |
+| review04ReverseEvidenceContinuesPastTwoInvalidCandidatesWithoutFalseIssue | 第三个 processing 候选才有真实 Stream 证据，前两次分页不错误断言 missing |
+
+第一次修复后整类运行是 **21 tests / 0 failures / 1 error**，错误来自新取证夹具用 Spring Redis 原始 execute 读取 SLOWLOG 的嵌套整数结果，默认 ByteArrayOutput 不支持 long。该次不算通过，保留[原错误摘录](review-fixes-2026-09-15/ir03-ir04-first-green-attempt.txt)。改为经过本地 jar javap 核对的 Lettuce typed slowlogGet/Reset 后重跑全部 21 项，得到上述通过结果；没有删除命令检查或放宽预算，反而将最初红测上限16强化为正式预算公式7。
+
+编译入口（两次已成功）：`sh ./mvnw -B -pl task -am -DskipTests test`，使用同一 Java21 容器与 Maven3.9.16 wrapper。Windows PowerShell 的 Maven `-D` 含点参数需整体引用；容器日志和业务时间采用 UTC，宿主时区 Asia/Shanghai。新增/修改文本已严格 UTF-8 解码检查，报告显式写 UTF-8/LF；证据仅清理尾部空白以通过 diff --check。
+
+## 资源与尚未执行范围
+
+- 本分支两轮整类 green 尝试和一轮 red 的 MySQL/Redis/Ryuk 临时容器已由 Testcontainers 删除，green runner 使用 --rm 删除。最终 `docker ps` 中仅剩其他任务的 `hotshop-ir01-http`，未操作它。
+- 不运行根 Maven clean；完整运行日志保留在本 worktree 的 `task/target/review-fix-03/`。Maven 缓存 `hotshop-task04-m2` 是既有共享依赖缓存，未删除。
+- 本功能分支没有完整运行其余全部 Java、真实 Qdrant、浏览器闭环、长时压测。PAYMENT_EXPIRED 的既有 Rabbit+Redis 测试类只调整了新增 metadata key 所需种子，最终重跑交由主 agent 的集成验证；这不是本分支已通过项。
+- 普通/秒杀订单、后台显式调整、真实超时回补与商品/活动对账的完整联合服务验证由独立 joint 测试和主 agent 在集成 HEAD 重跑，本分支局部通过不能替代它。
+- PowerShell 旧索引升级入口的真实 CLI 冒烟由主 agent 在集成分支执行；其发现并修复了裸逗号参数解析问题。此处的 JUnit Lua 升级测试不冒充 PowerShell 入口通过证据。
+- 本分支无 push、master 合并、全局 prune、既有数据卷操作或付费模型调用。
+
+## 最小独立复验
+
+在最终集成 worktree 用上列完整 `SeckillOrderReliabilityContainerTest` 命令复跑，另运行统一修复报告指定的 joint、HTTP 与 PAYMENT_EXPIRED 测试。核对实际 issue 表断言、打印的 Redis 预算、迁移成功和最后测试汇总；不要只检查报告 checkedEvents。旧部署首次启用有界对账前按上节显式升级索引，并核对实际 CLI 的 COMPLETE 与 cardinality。

@@ -1,4 +1,8 @@
 import { apiClients } from "@/api/clients";
+import type {
+  AdminProductEditRequest,
+  AdminStockAdjustmentRequest,
+} from "@/api/generated/admin";
 import { adminAuth } from "@/auth/domains";
 
 export interface CursorPage<T> {
@@ -57,13 +61,8 @@ export interface ProductMutation {
   reason: string;
 }
 
-export type ProductEdit = Omit<ProductMutation, "stock">;
-
-export interface StockAdjustment {
-  delta: number;
-  expectedVersion: string;
-  reason: string;
-}
+export type ProductEdit = AdminProductEditRequest;
+export type StockAdjustment = AdminStockAdjustmentRequest;
 
 export interface AdminActivity {
   activityId: string;

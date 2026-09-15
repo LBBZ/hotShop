@@ -1,0 +1,7 @@
+REVIEW_BUDGET B=3 HGETALL=4 HMGET=3 XRANGE_COUNT_SUM=6 XRANGE_COMMANDS=2
+[ERROR] Tests run: 26, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 123.1 s <<< FAILURE! -- in com.real.task.seckill.SeckillOrderReliabilityContainerTest
+[ERROR] com.real.task.seckill.SeckillOrderReliabilityContainerTest.emptyCarrierWithBrokenTracerCannotLeakWorkerTraceIntoTimelineOrOutbox -- Time elapsed: 8.376 s <<< ERROR!
+org.springframework.jdbc.CannotGetJdbcConnectionException: Failed to obtain JDBC Connection
+Caused by: java.net.SocketTimeoutException: Connect timed out
+[ERROR] Tests run: 26, Failures: 0, Errors: 1, Skipped: 0
+[INFO] BUILD FAILURE

@@ -1,9 +1,10 @@
 -- One atomic, restartable conservation page. No full-history reads.
--- KEYS: metadata, stock, stream, persistent reconciliation checkpoint.
+-- KEYS: metadata, stock, stream, persistent checkpoint, per-scan seen hash.
 -- ARGV: maximum records (hard XRANGE COUNT), reservation-key prefix.
 -- Only effective-state-changing writers advance inventoryRevision. Finalizing
 -- RESERVED -> ORDER_CREATED does not change effective quantity.
 local meta, stock, stream, checkpoint = KEYS[1], KEYS[2], KEYS[3], KEYS[4]
+local seen = KEYS[5]
 local revision = redis.call('HGET', meta, 'inventoryRevision') or '0'
 local epoch = redis.call('HGET', meta, 'databaseVersion') or '0'
 local fence = epoch .. ':' .. revision
@@ -12,12 +13,21 @@ local cursor = redis.call('HGET', checkpoint, 'cursor') or '0-0'
 local total = tonumber(redis.call('HGET', checkpoint, 'quantity') or '0')
 local invalid = tonumber(redis.call('HGET', checkpoint, 'invalid') or '0')
 local restarted = '0'
-if previous ~= fence then
-    if previous then
+local schema = redis.call('HGET', checkpoint, 'schemaVersion')
+local priorState = redis.call('HGET', checkpoint, 'state')
+-- Legacy aggregates have no trustworthy distinct-reservation state. Missing
+-- companion state (e.g. eviction) also requires restarting, never resuming sums.
+-- Both keys are persisted atomically, without TTL, in the activity's hash slot.
+if previous ~= fence or schema ~= '2' or priorState ~= 'IN_PROGRESS'
+        or redis.call('EXISTS', seen) == 0 then
+    if previous and priorState ~= 'COMPLETE' then
         redis.call('HINCRBY', checkpoint, 'restarts', 1)
         restarted = '1'
     end
     cursor, total, invalid = '0-0', 0, 0
+    -- Detach in constant time; Redis reclaims large hashes asynchronously.
+    redis.call('UNLINK', seen)
+    redis.call('HSET', seen, 'initialized', '1')
 end
 local rows = redis.call('XRANGE', stream, '(' .. cursor, '+', 'COUNT', ARGV[1])
 for _, row in ipairs(rows) do
@@ -33,7 +43,11 @@ for _, row in ipairs(rows) do
         if not fact[1] or tonumber(fact[2]) ~= quantity or fact[5] ~= no then
             invalid = invalid + 1
         elseif fact[1] == 'RESERVED' or fact[1] == 'ORDER_CREATED' or fact[1] == 'COMPENSATING' then
-            total = total + quantity
+            -- Validate every delivery above, but count each business reservation
+            -- once across pages / service restarts, regardless of eventId.
+            if redis.call('HSETNX', seen, 'reservation:' .. no, '1') == 1 then
+                total = total + quantity
+            end
         elseif fact[1] == 'COMPENSATED' then
             if fact[3] ~= '1' or not fact[4] then invalid = invalid + 1 end
         elseif fact[1] ~= 'PAYMENT_EXPIRED' then
@@ -42,13 +56,13 @@ for _, row in ipairs(rows) do
     end
     cursor = row[1]
 end
--- XLEN is O(1). A page ending exactly at COUNT completes on the next empty page.
+-- A page ending exactly at COUNT completes on the next empty page.
 -- Finishing requires the same writer fence throughout the whole historical scan.
 local complete = #rows < tonumber(ARGV[1])
 local state = complete and 'COMPLETE' or 'IN_PROGRESS'
 local initial = redis.call('HGET', meta, 'initialAvailableStock') or ''
 local current = redis.call('GET', stock) or ''
-redis.call('HSET', checkpoint, 'fence', fence, 'cursor', complete and '0-0' or cursor,
+redis.call('HSET', checkpoint, 'schemaVersion', '2', 'fence', fence, 'cursor', complete and '0-0' or cursor,
     'quantity', complete and '0' or tostring(total),
     'invalid', complete and '0' or tostring(invalid), 'state', state,
     'lastScanned', tostring(#rows))
@@ -56,6 +70,7 @@ if complete then
     redis.call('HINCRBY', checkpoint, 'completedScans', 1)
     redis.call('HSET', checkpoint, 'lastCompletedQuantity', tostring(total),
         'lastCompletedInvalid', tostring(invalid), 'lastCompletedFence', fence)
+    redis.call('UNLINK', seen)
 end
 return {state, tostring(#rows), tostring(total), initial, current,
     tostring(invalid), fence, restarted}

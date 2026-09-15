@@ -1,0 +1,32 @@
+[ERROR] Tests run: 3, Failures: 2, Errors: 0, Skipped: 0, Time elapsed: 45.41 s <<< FAILURE! -- in com.real.task.seckill.SeckillOrderReliabilityContainerTest
+[ERROR] com.real.task.seckill.SeckillOrderReliabilityContainerTest.reviewDedupRepeatedEventAndReservationAcrossPagesSurviveRestart -- Time elapsed: 9.383 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: 
+
+expected: "2"
+ but was: "4"
+	at com.real.task.seckill.SeckillOrderReliabilityContainerTest.reviewDedupRepeatedEventAndReservationAcrossPagesSurviveRestart(SeckillOrderReliabilityContainerTest.java:905)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+
+[ERROR] com.real.task.seckill.SeckillOrderReliabilityContainerTest.reviewDedupLegacyCheckpointAndLostSeenStateRestartBoundedly -- Time elapsed: 1.640 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: 
+
+expected: "IN_PROGRESS"
+ but was: "COMPLETE"
+	at com.real.task.seckill.SeckillOrderReliabilityContainerTest.reviewDedupLegacyCheckpointAndLostSeenStateRestartBoundedly(SeckillOrderReliabilityContainerTest.java:941)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+
+[INFO] 
+[INFO] Results:
+[INFO] 
+[ERROR] Failures: 
+[ERROR]   SeckillOrderReliabilityContainerTest.reviewDedupLegacyCheckpointAndLostSeenStateRestartBoundedly:941 
+expected: "IN_PROGRESS"
+ but was: "COMPLETE"
+[ERROR]   SeckillOrderReliabilityContainerTest.reviewDedupRepeatedEventAndReservationAcrossPagesSurviveRestart:905 
+expected: "2"
+ but was: "4"
+[INFO] 

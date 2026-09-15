@@ -1,0 +1,6 @@
+REVIEW_BUDGET B=3 HGETALL=4 HMGET=3 XRANGE_COUNT_SUM=6 XRANGE_COMMANDS=2
+[INFO] Tests run: 26, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 111.4 s -- in com.real.task.seckill.SeckillOrderReliabilityContainerTest
+[INFO] Tests run: 26, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS
+[INFO] Total time:  02:15 min
+[INFO] Finished at: 2026-09-15T16:20:36Z

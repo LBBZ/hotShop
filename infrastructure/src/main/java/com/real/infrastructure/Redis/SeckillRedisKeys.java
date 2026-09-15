@@ -47,6 +47,10 @@ public final class SeckillRedisKeys {
         return activity(activityId) + ":reconciliation:conservation";
     }
 
+    public static String conservationSeen(long activityId) {
+        return conservationCheckpoint(activityId) + ":seen";
+    }
+
     public static String loadStagingMetadata(long activityId, String loadId) {
         return activity(activityId) + ":load:" + loadId + ":meta";
     }

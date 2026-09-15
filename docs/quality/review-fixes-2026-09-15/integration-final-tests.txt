@@ -1,0 +1,78 @@
+HEAD: 9feda3de5a736a13c078a9c4df0eddd83b38aa19
+Java: sh ./mvnw -B -ntp -fae verify; exit 0; 313 tests, 0 failures, 0 errors, 0 skipped
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.414 s -- in com.real.common.api.CursorCodecTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.039 s -- in com.real.common.enums.OrderStatusCharacterizationTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.431 s -- in com.real.common.observability.ObservabilityRequestFilterTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.141 s -- in com.real.common.observability.ObservabilitySafetyTest
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 4.086 s -- in com.real.domain.observability.RedisLuaObservationAspectTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.335 s -- in com.real.domain.OrderServiceTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.224 s -- in com.real.domain.payment.MockPaymentProviderTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.062 s -- in com.real.domain.ReliableRabbitTopologyTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.249 s -- in com.real.domain.userjourney.TransactionTimelineWriterTest
+[INFO] Tests run: 16, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 20.73 s -- in com.real.database.LegacyTakeoverTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 13.50 s -- in com.real.database.MapperCompatibilityTest
+[INFO] Tests run: 33, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 11.39 s -- in com.real.database.SchemaConstraintTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 10.32 s -- in com.real.database.V15ToV16MigrationTest
+[INFO] Tests run: 39, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.158 s -- in com.real.security.audit.AuditSensitiveDataSanitizerTest
+[INFO] Tests run: 25, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 3.125 s -- in com.real.security.service.ClientAddressResolverTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.019 s -- in com.real.security.service.RefreshCookieServiceTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.304 s -- in com.real.security.service.SecurityAuditServiceTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.023 s -- in com.real.security.service.UserTransactionRateLimiterTest
+[INFO] Tests run: 36, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.508 s -- in com.real.task.observability.TaskObservabilityMetricsTest
+[INFO] Tests run: 18, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 4.289 s -- in com.real.task.outbox.OutboxPublisherTest
+[INFO] Tests run: 23, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 33.49 s -- in com.real.task.outbox.ReliableMessagingContainerTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 7.787 s -- in com.real.task.payment.SeckillPaymentExpiredDeliveryContainerTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 11.28 s -- in com.real.task.seckill.InventoryEditContainerTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.717 s -- in com.real.task.seckill.ReservationStreamConsumerObservationTest
+REVIEW_BUDGET B=3 HGETALL=4 HMGET=3 XRANGE_COUNT_SUM=6 XRANGE_COMMANDS=2
+[INFO] Tests run: 23, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 67.60 s -- in com.real.task.seckill.SeckillOrderReliabilityContainerTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.206 s -- in com.real.task.timeoutOrderTask.OrderTimeoutConsumerTest
+[INFO] Tests run: 81, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 36.72 s -- in com.real.portal.agenttools.AgentToolsAndPurchaseConfirmationIntegrationTest
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 19.23 s -- in com.real.portal.FlashSaleReservationIntegrationTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 20.40 s -- in com.real.portal.IdentitySecurityTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 14.78 s -- in com.real.portal.MockPaymentIntegrationTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 40.95 s -- in com.real.portal.PaymentTerminalRaceContainerTest
+[INFO] Tests run: 26, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 7.243 s -- in com.real.portal.PortalApiContractTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.953 s -- in com.real.portal.sse.TransactionEventStreamServiceTest
+[INFO] Tests run: 79, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 20.73 s -- in com.real.admin.AdminApiContractTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.410 s -- in com.real.admin.AdminFlashSaleActivityLoadServiceTest
+[INFO] Tests run: 16, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 20.16 s -- in com.real.admin.AdminIdentitySecurityTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.420 s -- in com.real.admin.AdminInventoryApiTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.071 s -- in com.real.admin.agenttools.AdminAgentToolsControllerTest
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.273 s -- in com.real.admin.agenttools.AdminAgentToolServiceTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 20.31 s -- in com.real.admin.InventoryReconciliationJointContainerTest
+[INFO] Tests run: 50, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS
+[INFO] Total time:  09:35 min
+[INFO] Finished at: 2026-09-15T15:44:34Z
+
+Agent: pytest -o addopts= -p no:cacheprovider -p pytest_asyncio.plugin -m 'not qdrant' --tb=short -q; exit 0
+267 passed, 6 skipped, 8 deselected in 29.43s
+
+Agent quality:
+lint=0
+format-all=1
+format-changed=0
+mypy=0
+
+Web: corepack pnpm@10.15.0 --dir web <step>; 86 tests in 19 files
+format:check=0
+lint=0
+typecheck=0
+test=0
+build=0
+
+Runtime OpenAPI export: script/generate-openapi.ps1 -UseExistingPackages; exit 0
+OpenAPI compatibility: script/check_openapi_compatibility.py; exit 0
+api:check=0
+api:check:admin=0
+api:check:agent=0
+PASS: actual CLI resumed a partial upgrade and retained all 160 legacy members.
+baseline_source_equals_final_runtime: True
+validation_properties: ['ctx', 'input', 'loc', 'msg', 'type']

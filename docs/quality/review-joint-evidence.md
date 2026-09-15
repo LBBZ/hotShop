@@ -35,7 +35,15 @@ docker run --rm --name hotshop-review-joint-red --mount type=bind,source=D:/Code
 
 最初局部复跑（加 FOR UPDATE 前的同等 JDBC 读路径）得到 **3 tests / 0 failures / 1 error**，真实审计存储失败回滚测试及陈旧普通订单表单测试均通过。完整业务测试通过调整响应后，在首次对账遇到 `XPENDING NOGROUP`：新活动已由生产 loader 注册，但生产 consumer 尚未发现并创建 group。未通过在测试中提前 refresh consumer 绕开；为对账的这一合法启动窗口另补正式红绿回归及局部处理。
 
-原始失败摘要见 [首次联合失败](review-fixes-2026-09-15/integration-joint-before.txt) 和 [启动窗口错误](review-fixes-2026-09-15/integration-joint-intermediate.txt)。完整原始日志保存在集成 worktree 的 `target/review-fixes/integration-java-third-attempt.log`、`joint-cache-fix.log`。最终完整通过结果在联合修复合并后补记。
+原始失败摘要见 [首次联合失败](review-fixes-2026-09-15/integration-joint-before.txt) 和 [启动窗口错误](review-fixes-2026-09-15/integration-joint-intermediate.txt)。完整原始日志保存在集成 worktree 的 `target/review-fixes/integration-java-third-attempt.log`、`joint-cache-fix.log`。
+
+### 最终联合代码的真实通过
+
+主 agent 在 `9feda3de5a736a13c078a9c4df0eddd83b38aa19` 使用上述 Docker/Maven 入口、`-pl admin -am '-Dtest=InventoryReconciliationJointContainerTest' '-Dsurefire.failIfNoSpecifiedTests=false' test` 运行完整联合类：**3 tests / 0 failures / 0 errors / 0 skipped，BUILD SUCCESS，退出 0**。类耗时74.76秒，reactor总耗时02:12，完成于2026-09-15 15:27:15 UTC。日志：`target/review-fixes/joint-integrated.log`。
+
+新增的真实审计故障回归先拒绝成功审计写入，验证 HTTP 500、stock=expected_stock=100、version不变，独立失败审计存在且成功审计为0；移除测试触发器后，同一 expectedVersion 重提成功，stock=expected_stock=105，成功审计为1。完整业务回归保持原有所有库存、HTTP、审计、Outbox、Redis投影、零异常及真实篡改断言，未放宽断言或预先创建消费组。
+
+统一报告另记录同一代码 HEAD 的全 reactor verify 结果；本节的定向通过不代替该结果。
 
 ## 复验命令与资源
 

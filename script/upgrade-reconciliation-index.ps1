@@ -14,7 +14,7 @@ $timer = [System.Diagnostics.Stopwatch]::StartNew()
 for ($page = 0; $page -lt $MaxPages -and $timer.Elapsed.TotalSeconds -lt $MaxSeconds; $page++) {
     # Explicit maintenance only. SSCAN COUNT is advisory, unlike the hard LIMIT
     # used by runBatch; print the actual page size and resume stored cursor.
-    $result = @($lua | docker exec -i $RedisContainer redis-cli --raw --eval /dev/stdin $registry $index $checkpoint , $CountHint)
+    $result = @($lua | docker exec -i $RedisContainer redis-cli --raw --eval /dev/stdin $registry $index $checkpoint ',' $CountHint)
     if ($LASTEXITCODE -ne 0 -or $result.Count -ne 3) {
         throw "Index upgrade failed: $result"
     }

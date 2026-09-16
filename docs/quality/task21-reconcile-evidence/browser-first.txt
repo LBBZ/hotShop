@@ -1,0 +1,90 @@
+
+Running 7 tests using 1 worker
+
+(node:29084) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:29084) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x  1 e2e\task-21-delivery-real.spec.ts:88:1 › built application: purchase, Mock payment, reservation and Agent confirmation (17.5s)
+(node:27656) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:27656) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 2 e2e\task-21-delivery-real.spec.ts:137:1 › built admin: metadata preserves a purchase and stale stock adjustment conflicts (4.4s)
+  x  3 e2e\task-21-delivery-real.spec.ts:181:1 › built admin: high-risk Agent action is refused without a tool call (1.8s)
+(node:37064) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:37064) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x  4 e2e\task-21-delivery-real.spec.ts:195:1 › built admin: audit remains readable after Agent tools and confirmation (6.0s)
+(node:39276) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:39276) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 5 e2e\task-21-delivery-real.spec.ts:215:1 › built Agent: original Chinese paraphrase safely returns empty at default threshold (3.7s)
+  ok 6 e2e\task-21-delivery-real.spec.ts:234:1 › built Agent: Chinese direct corpus question returns a verified citation (2.2s)
+  ok 7 e2e\task-21-delivery-real.spec.ts:242:1 › built Agent: English static question returns a citation (5.7s)
+
+
+  1) e2e\task-21-delivery-real.spec.ts:88:1 › built application: purchase, Mock payment, reservation and Agent confirmation
+
+    Error: response.text: Protocol error (Network.getResponseBody): No data found for resource with given identifier
+
+      57 |     timeout: 45_000,
+      58 |   });
+    > 59 |   return (await (await stream).text())
+         |                                ^
+      60 |     .split("\n")
+      61 |     .filter((line) => line.startsWith("data: "))
+      62 |     .map(
+        at ask (D:\Codex\Projects\hotShop-task21-reconcile-01\web\e2e\task-21-delivery-real.spec.ts:59:32)
+        at D:\Codex\Projects\hotShop-task21-reconcile-01\web\e2e\task-21-delivery-real.spec.ts:125:3
+
+    Error Context: test-results\task-21-delivery-real-buil-31f90-tion-and-Agent-confirmation\error-context.md
+
+  2) e2e\task-21-delivery-real.spec.ts:181:1 › built admin: high-risk Agent action is refused without a tool call
+
+    Error: response.text: Protocol error (Network.getResponseBody): No data found for resource with given identifier
+
+      57 |     timeout: 45_000,
+      58 |   });
+    > 59 |   return (await (await stream).text())
+         |                                ^
+      60 |     .split("\n")
+      61 |     .filter((line) => line.startsWith("data: "))
+      62 |     .map(
+        at ask (D:\Codex\Projects\hotShop-task21-reconcile-01\web\e2e\task-21-delivery-real.spec.ts:59:32)
+        at D:\Codex\Projects\hotShop-task21-reconcile-01\web\e2e\task-21-delivery-real.spec.ts:186:3
+
+    Error Context: test-results\task-21-delivery-real-buil-52770-refused-without-a-tool-call\error-context.md
+
+  3) e2e\task-21-delivery-real.spec.ts:195:1 › built admin: audit remains readable after Agent tools and confirmation
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: getByRole('cell', { name: 'CATALOG_STOCK_ADJUSTED', exact: true }).first()
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 5000ms[22m
+    [2m  - waiting for getByRole('cell', { name: 'CATALOG_STOCK_ADJUSTED', exact: true }).first()[22m
+
+
+      202 |       .getByRole("cell", { name: "CATALOG_STOCK_ADJUSTED", exact: true })
+      203 |       .first(),
+    > 204 |   ).toBeVisible();
+          |     ^
+      205 |   await page.getByLabel("动作代码（精确）").fill("AGENT_TOOL_INVOKED");
+      206 |   await page.getByLabel("资源类型（精确）").fill("PURCHASE_DRAFT");
+      207 |   await expect(
+        at D:\Codex\Projects\hotShop-task21-reconcile-01\web\e2e\task-21-delivery-real.spec.ts:204:5
+
+    Error Context: test-results\task-21-delivery-real-buil-edca0-gent-tools-and-confirmation\error-context.md
+
+  3 failed
+    e2e\task-21-delivery-real.spec.ts:88:1 › built application: purchase, Mock payment, reservation and Agent confirmation
+    e2e\task-21-delivery-real.spec.ts:181:1 › built admin: high-risk Agent action is refused without a tool call
+    e2e\task-21-delivery-real.spec.ts:195:1 › built admin: audit remains readable after Agent tools and confirmation
+  4 passed (45.8s)

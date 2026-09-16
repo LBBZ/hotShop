@@ -1,0 +1,143 @@
+{
+  "baseline": "ebefde2ee158809f900a5912cbcda3ae7d58adad",
+  "branch": "task-21-reconcile-01",
+  "binding": "Worktree source archived in implementation commit; only browser test type annotations/format were adjusted after accepted browser execution. No application changes afterward.",
+  "files": [
+    {
+      "path": "admin/src/main/java/com/real/admin/agenttools/AdminAgentToolAuditService.java",
+      "sha256": "34f74e26a6a27814127e7ba67e2871bdfadf861aeb6f4f0756cbb1471f253acb"
+    },
+    {
+      "path": "admin/src/main/java/com/real/admin/agenttools/AdminAgentToolService.java",
+      "sha256": "f9bc7470735633f065d4a20a2124e8f6f783a30ec93586df8b7df6112fefdbb4"
+    },
+    {
+      "path": "admin/src/main/java/com/real/admin/controller/AdminAuditLogController.java",
+      "sha256": "d2506d00e4c2a64c22c4aa8c319d14a3236a461cf15b1d30aa1d258a2094cb11"
+    },
+    {
+      "path": "admin/src/main/java/com/real/admin/service/AdminAuditLogQueryService.java",
+      "sha256": "e0aef9e96907b0552c74383c79a554b2ba099b858a70d1132dc745d8edcab918"
+    },
+    {
+      "path": "admin/src/test/java/com/real/admin/AdminIdentitySecurityTest.java",
+      "sha256": "968614c349f5f4cefa9c2a9534f4585bf27e1465eb9b7e07ffd14f7c92ab7eab"
+    },
+    {
+      "path": "admin/src/test/java/com/real/admin/agenttools/AdminAgentToolServiceTest.java",
+      "sha256": "110de2febadb214ff778d8f8453553758af5c96a1da91afdd28d6b807ea6d23f"
+    },
+    {
+      "path": "agent/knowledge/after-sales.json",
+      "sha256": "b83f062b1a37001febf4716bdd40a80504bc8971c83104845d483d666ae1856f"
+    },
+    {
+      "path": "agent/src/hotshop_agent/embeddings/fake.py",
+      "sha256": "6ed41170af09051f986913a2ca547b4e757243adf1dee3418839f47d46a5717b"
+    },
+    {
+      "path": "agent/src/hotshop_agent/observability.py",
+      "sha256": "b45d33969c37235dd7a920caad7e5b72313a7e099b10b685f2c2f2e14da2ee70"
+    },
+    {
+      "path": "agent/src/hotshop_agent/qdrant.py",
+      "sha256": "a7fed9114b38b315dd4a11dc9053ea6e3a3ff771b2b0a5b249ae0e13b2b1534a"
+    },
+    {
+      "path": "agent/src/hotshop_agent/rag.py",
+      "sha256": "f2ce834e46df3a89d96154239fd6c4f94cb757d725f1245b003cf33057574c24"
+    },
+    {
+      "path": "agent/src/hotshop_agent/service.py",
+      "sha256": "54c050e492e1e65c82d8859d89404eeb6460786b4b6e6187a2c01d187372dc5d"
+    },
+    {
+      "path": "agent/tests/test_reconcile_rag.py",
+      "sha256": "876eab5d3c974e92feedb73072e209907fad99f2414a9c85a9869ae8fdda070f"
+    },
+    {
+      "path": "common/src/main/java/com/real/common/audit/AuditAction.java",
+      "sha256": "e8ec462ab427081de79e2fc71818fa1da06525d00f2a81e05c244e3b31fabc51"
+    },
+    {
+      "path": "common/src/main/java/com/real/common/audit/AuditLogResponse.java",
+      "sha256": "bf8269ca5eb468b74619aada654974d299c0a429b352850924c553a65827d054"
+    },
+    {
+      "path": "common/src/main/java/com/real/common/audit/AuditResourceType.java",
+      "sha256": "fd5d1d68b702cb937af2dc942077467689862f535a2b08ad42a0e95d20d3e3d0"
+    },
+    {
+      "path": "docker-compose.demo.yml",
+      "sha256": "796b09de5e778832c9987efd2c7b316d923d20d8f6ac2c2ede94cc11e639ce56"
+    },
+    {
+      "path": "docker-compose.yml",
+      "sha256": "ed825a7ce3c4d41cec02fc7270494d5137e171b7a419eea310ae8a15122e36ea"
+    },
+    {
+      "path": "domain/src/main/java/com/real/domain/agenttools/AgentToolAuditWriter.java",
+      "sha256": "96c79752912c187cdc9dddf8e82d350030128ef379fadd29589c7ec793375585"
+    },
+    {
+      "path": "domain/src/main/java/com/real/domain/agenttools/AgentToolService.java",
+      "sha256": "98c4527a9d782f1467cc4e21f250bd066ca17f11345d31182fdee067479669b5"
+    },
+    {
+      "path": "domain/src/main/java/com/real/domain/agenttools/PurchaseConfirmationService.java",
+      "sha256": "059f72e78c9cfc100bd18acaf4c17704759341202804b4654a848aff8dd34100"
+    },
+    {
+      "path": "portal/src/main/java/com/real/portal/controller/AgentToolController.java",
+      "sha256": "9406aa0b15c6faeb33171eda27f9ec123325bbfaa346f1562e078f81a366e60b"
+    },
+    {
+      "path": "portal/src/main/java/com/real/portal/controller/PurchaseConfirmationController.java",
+      "sha256": "8796188745145bed00abdc3584c520cc6fe30e1b13886f93a6d6f26155224ecc"
+    },
+    {
+      "path": "script/reconcile-browser-observer.js",
+      "sha256": "28c542f8bbecf929e3fc42907785f996b25afbea74c4d0773a58e4559c5c15f3"
+    },
+    {
+      "path": "script/task21-demo.ps1",
+      "sha256": "cd5e25fbb9ddcb5652872f1bbca8234d146ec1fbcc09f8c002279322a4e338d6"
+    },
+    {
+      "path": "script/verify-reconcile-rag.mjs",
+      "sha256": "e09c3bec85e1399b752bfa18497bf5864298d692461e710aa1069b42e1b92068"
+    },
+    {
+      "path": "task/src/main/java/com/real/task/seckill/SeckillProcessingService.java",
+      "sha256": "a512a383c6964e412b9de7f7b7730df2c97d889f5cd7298eda826f73af09ab1d"
+    },
+    {
+      "path": "task/src/main/java/com/real/task/timeoutOrderTask/OrderTimeoutService.java",
+      "sha256": "fe7df2aadf64ef2a1b349414513708f59b629af320a7a48be865a3f3c68289be"
+    },
+    {
+      "path": "web/e2e/task-21-delivery-real.spec.ts",
+      "sha256": "37719fffa2feacaf5c85e16f7465725e13472e1ff7d4ec1df74b69ecdee60889"
+    },
+    {
+      "path": "web/src/api/generated/admin/apis/AdminAuditLogsApi.ts",
+      "sha256": "80e06520cca8f866e4649708b1ee68b0061fd05837537a5d1282cfbfd475d5ad"
+    },
+    {
+      "path": "web/src/api/generated/admin/models/AuditLogResponse.ts",
+      "sha256": "69b440fc41dec7334ee0764e19a5db2f79c9ec1994b35fdf3b975bb068be67ce"
+    },
+    {
+      "path": "web/src/features/admin/admin-api.ts",
+      "sha256": "49f622ec1b4933a2ee2c5a23167843d14a7d94b19c3a66a31b821f4c02878f87"
+    },
+    {
+      "path": "web/src/pages/admin-audit-page.test.tsx",
+      "sha256": "de39517917765d7c43b8a68d75c69dad578089bf1f417339a39f91b9b0b0942c"
+    },
+    {
+      "path": "web/src/pages/admin-audit-page.tsx",
+      "sha256": "fbba8eb56dc09d79b2e1e49744ab38665f9d1a78d8efed9adb2076a6f5eda8b8"
+    }
+  ]
+}

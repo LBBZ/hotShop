@@ -1,5 +1,7 @@
 package com.real.task.timeoutOrderTask;
 
+import com.real.common.audit.AuditAction;
+import com.real.common.audit.AuditResourceType;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.real.common.audit.InventoryCompensationAuditState;
@@ -174,7 +176,8 @@ public class OrderTimeoutService {
     private void insertInventoryCompensationAudit(TimeoutEvent event,
             ReservationFact reservation, int restoredQuantity) {
         String orderType = reservation == null ? "ORDINARY" : "SECKILL";
-        String resourceType = reservation == null ? "SALES_ORDER" : "SALE_RESERVATION";
+        AuditResourceType resourceType = reservation == null
+                ? AuditResourceType.SALES_ORDER : AuditResourceType.SALE_RESERVATION;
         String resourceId = reservation == null ? event.orderId() : reservation.reservationNo();
         InventoryCompensationAuditState state = new InventoryCompensationAuditState(
                 orderType, "PAYMENT_TIMEOUT", event.orderId(),
@@ -183,8 +186,9 @@ public class OrderTimeoutService {
             int inserted = jdbc.update("""
                 INSERT INTO audit_log(actor_type,actor_id,action,resource_type,resource_id,result,
                   request_id,trace_id,source,state_summary)
-                VALUES('SYSTEM',NULL,'INVENTORY_COMPENSATED',?,?,'SUCCESS',NULL,NULL,'TASK',CAST(? AS JSON))
-                """, resourceType, resourceId, json.writeValueAsString(state));
+                VALUES('SYSTEM',NULL,?,?,?,'SUCCESS',NULL,NULL,'TASK',CAST(? AS JSON))
+                """, AuditAction.INVENTORY_COMPENSATED.name(), resourceType.name(), resourceId,
+                    json.writeValueAsString(state));
             if (inserted != 1) throw new IllegalStateException("Inventory compensation audit was not inserted");
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Cannot serialize inventory compensation audit", exception);

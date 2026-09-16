@@ -1,0 +1,6 @@
+orders_before_browser
+0
+product_id	stock	expected_stock	version
+913001	50	50	0
+applied_migrations
+11

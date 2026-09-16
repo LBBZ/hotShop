@@ -1,5 +1,7 @@
 package com.real.domain.agenttools;
 
+import com.real.common.audit.AuditResourceType;
+import com.real.common.audit.AuditAction;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.real.common.api.RequestContext;
@@ -28,7 +30,7 @@ public class AgentToolAuditWriter {
             String agentClientId,
             long delegatedUserId,
             String tool,
-            String resourceType,
+            AuditResourceType resourceType,
             String resourceId,
             String result,
             Map<String, Object> parameterSummary,
@@ -39,7 +41,7 @@ public class AgentToolAuditWriter {
                 agentClientId,
                 "USER",
                 Long.toString(delegatedUserId),
-                "AGENT_TOOL_INVOKED",
+                AuditAction.AGENT_TOOL_INVOKED,
                 resourceType,
                 resourceId,
                 result,
@@ -57,7 +59,7 @@ public class AgentToolAuditWriter {
             String agentClientId,
             long delegatedUserId,
             String tool,
-            String resourceType,
+            AuditResourceType resourceType,
             String resourceId,
             String result,
             Map<String, Object> parameterSummary,
@@ -78,8 +80,8 @@ public class AgentToolAuditWriter {
     @Transactional(propagation = Propagation.REQUIRED)
     public void appendConfirmation(
             long userId,
-            String action,
-            String resourceType,
+            AuditAction action,
+            AuditResourceType resourceType,
             String resourceId,
             String result,
             Map<String, Object> safeSummary,
@@ -94,8 +96,8 @@ public class AgentToolAuditWriter {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void appendConfirmationFailure(
             long userId,
-            String action,
-            String resourceType,
+            AuditAction action,
+            AuditResourceType resourceType,
             String resourceId,
             Map<String, Object> safeSummary,
             HttpServletRequest request
@@ -108,8 +110,8 @@ public class AgentToolAuditWriter {
             String actorId,
             String delegatedActorType,
             String delegatedActorId,
-            String action,
-            String resourceType,
+            AuditAction action,
+            AuditResourceType resourceType,
             String resourceId,
             String result,
             Map<String, Object> summary,
@@ -126,8 +128,8 @@ public class AgentToolAuditWriter {
                 actorId,
                 delegatedActorType,
                 delegatedActorId,
-                action,
-                resourceType,
+                action.name(),
+                resourceType.name(),
                 resourceId,
                 result,
                 RequestContext.requestId(request),

@@ -1,0 +1,1 @@
+Generated API clients match all four OpenAPI baselines.

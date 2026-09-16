@@ -1,0 +1,38 @@
+
+> hotshop-web@0.1.0 test D:\Codex\Projects\hotShop-task21-reconcile-01\web
+> vitest run
+
+
+ RUN  v3.2.6 D:/Codex/Projects/hotShop-task21-reconcile-01/web
+
+ ✓ src/features/catalog/activity-board.test.ts (2 tests) 19ms
+ ✓ src/features/transactions/purchase-intent.test.ts (3 tests) 23ms
+ ✓ src/auth/no-persistence.test.ts (1 test) 17ms
+ ✓ scripts/api-generation.test.mjs (4 tests) 16ms
+ ✓ src/observability/admin-trace-link.test.ts (10 tests) 23ms
+ ✓ src/features/transactions/status-machine.test.ts (27 tests) 30ms
+ ✓ src/features/agent/agent-stream.test.ts (4 tests) 40ms
+ ✓ src/api/core/problem.test.ts (3 tests) 25ms
+ ✓ src/features/transactions/transaction-stream.test.ts (7 tests) 40ms
+ ✓ src/features/transactions/use-transaction-stream.test.ts (3 tests) 149ms
+ ✓ src/api/core/request-context.test.ts (3 tests) 27ms
+ ✓ src/auth/auth-domain.test.ts (5 tests) 101ms
+ ✓ src/features/transactions/transaction-timeline.test.tsx (3 tests) 153ms
+ ✓ src/app/protected-route.test.tsx (2 tests) 142ms
+ ✓ src/features/auth/user-auth-panel.test.tsx (1 test) 233ms
+ ✓ src/pages/admin-orders-page.test.tsx (1 test) 249ms
+ ✓ src/pages/admin-login-page.test.tsx (1 test) 519ms
+   ✓ AdminLoginPage > rejects a non-Administrator login response and stores no token  518ms
+ ✓ src/pages/admin-audit-page.test.tsx (1 test) 594ms
+   ✓ preserves unknown audit codes and delegation, and resets pagination on exact filters  593ms
+ ✓ src/pages/admin-outbox-page.test.tsx (3 tests) 671ms
+   ✓ AdminOutboxPage > requires a reason and a second confirmation before replay  324ms
+ ✓ src/pages/admin-products-page.test.tsx (3 tests) 1152ms
+   ✓ AdminProductsPage inventory boundaries > a stale name-only form never sends its cached stock  496ms
+   ✓ AdminProductsPage inventory boundaries > sends an explicit delta with the exact version and requires refresh after a conflict  344ms
+   ✓ AdminProductsPage inventory boundaries > rejects zero and reductions below zero before sending adjustments  310ms
+
+ Test Files  20 passed (20)
+      Tests  87 passed (87)
+   Start at  09:04:02
+   Duration  9.10s (transform 3.00s, setup 34.43s, collect 19.88s, tests 4.22s, environment 49.50s, prepare 10.26s)

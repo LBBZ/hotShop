@@ -1,0 +1,1 @@
+OpenAPI compatibility check passed for public, user, admin, and Agent contracts.

@@ -1,5 +1,7 @@
 package com.real.admin.agenttools;
 
+import com.real.common.audit.AuditResourceType;
+import com.real.common.audit.AuditAction;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.real.common.api.RequestContext;
@@ -16,7 +18,7 @@ import java.util.Map;
 
 @Service
 public class AdminAgentToolAuditService {
-    private static final String ACTION = "AGENT_TOOL_INVOKED";
+    private static final AuditAction ACTION = AuditAction.AGENT_TOOL_INVOKED;
     private static final String SOURCE = "AGENT_API";
 
     private final JdbcTemplate jdbcTemplate;
@@ -31,7 +33,7 @@ public class AdminAgentToolAuditService {
     public void appendSuccess(
             long administratorId,
             String toolName,
-            String resourceType,
+            AuditResourceType resourceType,
             String resourceId,
             String parameterSummary,
             HttpServletRequest request
@@ -52,7 +54,7 @@ public class AdminAgentToolAuditService {
     public void appendRejected(
             long administratorId,
             String toolName,
-            String resourceType,
+            AuditResourceType resourceType,
             String resourceId,
             String outcomeCode,
             String parameterSummary,
@@ -74,7 +76,7 @@ public class AdminAgentToolAuditService {
     public void appendFailure(
             long administratorId,
             String toolName,
-            String resourceType,
+            AuditResourceType resourceType,
             String resourceId,
             String parameterSummary,
             HttpServletRequest request
@@ -94,7 +96,7 @@ public class AdminAgentToolAuditService {
     private void append(
             long administratorId,
             String toolName,
-            String resourceType,
+            AuditResourceType resourceType,
             String resourceId,
             String result,
             String outcomeCode,
@@ -114,8 +116,8 @@ public class AdminAgentToolAuditService {
                 ) VALUES ('ADMIN', ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 Long.toString(administratorId),
-                ACTION,
-                resourceType,
+                ACTION.name(),
+                resourceType.name(),
                 resourceId,
                 result,
                 RequestContext.requestId(request),

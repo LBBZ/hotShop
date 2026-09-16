@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.real.admin.service.AdminProductAuditService;
 import com.real.common.api.RequestContext;
+import com.real.common.audit.AuditResourceType;
+import com.real.common.audit.AuditAction;
 import com.real.domain.entity.Product;
 import com.real.security.entity.CustomUserDetails;
 import com.real.security.identity.IdentityType;
@@ -742,6 +744,216 @@ class AdminIdentitySecurityTest {
         )).isZero();
     }
 
+    @Test
+    void mixedAgentAuditRemainsReadableIncludingLookaheadBoundary() throws Exception {
+        LocalDateTime time = LocalDateTime.of(2040, 1, 1, 0, 0);
+        long agent = insertAuditKind("reconcile-agent-boundary", time,
+                "AGENT_TOOL_INVOKED", "PURCHASE_DRAFT");
+        long newest = insertAudit("reconcile-known-newest", "reconcile-known", time.plusSeconds(1));
+        MvcResult first = mockMvc.perform(get("/admin/api/v1/audit-logs")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess()))
+                        .param("limit", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].auditId").value(Long.toString(newest)))
+                .andExpect(jsonPath("$.hasMore").value(true)).andReturn();
+        String cursor = objectMapper.readTree(first.getResponse().getContentAsString())
+                .path("nextCursor").asText();
+        mockMvc.perform(get("/admin/api/v1/audit-logs")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess()))
+                        .param("limit", "1").param("cursor", cursor))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].auditId").value(Long.toString(agent)))
+                .andExpect(jsonPath("$.items[0].action").value("AGENT_TOOL_INVOKED"))
+                .andExpect(jsonPath("$.items[0].resourceType").value("PURCHASE_DRAFT"));
+
+        // An unknown future code must survive both lookahead mapping and the following page.
+        long future = insertAuditKind("reconcile-future-boundary", time.plusSeconds(2),
+                "FUTURE_ACTION_V2", "FUTURE_RESOURCE_V2");
+        insertAudit("reconcile-known-after-future", "reconcile-known", time.plusSeconds(3));
+        MvcResult futureFirst = mockMvc.perform(get("/admin/api/v1/audit-logs")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess())).param("limit", "1"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.hasMore").value(true)).andReturn();
+        String futureCursor = objectMapper.readTree(futureFirst.getResponse().getContentAsString())
+                .path("nextCursor").asText();
+        mockMvc.perform(get("/admin/api/v1/audit-logs")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess()))
+                        .param("limit", "1").param("cursor", futureCursor))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].auditId").value(Long.toString(future)))
+                .andExpect(jsonPath("$.items[0].action").value("FUTURE_ACTION_V2"))
+                .andExpect(jsonPath("$.items[0].resourceType").value("FUTURE_RESOURCE_V2"));
+        mockMvc.perform(get("/admin/api/v1/audit-logs")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess()))
+                        .param("action", "FUTURE_ACTION_V2").param("resourceType", "FUTURE_RESOURCE_V2"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].auditId").value(Long.toString(future)));
+        mockMvc.perform(get("/admin/api/v1/audit-logs")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess()))
+                        .param("action", "future_action_v2"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(0));
+    }
+
+    @Autowired
+    com.real.domain.agenttools.AgentToolAuditWriter agentAudit;
+    @Autowired
+    com.real.admin.agenttools.AdminAgentToolAuditService adminAgentAudit;
+    @Autowired
+    org.springframework.transaction.PlatformTransactionManager transactionManager;
+
+    @Test
+    void ordinaryTimeoutAuditOmitsAbsentReservationAndCorrelation() throws Exception {
+        var summary = new com.real.common.audit.InventoryCompensationAuditState(
+                "ORDINARY", "PAYMENT_TIMEOUT", "reconcile-timeout", null, 1);
+        // Same serialization used by OrderTimeoutService, without the generic sanitizer.
+        jdbcTemplate.update("""
+                INSERT INTO audit_log(actor_type,actor_id,action,resource_type,resource_id,
+                    result,request_id,trace_id,source,state_summary)
+                VALUES('SYSTEM',NULL,'INVENTORY_COMPENSATED','SALES_ORDER',
+                    'reconcile-timeout','SUCCESS',NULL,NULL,'TASK',CAST(? AS JSON))
+                """, objectMapper.writeValueAsString(summary));
+        mockMvc.perform(get("/admin/api/v1/audit-logs")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess()))
+                        .param("resourceId", "reconcile-timeout"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].stateSummary.orderType").value("ORDINARY"))
+                .andExpect(jsonPath("$.items[0].stateSummary.reservationNo").doesNotExist())
+                .andExpect(jsonPath("$.items[0].requestId").doesNotExist())
+                .andExpect(jsonPath("$.items[0].traceId").doesNotExist());
+    }
+
+    @Test
+    void administratorAllowedAndRejectedToolsRemainQueryableOnRealMysql() throws Exception {
+        String access = bearer(adminAccess());
+        mockMvc.perform(get("/admin/api/v1/agent-tools/statistics").header(HttpHeaders.AUTHORIZATION, access))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/admin/api/v1/agent-tools/statistics").header(HttpHeaders.AUTHORIZATION, access)
+                        .param("unexpected", "rejected"))
+                .andExpect(status().isBadRequest());
+        MvcResult draft = mockMvc.perform(post("/admin/api/v1/agent-tools/configuration-drafts")
+                        .header(HttpHeaders.AUTHORIZATION, access).contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"configurationKey":"AGENT_RESPONSE_STYLE","proposedValue":"BALANCED",
+                                 "reason":"contract regression"}
+                                """))
+                .andExpect(status().isCreated()).andReturn();
+        mockMvc.perform(post("/admin/api/v1/agent-tools/configuration-drafts")
+                        .header(HttpHeaders.AUTHORIZATION, access).contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"configurationKey":"SECRET_KEY","proposedValue":"blocked",
+                                 "reason":"must reject forbidden configuration"}
+                                """))
+                .andExpect(status().isBadRequest());
+        String draftId = objectMapper.readTree(draft.getResponse().getContentAsString()).path("configurationDraftId").asText();
+        assertThat(draftId).isNotBlank();
+        for (String result : List.of("SUCCESS", "DENIED")) {
+            mockMvc.perform(get("/admin/api/v1/audit-logs").header(HttpHeaders.AUTHORIZATION, access)
+                            .param("action", "AGENT_TOOL_INVOKED").param("resourceType", "AGENT_TOOL")
+                            .param("resourceId", "read_low_risk_statistics").param("result", result))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].result").value(result));
+        }
+        mockMvc.perform(get("/admin/api/v1/audit-logs").header(HttpHeaders.AUTHORIZATION, access)
+                        .param("resourceId", draftId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].resourceType").value("AGENT_CONFIGURATION_DRAFT"));
+    }
+
+    @Test
+    void everyAuditWriterCodeCanBeReadAndFilteredWithoutDroppingRecords() throws Exception {
+        var request = auditRequest("reconcile-writers", "55555555555555555555555555555555");
+        for (var resource : List.of(
+                AuditResourceType.CATALOG_PRODUCT,
+                AuditResourceType.SALES_ORDER,
+                AuditResourceType.SALE_RESERVATION,
+                AuditResourceType.PURCHASE_DRAFT)) {
+            agentAudit.appendAgentTool("test-agent", userId, "contract-test", resource,
+                    "contract-resource", "SUCCESS", Map.of(), request);
+            agentAudit.appendAgentToolFailure("test-agent", userId, "contract-test", resource,
+                    "contract-resource", "FAILURE", Map.of(), request);
+        }
+        for (var action : List.of(
+                AuditAction.PURCHASE_CONFIRMATION_ISSUED,
+                AuditAction.PURCHASE_CONFIRMATION_CONSUMED,
+                AuditAction.PURCHASE_CONFIRMATION_REVOKED)) {
+            var resource = action == AuditAction.PURCHASE_CONFIRMATION_CONSUMED
+                    ? AuditResourceType.SALES_ORDER
+                    : AuditResourceType.PURCHASE_CONFIRMATION;
+            agentAudit.appendConfirmation(userId, action, resource, "contract-resource", "SUCCESS",
+                    Map.of(), request);
+            var deniedAction = switch (action) {
+                case PURCHASE_CONFIRMATION_ISSUED -> AuditAction.PURCHASE_CONFIRMATION_ISSUE_DENIED;
+                case PURCHASE_CONFIRMATION_CONSUMED -> AuditAction.PURCHASE_CONFIRMATION_CONSUME_DENIED;
+                case PURCHASE_CONFIRMATION_REVOKED -> AuditAction.PURCHASE_CONFIRMATION_REVOKE_DENIED;
+                default -> throw new IllegalStateException("Unexpected confirmation action");
+            };
+            agentAudit.appendConfirmationFailure(userId, deniedAction,
+                    AuditResourceType.PURCHASE_DRAFT,
+                    "contract-resource", Map.of(), request);
+        }
+        var transaction = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+        for (var resource : List.of(AuditResourceType.AGENT_TOOL,
+                AuditResourceType.AGENT_CONFIGURATION_DRAFT)) {
+            transaction.executeWithoutResult(ignored -> adminAgentAudit.appendSuccess(adminId,
+                    "contract-test", resource, "contract-resource", "content_omitted", request));
+            adminAgentAudit.appendRejected(adminId, "contract-test", resource, "contract-resource",
+                    "DENIED", "content_omitted", request);
+            adminAgentAudit.appendFailure(adminId, "contract-test", resource, "contract-resource",
+                    "content_omitted", request);
+        }
+        // All declared non-Agent codes are persisted as fixtures as well, including legacy records.
+        for (var action : AuditAction.values()) {
+            insertAuditKind("reconcile-code-" + action.name(), LocalDateTime.of(2039, 1, 1, 0, 0),
+                    action.name(), "CATALOG_PRODUCT");
+            mockMvc.perform(get("/admin/api/v1/audit-logs")
+                            .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess()))
+                            .param("action", action.name()).param("resourceType", "CATALOG_PRODUCT"))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].action").value(action.name()));
+        }
+        for (var resource : AuditResourceType.values()) {
+            insertAuditKind("reconcile-resource-" + resource.name(), LocalDateTime.of(2038, 1, 1, 0, 0),
+                    "AGENT_TOOL_INVOKED", resource.name());
+            mockMvc.perform(get("/admin/api/v1/audit-logs")
+                            .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess()))
+                            .param("resourceType", resource.name()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.items[0].resourceType").value(resource.name()));
+        }
+        // Existing background writers legitimately have no inbound HTTP correlation.
+        jdbcTemplate.update("""
+                INSERT INTO audit_log(actor_type,actor_id,action,resource_type,resource_id,
+                    result,request_id,trace_id,source,state_summary)
+                VALUES('SYSTEM','seckill-order-consumer','RESERVATION_COMPENSATED',
+                    'FLASH_SALE_RESERVATION','reconcile-task-null','SUCCESS',NULL,NULL,'TASK','{}')
+                """);
+        mockMvc.perform(get("/admin/api/v1/audit-logs")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess()))
+                        .param("resourceId", "reconcile-task-null"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].action").value("RESERVATION_COMPENSATED"))
+                .andExpect(jsonPath("$.items[0].source").value("TASK"))
+                .andExpect(jsonPath("$.items[0].requestId").doesNotExist())
+                .andExpect(jsonPath("$.items[0].traceId").doesNotExist());
+        var expected = jdbcTemplate.queryForList("SELECT audit_id FROM audit_log", Long.class);
+        var seen = new java.util.HashSet<Long>();
+        String cursor = null;
+        do {
+            var query = get("/admin/api/v1/audit-logs")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess())).param("limit", "3");
+            if (cursor != null) query.param("cursor", cursor);
+            var response = mockMvc.perform(query).andExpect(status().isOk()).andReturn();
+            JsonNode page = objectMapper.readTree(response.getResponse().getContentAsString());
+            for (JsonNode row : page.path("items")) assertThat(seen.add(row.path("auditId").asLong())).isTrue();
+            cursor = page.path("hasMore").asBoolean() ? page.path("nextCursor").asText() : null;
+        } while (cursor != null);
+        assertThat(seen).containsExactlyInAnyOrderElementsOf(expected);
+        mockMvc.perform(get("/admin/api/v1/audit-logs")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess()))
+                        .param("action", "AGENT_TOOL_INVOKED").param("resourceType", "AGENT_TOOL")
+                        .param("resourceId", "contract-resource")
+                        .param("result", "DENIED"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].result").value("DENIED"));
+    }
+
     private LoginResult loginAdmin() throws Exception {
         MvcResult result = mockMvc.perform(post("/admin/api/v1/auth/login")
                         .cookie(new Cookie(
@@ -798,6 +1010,16 @@ class AdminIdentitySecurityTest {
                 Long.class,
                 requestId
         );
+    }
+
+    private long insertAuditKind(String requestId, LocalDateTime occurredAt, String action, String resource) {
+        jdbcTemplate.update("""
+                INSERT INTO audit_log (occurred_at,actor_type,actor_id,action,resource_type,
+                    result,request_id,trace_id,source,state_summary)
+                VALUES (?,'AGENT','reconcile',?,?,'SUCCESS',?,REPEAT('4',32),'AGENT_API','{}')
+                """, occurredAt, action, resource, requestId);
+        return jdbcTemplate.queryForObject("SELECT audit_id FROM audit_log WHERE request_id=?",
+                Long.class, requestId);
     }
 
     private String insertOutbox(String status, int attempts, int consecutive, int replays,

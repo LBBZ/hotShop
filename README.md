@@ -6,8 +6,10 @@
 重点展示库存并发、异步预约、消息重试、模拟支付、委托权限与可复核的工程证据。
 这是**模块化、多进程项目**，共享 MySQL；没有线上运营或稳定高 QPS 的证明。
 
-**交付状态：部分完成。** 本轮真实浏览器已发现审计列表阻塞与中文RAG召回限制，英文引用已通过，失败测试保留；
-参见[阻塞报告](docs/quality/task-21-blockers.md)。下列功能描述表示源码能力，不代表整体验收通过。
+**本地交付复验，非全项目终验。** 审计读写契约已统一，未知动作/资源代码原样保留且可筛选。
+中文直接问题与英文引用、原改写问题的安全拒答分别验证；历史检索异常根因仍未决。
+见[RECONCILE-01修复与实际结果](docs/quality/task-21-reconcile-01.md)；[原失败证据](docs/quality/task-21-blockers.md)保留。
+未在另一台新机器验证，性能目标未达的结论不变。
 
 ## 实际功能
 
@@ -80,7 +82,7 @@ Docker 需能拉镜像及访问 Maven、PyPI、npm、系统软件源；首次下
 给 Docker 预留足够内存和磁盘；本轮 VM 为约 7.62 GiB、32 vCPU，不把这当作最低配置保证。
 
 ```powershell
-Set-Location D:/Codex/Projects/hotShop-task21
+Set-Location D:/Codex/Projects/hotShop-task21-reconcile-01
 $demoProject = 'hotshop-task21-' + [guid]::NewGuid().ToString('N').Substring(0,12)
 pwsh -NoProfile -File ./script/task21-demo.ps1 -Action Start -ProjectName $demoProject
 ```
@@ -117,7 +119,8 @@ pwsh -NoProfile -File ./script/task21-demo.ps1 -Action Restart -ProjectName $dem
 4. 管理员编辑描述；另一用户购买后保存，不覆盖扣减。打开库存调整，再购买，旧版本提交得到 409；
    刷新、核对 delta 后提交，查看审计。
 5. 用户 Agent 查询商品，提出购买请求，展示“尚未创建订单”草稿，再点击确认。
-6. 查询售后规则，查看静态引用；管理 Agent 请求退款/重放，展示拒绝。另一个用户不能打开前述订单。
+6. 输入“售后申请应从哪里发起？”，核对静态引用；原改写“售后退换申请应该怎么做？”展示低分拒答。
+   管理 Agent 请求退款/重放，展示拒绝。另一个用户不能打开前述订单。
 
 逐步操作、预期、讲解及排障：[演示脚本](docs/delivery/demo.md)。真实执行结论与未完成项以交付报告为准。
 
@@ -146,11 +149,13 @@ corepack pnpm@10.15.0 --dir web typecheck
 
 交付浏览器测试连接 `http://127.0.0.1:18080` 的真实 Nginx/后端，无路由 mock。
 使用其他 Web 端口时先设 `$env:HOTSHOP_DELIVERY_URL='http://127.0.0.1:18081'`。
-当前完整交付套件保留审计/RAG的失败断言，运行返回非零；不要把失败项跳过后宣称通过。
+原失败问句保留为独立的安全拒答案例，新增中文直接问题与英文引用核验；审计仍必须真实显示并支持筛选。
+预期调整依据与分次执行结果见RECONCILE-01报告，不将原来的失败追改为通过。
 测试会创建用户和订单、调整演示库存，只用于上述隔离测试数据。
 
 ```powershell
 # 宿主 Java 21；Docker 可用供 Testcontainers 创建独立中间件。
+$env:JAVA_TOOL_OPTIONS='-Duser.timezone=UTC' # 本轮复验显式固定UTC；原生本地时区失败另有记录。
 ./mvnw.cmd -B -ntp verify
 # Agent 测试镜像（固定依赖），不调用付费模型。
 docker build --target test -t hotshop-task21-agent-tests:local -f agent/Dockerfile agent
@@ -160,6 +165,12 @@ pwsh -NoProfile -File ./script/verify-task19-e2e.ps1
 ```
 
 非 Qdrant Agent 命令不证明真实向量库和容器权限全部通过；跳过/排除以输出为准。
+运行中Agent的Qdrant断连/恢复验证（仅所属隔离demo，结束自动尝试恢复Qdrant）：
+
+```powershell
+node script/verify-reconcile-rag.mjs $demoProject http://127.0.0.1:18080
+```
+
 更多命令、对应 SHA、历史结果、fault/security/eval 和 CI 入口见[证据索引](docs/quality/evidence-index.md)。
 基线 [CI run 34998695750](https://github.com/LBBZ/hotShop/actions/runs/34998695750) 对应
 `10d82528aab71766ab5aa6020180ae4935f96359`；成功范围含 mocked smoke，不是完整浏览器闭环或长期压测。
@@ -188,3 +199,4 @@ Rabbit raw ready 4412 是 2206 条无当前消费者的 ORDER_CREATED 集成消�
 - [启动与排障](docs/runbooks/container-environment.md) · [认证](docs/runbooks/authentication-operations.md) · [故障演练](docs/runbooks/fault-injection.md)
 - [测试证据](docs/quality/evidence-index.md) · [演示](docs/delivery/demo.md) · [双版简历与面试问答](docs/delivery/career.md)
 - [TASK-21 验收映射与结果](docs/quality/task-21-delivery.md) · [路线约束](docs/roadmap/MASTER_PLAN.md)
+- [交付阻塞修复与复验](docs/quality/task-21-reconcile-01.md) · [审计写入清点](docs/quality/task21-reconcile-audit-inventory.md)

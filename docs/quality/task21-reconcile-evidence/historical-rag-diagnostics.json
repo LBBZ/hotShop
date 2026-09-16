@@ -1,0 +1,15 @@
+{
+  "containerLogReadExit": 0,
+  "unavailableRecords": [
+    {
+      "timestamp": "2026-09-15T17:44:58.671717+00:00",
+      "event": "agent.rag.retrieval",
+      "requestId": "4f85e04a-adf2-4238-a07a-080d73d74c22",
+      "traceId": "5f2760cf6cd56139d013fd6a90755ff2",
+      "runId": null,
+      "outcome": "unavailable",
+      "errorType": "RetrievalError"
+    }
+  ],
+  "limit": "Historical log has no exception cause or runId; root cause unresolved."
+}

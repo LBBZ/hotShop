@@ -51,3 +51,11 @@ Operational metrics remain low-cardinality. Application/environment and bounded 
 `PUT /admin/api/v1/products/{productId}` 只修改商品元数据，不能以旧页面快照覆写库存。`POST /admin/api/v1/products/{productId}/stock-adjustments` 必须提交非零 signed `delta`、当前 `expectedVersion` 与 `reason`。`AdminProductAuditService.adjustStock` 先锁定行，用 JDBC 读取最新库存（避开 MyBatis 事务内缓存），检查版本后调用 `AdminProductMutationRepository.adjustStock`，同步增加 stock 与 expected_stock 并推进 version。旧版本返回 409 `STOCK_ADJUSTMENT_CONFLICT`；越界或零调整也拒绝，成功追加 delta、前后库存及版本审计。
 
 元数据 UPDATE 本身不推进库存 version，不能声称所有后台编辑都有乐观锁。Catalog 调整也不直接改 Redis 活动库存。expected 库存从 V1.9 迁移时现存值建立基线，并由合法交易同步更新；不是从全部历史订单独立重建的账本，也不能追溯证明基线正确。对账发现与持续写入扫描的限制见 [当前架构第 5 节](current-state.md#5-库存基线版本与对账局限)。
+
+## RECONCILE-01：审计契约兼容
+
+写入使用共享action/resource枚举；读取开放VARCHAR原始值，未知动作或资源不能令limit+1窗口映射失败。
+管理员可精确筛选原始代码，界面显示委托身份，不过滤Agent或历史补偿事件。
+后台Task缺少HTTP关联时省略requestId/traceId，OpenAPI将其标为可选string。
+actor/result/source继续受数据库CHECK与共享枚举约束。详见[写入清点](../quality/task21-reconcile-audit-inventory.md)
+和[审计手册](../runbooks/audit-operations.md)。

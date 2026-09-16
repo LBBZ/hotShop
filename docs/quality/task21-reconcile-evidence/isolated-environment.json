@@ -1,0 +1,189 @@
+{
+  "project": "hotshop-task21-reconcile091603",
+  "services": [
+    {
+      "service": "web-demo",
+      "containerId": "546f39602db7110ccf35292f7f5e6193a1d328b9186041084a3b7c466762841e",
+      "imageId": "sha256:da4ca9a83164068ea0119a31cbf3ce2dc07ad69d439075aeb1c07b6d485c3c11",
+      "startedAt": "2026-09-16T01:12:55.164066932Z",
+      "mounts": []
+    },
+    {
+      "service": "portal-service",
+      "containerId": "c6b9eec837da6d256ad07fd450d4e14ae7b57a26157e3d33656214b74d0e9c17",
+      "imageId": "sha256:0c137f0600fe6b36bd13370ba7a5b1a3a66637ae53c9146eab1916734d92b6e9",
+      "startedAt": "2026-09-16T01:12:54.941358118Z",
+      "mounts": [
+        {
+          "type": "volume",
+          "name": "hotshop-task21-reconcile091603_portal_key_material",
+          "destination": "/run/secrets/hotshop"
+        }
+      ]
+    },
+    {
+      "service": "admin-service",
+      "containerId": "216ac6ad44568b2e539b1ca80bda9f4e9a5ad267b0651373c455b0d7d6de5ecb",
+      "imageId": "sha256:3e0e1c2f5af65fc34fa408e0a983cf3fa3e8ebc0a4d160baab4dd7947fad44a7",
+      "startedAt": "2026-09-16T01:12:54.938629372Z",
+      "mounts": [
+        {
+          "type": "volume",
+          "name": "hotshop-task21-reconcile091603_admin_key_material",
+          "destination": "/run/secrets/hotshop"
+        }
+      ]
+    },
+    {
+      "service": "task-service",
+      "containerId": "09332902ad610c8dedc8fc27dc73daa3107a1ff0b57c4a51be28d21bbc823712",
+      "imageId": "sha256:8af06607bbfe168deb4686e9d0977e4a4827e6178c0d8b7d5be26ee5585523fa",
+      "startedAt": "2026-09-16T01:12:54.937551709Z",
+      "mounts": []
+    },
+    {
+      "service": "agent-service",
+      "containerId": "6bb54de7d5064c073d5e39e9d25e40f6b7b4a939929d8aab3ce48ca6174c7462",
+      "imageId": "sha256:37cf56f766059b6d4f9fd8c872d987eb0a1c149f197e8a71ec0a2498553992f1",
+      "startedAt": "2026-09-16T01:12:39.767524598Z",
+      "mounts": [
+        {
+          "type": "bind",
+          "name": null,
+          "destination": "/run/secrets/hotshop/administrator-public.pem"
+        },
+        {
+          "type": "bind",
+          "name": null,
+          "destination": "/run/secrets/hotshop/agent-delegation-public.pem"
+        },
+        {
+          "type": "bind",
+          "name": null,
+          "destination": "/run/secrets/hotshop/agent-service-private.pem"
+        },
+        {
+          "type": "bind",
+          "name": null,
+          "destination": "/run/secrets/hotshop/user-public.pem"
+        }
+      ]
+    },
+    {
+      "service": "database-migrator",
+      "containerId": "ef95f502f296a06d3699ea90bfbc3e422cf154677d383e823b5a03f26e3c37a2",
+      "imageId": "sha256:07f65a04ac518f3bf1c00a52dab46aa9649d931510860c6ac5363d6fb75e4c1b",
+      "startedAt": "2026-09-16T01:12:49.797195543Z",
+      "mounts": [
+        {
+          "type": "bind",
+          "name": null,
+          "destination": "/flyway/sql"
+        }
+      ]
+    },
+    {
+      "service": "redis-cache",
+      "containerId": "a31f13814bd1830d51405c968eb27babb7010a677f1f6f1d76d6c7e6f37f9b8a",
+      "imageId": "sha256:8096655e437712b07503796fb64d81359256cfcff0ab29d95a7da72863786efb",
+      "startedAt": "2026-09-16T01:12:33.784546056Z",
+      "mounts": [
+        {
+          "type": "bind",
+          "name": null,
+          "destination": "/usr/local/etc/redis/redis.conf"
+        },
+        {
+          "type": "volume",
+          "name": "hotshop-task21-reconcile091603_redis_cache_data",
+          "destination": "/data"
+        }
+      ]
+    },
+    {
+      "service": "qdrant",
+      "containerId": "87ddd791253d6928f6b853201ea2537d9f45d12b4226c197c940f348898f9430",
+      "imageId": "sha256:6ac4807063bbecddca0250bfbcff52acf18c22263b904d12919349e6d0a408f1",
+      "startedAt": "2026-09-16T01:14:37.480405188Z",
+      "mounts": [
+        {
+          "type": "volume",
+          "name": "hotshop-task21-reconcile091603_qdrant_data",
+          "destination": "/qdrant/storage"
+        }
+      ]
+    },
+    {
+      "service": "redis-seckill",
+      "containerId": "31102ce4ae07be50a3471f40713dfe27cacf7270a3aa3ee8ce68bbb65a9eaf74",
+      "imageId": "sha256:8096655e437712b07503796fb64d81359256cfcff0ab29d95a7da72863786efb",
+      "startedAt": "2026-09-16T01:12:33.767570905Z",
+      "mounts": [
+        {
+          "type": "bind",
+          "name": null,
+          "destination": "/usr/local/etc/redis/redis.conf"
+        },
+        {
+          "type": "volume",
+          "name": "hotshop-task21-reconcile091603_redis_seckill_data",
+          "destination": "/data"
+        }
+      ]
+    },
+    {
+      "service": "rabbitmq",
+      "containerId": "a9f97c41c79120f5af3575d22db2992638f76ad027f768253ba9f6b6ce3ad0b0",
+      "imageId": "sha256:5ac6e0f15102bba6d59699e277cde4472a6b75c76207074f812beb4aa85d8c00",
+      "startedAt": "2026-09-16T01:12:33.750248184Z",
+      "mounts": [
+        {
+          "type": "volume",
+          "name": "hotshop-task21-reconcile091603_rabbitmq_data",
+          "destination": "/var/lib/rabbitmq"
+        }
+      ]
+    },
+    {
+      "service": "java-key-material-init",
+      "containerId": "599dfd0bbe0b36df6107e09e6d0f4916a4093a3b1dfe2dc0c3551aaaaea43b34",
+      "imageId": "sha256:4bcff63911fcb4448bd4fdacec207030997caf25e9bea4045fa6c8c44de311d1",
+      "startedAt": "2026-09-16T01:12:33.773001953Z",
+      "mounts": [
+        {
+          "type": "volume",
+          "name": "hotshop-task21-reconcile091603_portal_key_material",
+          "destination": "/portal"
+        },
+        {
+          "type": "volume",
+          "name": "hotshop-task21-reconcile091603_admin_key_material",
+          "destination": "/admin"
+        },
+        {
+          "type": "bind",
+          "name": null,
+          "destination": "/source"
+        }
+      ]
+    },
+    {
+      "service": "mysql",
+      "containerId": "73c4b45afa5744422a2cb53a7c068bbb34aca415faa88196db01d0a98cd3923c",
+      "imageId": "sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b",
+      "startedAt": "2026-09-16T01:12:33.791367695Z",
+      "mounts": [
+        {
+          "type": "volume",
+          "name": "hotshop-task21-reconcile091603_mysql_data",
+          "destination": "/var/lib/mysql"
+        },
+        {
+          "type": "bind",
+          "name": null,
+          "destination": "/opt/hotshop/data"
+        }
+      ]
+    }
+  ]
+}

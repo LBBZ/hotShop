@@ -1,0 +1,36 @@
+--- a/admin/src/test/java/com/real/admin/AdminIdentitySecurityTest.java
++++ b/admin/src/test/java/com/real/admin/AdminIdentitySecurityTest.java
+@@ -744,0 +745,33 @@
++    @Test
++    void mixedAgentAuditRemainsReadableIncludingLookaheadBoundary() throws Exception {
++        LocalDateTime time = LocalDateTime.of(2040, 1, 1, 0, 0);
++        long agent = insertAuditKind("reconcile-agent-boundary", time,
++                "AGENT_TOOL_INVOKED", "PURCHASE_DRAFT");
++        long newest = insertAudit("reconcile-known-newest", "reconcile-known", time.plusSeconds(1));
++        MvcResult first = mockMvc.perform(get("/admin/api/v1/audit-logs")
++                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess()))
++                        .param("limit", "1"))
++                .andExpect(status().isOk())
++                .andExpect(jsonPath("$.items[0].auditId").value(Long.toString(newest)))
++                .andExpect(jsonPath("$.hasMore").value(true)).andReturn();
++        String cursor = objectMapper.readTree(first.getResponse().getContentAsString())
++                .path("nextCursor").asText();
++        mockMvc.perform(get("/admin/api/v1/audit-logs")
++                        .header(HttpHeaders.AUTHORIZATION, bearer(adminAccess()))
++                        .param("limit", "1").param("cursor", cursor))
++                .andExpect(status().isOk())
++                .andExpect(jsonPath("$.items[0].auditId").value(Long.toString(agent)))
++                .andExpect(jsonPath("$.items[0].action").value("AGENT_TOOL_INVOKED"))
++                .andExpect(jsonPath("$.items[0].resourceType").value("PURCHASE_DRAFT"));
++    }
++
++    private long insertAuditKind(String requestId, LocalDateTime occurredAt, String action, String resource) {
++        jdbcTemplate.update("""
++                INSERT INTO audit_log (occurred_at,actor_type,actor_id,action,resource_type,
++                    result,request_id,trace_id,source,state_summary)
++                VALUES (?,'AGENT','reconcile',?,?,'SUCCESS',?,REPEAT('4',32),'AGENT_API','{}')
++                """, occurredAt, action, resource, requestId);
++        return jdbcTemplate.queryForObject("SELECT audit_id FROM audit_log WHERE request_id=?",
++                Long.class, requestId);
++    }
++

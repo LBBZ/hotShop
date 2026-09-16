@@ -32,8 +32,8 @@ export interface GetAuditLogsRequest {
     occurredTo?: Date;
     actorType?: GetAuditLogsActorTypeEnum;
     actorId?: string;
-    action?: GetAuditLogsActionEnum;
-    resourceType?: GetAuditLogsResourceTypeEnum;
+    action?: string;
+    resourceType?: string;
     resourceId?: string;
     result?: GetAuditLogsResultEnum;
     xRequestId?: string;
@@ -56,8 +56,8 @@ export interface AdminAuditLogsApiInterface {
      * @param {Date} [occurredTo]
      * @param {'USER' | 'ADMIN' | 'AGENT' | 'SERVICE' | 'SYSTEM'} [actorType]
      * @param {string} [actorId]
-     * @param {'AUTHENTICATION_LOGIN' | 'REFRESH_TOKEN_REUSE_DETECTED' | 'AGENT_DELEGATION_ISSUED' | 'CATALOG_PRODUCT_CREATED' | 'CATALOG_PRODUCT_UPDATED' | 'CATALOG_STOCK_ADJUSTED' | 'CATALOG_PRODUCT_DELETED' | 'FLASH_SALE_ACTIVITY_LOADED' | 'OUTBOX_REPLAY' | 'INVENTORY_COMPENSATED' | 'MOCK_PAYMENT_CALLBACK_ACCEPTED' | 'MOCK_PAYMENT_CALLBACK_REJECTED'} [action]
-     * @param {'AUTHENTICATION_SESSION' | 'REFRESH_TOKEN_FAMILY' | 'USER' | 'CATALOG_PRODUCT' | 'FLASH_SALE_ACTIVITY' | 'OUTBOX_EVENT' | 'SALES_ORDER' | 'SALE_RESERVATION' | 'PAYMENT_ORDER' | 'PAYMENT_CALLBACK'} [resourceType]
+     * @param {string} [action]
+     * @param {string} [resourceType]
      * @param {string} [resourceId]
      * @param {'SUCCESS' | 'FAILURE' | 'DENIED'} [result]
      * @param {string} [xRequestId] Caller-supplied correlation ID. Invalid values are replaced by the server.
@@ -181,40 +181,6 @@ export const GetAuditLogsActorTypeEnum = {
     System: 'SYSTEM'
 } as const;
 export type GetAuditLogsActorTypeEnum = typeof GetAuditLogsActorTypeEnum[keyof typeof GetAuditLogsActorTypeEnum];
-/**
- * @export
- */
-export const GetAuditLogsActionEnum = {
-    AuthenticationLogin: 'AUTHENTICATION_LOGIN',
-    RefreshTokenReuseDetected: 'REFRESH_TOKEN_REUSE_DETECTED',
-    AgentDelegationIssued: 'AGENT_DELEGATION_ISSUED',
-    CatalogProductCreated: 'CATALOG_PRODUCT_CREATED',
-    CatalogProductUpdated: 'CATALOG_PRODUCT_UPDATED',
-    CatalogStockAdjusted: 'CATALOG_STOCK_ADJUSTED',
-    CatalogProductDeleted: 'CATALOG_PRODUCT_DELETED',
-    FlashSaleActivityLoaded: 'FLASH_SALE_ACTIVITY_LOADED',
-    OutboxReplay: 'OUTBOX_REPLAY',
-    InventoryCompensated: 'INVENTORY_COMPENSATED',
-    MockPaymentCallbackAccepted: 'MOCK_PAYMENT_CALLBACK_ACCEPTED',
-    MockPaymentCallbackRejected: 'MOCK_PAYMENT_CALLBACK_REJECTED'
-} as const;
-export type GetAuditLogsActionEnum = typeof GetAuditLogsActionEnum[keyof typeof GetAuditLogsActionEnum];
-/**
- * @export
- */
-export const GetAuditLogsResourceTypeEnum = {
-    AuthenticationSession: 'AUTHENTICATION_SESSION',
-    RefreshTokenFamily: 'REFRESH_TOKEN_FAMILY',
-    User: 'USER',
-    CatalogProduct: 'CATALOG_PRODUCT',
-    FlashSaleActivity: 'FLASH_SALE_ACTIVITY',
-    OutboxEvent: 'OUTBOX_EVENT',
-    SalesOrder: 'SALES_ORDER',
-    SaleReservation: 'SALE_RESERVATION',
-    PaymentOrder: 'PAYMENT_ORDER',
-    PaymentCallback: 'PAYMENT_CALLBACK'
-} as const;
-export type GetAuditLogsResourceTypeEnum = typeof GetAuditLogsResourceTypeEnum[keyof typeof GetAuditLogsResourceTypeEnum];
 /**
  * @export
  */

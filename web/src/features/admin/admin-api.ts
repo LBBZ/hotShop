@@ -154,18 +154,20 @@ export interface FailedOutboxEvent {
 }
 
 export interface AuditEntry {
+  delegatedActorType?: string | null;
+  delegatedActorId?: string | null;
   auditId?: string;
   action: string;
   actorId?: string | null;
   actorType: string;
   occurredAt: string | Date;
-  requestId: string;
+  requestId?: string | null;
   resourceId?: string | null;
   resourceType: string;
   result: string;
   source: string;
   stateSummary: Record<string, unknown>;
-  traceId: string;
+  traceId?: string | null;
 }
 
 function queryString(values: Record<string, string | number | undefined>) {
@@ -300,8 +302,13 @@ export const adminApi = {
       headers: jsonHeaders,
       body: JSON.stringify({ reason }),
     }),
-  auditLogs: (cursor?: string, result?: string) =>
+  auditLogs: (
+    cursor?: string,
+    result?: string,
+    action?: string,
+    resourceType?: string,
+  ) =>
     json<CursorPage<AuditEntry>>(
-      `/admin/api/v1/audit-logs${queryString({ limit: 20, cursor, result })}`,
+      `/admin/api/v1/audit-logs${queryString({ limit: 20, cursor, result, action, resourceType })}`,
     ),
 };

@@ -1,5 +1,6 @@
 package com.real.admin.agenttools;
 
+import com.real.common.audit.AuditResourceType;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -25,8 +26,8 @@ public class AdminAgentToolService {
     static final String ANOMALIES_TOOL = "read_anomaly_summary";
     static final String CONFIGURATION_DRAFT_TOOL = "create_low_risk_configuration_draft";
 
-    private static final String TOOL_RESOURCE = "AGENT_TOOL";
-    private static final String CONFIGURATION_DRAFT_RESOURCE = "AGENT_CONFIGURATION_DRAFT";
+    private static final AuditResourceType TOOL_RESOURCE = AuditResourceType.AGENT_TOOL;
+    private static final AuditResourceType CONFIGURATION_DRAFT_RESOURCE = AuditResourceType.AGENT_CONFIGURATION_DRAFT;
     private static final Set<String> REQUEST_FIELDS = Set.of(
             "configurationKey",
             "proposedValue",

@@ -55,6 +55,7 @@ class JsonFormatter(logging.Formatter):
             "spanId": SPAN_ID.get(),
             "outcome": sanitize(str(getattr(record, "outcome", "unknown"))),
             "errorType": sanitize(str(getattr(record, "errorType", ""))),
+            "runId": sanitize(str(getattr(record, "runId", ""))),
             "identityKind": sanitize(str(getattr(record, "identityKind", ""))),
             "subject": sanitize(str(getattr(record, "subject", ""))),
             "tool": sanitize(str(getattr(record, "tool", ""))),

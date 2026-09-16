@@ -1,5 +1,6 @@
 package com.real.admin.agenttools;
 
+import com.real.common.audit.AuditResourceType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.real.common.api.ApiException;
 import com.real.common.api.RequestContext;
@@ -69,7 +70,7 @@ class AdminAgentToolServiceTest {
         verify(auditService).appendSuccess(
                 41L,
                 AdminAgentToolService.STATISTICS_TOOL,
-                "AGENT_TOOL",
+                AuditResourceType.AGENT_TOOL,
                 AdminAgentToolService.STATISTICS_TOOL,
                 "parameterCount=0",
                 request
@@ -94,7 +95,7 @@ class AdminAgentToolServiceTest {
         verify(auditService).appendSuccess(
                 42L,
                 AdminAgentToolService.ANOMALIES_TOOL,
-                "AGENT_TOOL",
+                AuditResourceType.AGENT_TOOL,
                 AdminAgentToolService.ANOMALIES_TOOL,
                 "parameterCount=0",
                 request
@@ -135,7 +136,7 @@ class AdminAgentToolServiceTest {
         verify(auditService).appendSuccess(
                 eq(43L),
                 eq(AdminAgentToolService.CONFIGURATION_DRAFT_TOOL),
-                eq("AGENT_CONFIGURATION_DRAFT"),
+                eq(AuditResourceType.AGENT_CONFIGURATION_DRAFT),
                 eq(result.configurationDraftId()),
                 eq("configurationKey=AGENT_RESPONSE_STYLE,valueKind=STRING"),
                 eq(request)
@@ -165,7 +166,7 @@ class AdminAgentToolServiceTest {
         verify(auditService).appendRejected(
                 44L,
                 AdminAgentToolService.CONFIGURATION_DRAFT_TOOL,
-                "AGENT_CONFIGURATION_DRAFT",
+                AuditResourceType.AGENT_CONFIGURATION_DRAFT,
                 AdminAgentToolService.CONFIGURATION_DRAFT_TOOL,
                 "SCHEMA_REJECTED",
                 "unparsed",
@@ -183,7 +184,7 @@ class AdminAgentToolServiceTest {
         verify(auditService).appendRejected(
                 45L,
                 AdminAgentToolService.STATISTICS_TOOL,
-                "AGENT_TOOL",
+                AuditResourceType.AGENT_TOOL,
                 AdminAgentToolService.STATISTICS_TOOL,
                 "SCHEMA_REJECTED",
                 "unexpectedQueryParameters=true",
@@ -192,7 +193,7 @@ class AdminAgentToolServiceTest {
         verify(auditService, never()).appendSuccess(
                 anyLong(),
                 anyString(),
-                anyString(),
+                any(AuditResourceType.class),
                 anyString(),
                 anyString(),
                 any()

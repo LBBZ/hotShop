@@ -1,0 +1,99 @@
+{
+  "project": "hotshop-task21-reconcile091603",
+  "agentImage": "sha256:37cf56f766059b6d4f9fd8c872d987eb0a1c149f197e8a71ec0a2498553992f1",
+  "sameAgentProcess": true,
+  "originalTransientCause": "unresolved; injected outage does not prove the historical cause",
+  "results": [
+    {
+      "label": "direct-cn",
+      "requestId": "reconcile-direct-cn-1789521268404",
+      "runId": "80c8ef80-c675-4459-98eb-4216e4eb95ca",
+      "outcome": "hit",
+      "citations": [
+        {
+          "documentId": "after-sales-general",
+          "title": "通用售后申请政策",
+          "version": "1.0.0",
+          "source": "https://docs.hotshop.local/policies/after-sales",
+          "chunkId": "after-sales-general-0000"
+        }
+      ]
+    },
+    {
+      "label": "original-paraphrase",
+      "requestId": "reconcile-original-paraphrase-1789521271459",
+      "runId": "3d3683e1-5a9b-4ae9-aae3-48716566d562",
+      "outcome": "empty",
+      "citations": []
+    },
+    {
+      "label": "english",
+      "requestId": "reconcile-english-1789521272196",
+      "runId": "5401b45d-8c23-485f-a7d0-361f2d41264a",
+      "outcome": "hit",
+      "citations": [
+        {
+          "documentId": "after-sales-general",
+          "title": "通用售后申请政策",
+          "version": "1.0.0",
+          "source": "https://docs.hotshop.local/policies/after-sales",
+          "chunkId": "after-sales-general-0000"
+        }
+      ]
+    },
+    {
+      "label": "disconnected",
+      "requestId": "reconcile-disconnected-1789521273043",
+      "runId": "63345ac4-dcf9-407b-b6e0-514f8ae3bf13",
+      "outcome": "unavailable",
+      "citations": []
+    },
+    {
+      "label": "recovered",
+      "requestId": "reconcile-recovered-1789521283667",
+      "runId": "5306140e-588a-466c-8c28-32b51673c32a",
+      "outcome": "hit",
+      "citations": [
+        {
+          "documentId": "after-sales-general",
+          "title": "通用售后申请政策",
+          "version": "1.0.0",
+          "source": "https://docs.hotshop.local/policies/after-sales",
+          "chunkId": "after-sales-general-0000"
+        }
+      ]
+    }
+  ],
+  "diagnostics": [
+    {
+      "requestId": "reconcile-direct-cn-1789521268404",
+      "runId": "80c8ef80-c675-4459-98eb-4216e4eb95ca",
+      "outcome": "hit",
+      "errorType": ""
+    },
+    {
+      "requestId": "reconcile-original-paraphrase-1789521271459",
+      "runId": "3d3683e1-5a9b-4ae9-aae3-48716566d562",
+      "outcome": "empty",
+      "errorType": ""
+    },
+    {
+      "requestId": "reconcile-english-1789521272196",
+      "runId": "5401b45d-8c23-485f-a7d0-361f2d41264a",
+      "outcome": "hit",
+      "errorType": ""
+    },
+    {
+      "requestId": "reconcile-disconnected-1789521273043",
+      "runId": "63345ac4-dcf9-407b-b6e0-514f8ae3bf13",
+      "outcome": "unavailable",
+      "errorType": "qdrant_timeout"
+    },
+    {
+      "requestId": "reconcile-recovered-1789521283667",
+      "runId": "5306140e-588a-466c-8c28-32b51673c32a",
+      "outcome": "hit",
+      "errorType": ""
+    }
+  ]
+}

@@ -1,5 +1,7 @@
 package com.real.task.seckill;
 
+import com.real.common.audit.AuditAction;
+import com.real.common.audit.AuditResourceType;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.real.common.observability.AsyncTraceContext;
@@ -475,10 +477,12 @@ public class SeckillProcessingService {
                     result, source, state_summary
                 ) VALUES (
                     'SYSTEM', 'seckill-order-consumer',
-                    'RESERVATION_COMPENSATED', 'FLASH_SALE_RESERVATION', ?,
+                    ?, ?, ?,
                     'SUCCESS', 'TASK', CAST(? AS JSON)
                 )
                 """,
+                AuditAction.RESERVATION_COMPENSATED.name(),
+                AuditResourceType.FLASH_SALE_RESERVATION.name(),
                 event.reservationNo(),
                 json(Map.of(
                         "schemaVersion", 1,

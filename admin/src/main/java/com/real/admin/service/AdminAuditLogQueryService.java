@@ -4,10 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.real.common.api.CursorSlice;
-import com.real.common.audit.AuditAction;
 import com.real.common.audit.AuditActorType;
 import com.real.common.audit.AuditLogResponse;
-import com.real.common.audit.AuditResourceType;
 import com.real.common.audit.AuditResult;
 import com.real.common.audit.AuditSource;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -48,8 +46,8 @@ public class AdminAuditLogQueryService {
             Instant occurredTo,
             AuditActorType actorType,
             String actorId,
-            AuditAction action,
-            AuditResourceType resourceType,
+            String action,
+            String resourceType,
             String resourceId,
             AuditResult result
     ) {
@@ -77,8 +75,8 @@ public class AdminAuditLogQueryService {
         addInstantFilter(sql, arguments, "occurred_at <= ?", occurredTo);
         addEnumFilter(sql, arguments, "actor_type = ?", actorType);
         addStringFilter(sql, arguments, "actor_id = ?", actorId);
-        addEnumFilter(sql, arguments, "action = ?", action);
-        addEnumFilter(sql, arguments, "resource_type = ?", resourceType);
+        addStringFilter(sql, arguments, "BINARY action = BINARY ?", action);
+        addStringFilter(sql, arguments, "BINARY resource_type = BINARY ?", resourceType);
         addStringFilter(sql, arguments, "resource_id = ?", resourceId);
         addEnumFilter(sql, arguments, "result = ?", result);
         if (decoded != null) {
@@ -115,8 +113,8 @@ public class AdminAuditLogQueryService {
                 resultSet.getString("actor_id"),
                 enumOrNull(AuditActorType.class, resultSet.getString("delegated_actor_type")),
                 resultSet.getString("delegated_actor_id"),
-                AuditAction.valueOf(resultSet.getString("action")),
-                AuditResourceType.valueOf(resultSet.getString("resource_type")),
+                resultSet.getString("action"),
+                resultSet.getString("resource_type"),
                 resultSet.getString("resource_id"),
                 AuditResult.valueOf(resultSet.getString("result")),
                 resultSet.getString("request_id"),

@@ -341,6 +341,7 @@ class AgentService:
                         message.content,
                         identity=session.identity_kind,
                         document_types=route.document_types,
+                        run_id=run.id,
                     )
                     await emit(
                         "rag.completed",

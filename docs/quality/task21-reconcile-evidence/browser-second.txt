@@ -1,0 +1,90 @@
+
+Running 7 tests using 1 worker
+
+(node:4200) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:4200) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 1 e2e\task-21-delivery-real.spec.ts:92:1 › built application: purchase, Mock payment, reservation and Agent confirmation (13.8s)
+  ok 2 e2e\task-21-delivery-real.spec.ts:141:1 › built admin: metadata preserves a purchase and stale stock adjustment conflicts (4.7s)
+  ok 3 e2e\task-21-delivery-real.spec.ts:185:1 › built admin: high-risk Agent action is refused without a tool call (1.8s)
+  x  4 e2e\task-21-delivery-real.spec.ts:199:1 › built admin: audit remains readable after Agent tools and confirmation (5.5s)
+(node:24564) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:24564) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x  5 e2e\task-21-delivery-real.spec.ts:217:1 › built Agent: original Chinese paraphrase safely returns empty at default threshold (4.5s)
+(node:4064) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:4064) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 6 e2e\task-21-delivery-real.spec.ts:236:1 › built Agent: Chinese direct corpus question returns a verified citation (2.2s)
+  ok 7 e2e\task-21-delivery-real.spec.ts:244:1 › built Agent: English static question returns a citation (2.2s)
+
+
+  1) e2e\task-21-delivery-real.spec.ts:199:1 › built admin: audit remains readable after Agent tools and confirmation
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: getByRole('heading', { name: '运营脉冲' })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 5000ms[22m
+    [2m  - waiting for getByRole('heading', { name: '运营脉冲' })[22m
+
+
+      34 |   await page.getByLabel("密码").fill("Task13Admin!2026");
+      35 |   await page.getByRole("button", { name: "以 Administrator 身份登录" }).click();
+    > 36 |   await expect(page.getByRole("heading", { name: "运营脉冲" })).toBeVisible();
+         |                                                             ^
+      37 | }
+      38 |
+      39 | async function buy(page: Page) {
+        at adminLogin (D:\Codex\Projects\hotShop-task21-reconcile-01\web\e2e\task-21-delivery-real.spec.ts:36:61)
+        at D:\Codex\Projects\hotShop-task21-reconcile-01\web\e2e\task-21-delivery-real.spec.ts:202:3
+
+    Error Context: test-results\task-21-delivery-real-buil-edca0-gent-tools-and-confirmation\error-context.md
+
+  2) e2e\task-21-delivery-real.spec.ts:217:1 › built Agent: original Chinese paraphrase safely returns empty at default threshold
+
+    Error: response.text: Protocol error (Network.getResponseBody): No data found for resource with given identifier
+
+      54 |             response.request().method() === "GET",
+      55 |         )
+    > 56 |         .then((response) => response.text())
+         |                                      ^
+      57 |     : undefined;
+      58 |   await page.getByLabel("请求").fill(content);
+      59 |   await page.getByRole("button", { name: "发送请求" }).click();
+        at D:\Codex\Projects\hotShop-task21-reconcile-01\web\e2e\task-21-delivery-real.spec.ts:56:38
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: locator('[data-agent-event="done"]')
+    Expected: visible
+    Error: element(s) not found
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 45000ms[22m
+    [2m  - waiting for locator('[data-agent-event="done"]')[22m
+
+
+      58 |   await page.getByLabel("请求").fill(content);
+      59 |   await page.getByRole("button", { name: "发送请求" }).click();
+    > 60 |   await expect(page.locator('[data-agent-event="done"]')).toBeVisible({
+         |                                                           ^
+      61 |     timeout: 45_000,
+      62 |   });
+      63 |   return (body ? await body : "")
+        at ask (D:\Codex\Projects\hotShop-task21-reconcile-01\web\e2e\task-21-delivery-real.spec.ts:60:59)
+        at D:\Codex\Projects\hotShop-task21-reconcile-01\web\e2e\task-21-delivery-real.spec.ts:222:18
+
+    Error Context: test-results\task-21-delivery-real-buil-6d12c--empty-at-default-threshold\error-context.md
+
+  2 failed
+    e2e\task-21-delivery-real.spec.ts:199:1 › built admin: audit remains readable after Agent tools and confirmation
+    e2e\task-21-delivery-real.spec.ts:217:1 › built Agent: original Chinese paraphrase safely returns empty at default threshold
+  5 passed (38.3s)

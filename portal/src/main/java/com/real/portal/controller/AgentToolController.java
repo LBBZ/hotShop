@@ -1,5 +1,6 @@
 package com.real.portal.controller;
 
+import com.real.common.audit.AuditResourceType;
 import com.real.common.api.ApiException;
 import com.real.common.api.dto.AgentOrderListResponse;
 import com.real.common.api.dto.AgentProductComparisonRequest;
@@ -59,7 +60,7 @@ public class AgentToolController {
         return audited(
                 principal,
                 "search_products",
-                "CATALOG_PRODUCT",
+                AuditResourceType.CATALOG_PRODUCT,
                 null,
                 Map.of(
                         "keywordLength", keyword == null ? 0 : keyword.length(),
@@ -84,7 +85,7 @@ public class AgentToolController {
         return audited(
                 principal,
                 "get_product",
-                "CATALOG_PRODUCT",
+                AuditResourceType.CATALOG_PRODUCT,
                 productId,
                 Map.of("productId", productId),
                 request,
@@ -106,7 +107,7 @@ public class AgentToolController {
         return audited(
                 principal,
                 "compare_products",
-                "CATALOG_PRODUCT",
+                AuditResourceType.CATALOG_PRODUCT,
                 null,
                 Map.of(
                         "productCount", ids.size(),
@@ -135,7 +136,7 @@ public class AgentToolController {
         return audited(
                 principal,
                 "list_my_orders",
-                "SALES_ORDER",
+                AuditResourceType.SALES_ORDER,
                 null,
                 Map.of("limit", limit, "cursorPresent", cursor != null),
                 request,
@@ -156,7 +157,7 @@ public class AgentToolController {
         return audited(
                 principal,
                 "list_my_reservations",
-                "SALE_RESERVATION",
+                AuditResourceType.SALE_RESERVATION,
                 null,
                 Map.of("limit", limit),
                 request,
@@ -183,7 +184,7 @@ public class AgentToolController {
         } catch (RuntimeException exception) {
             audit.appendAgentToolFailure(
                     principal.getAuthorizedParty(), principal.getUserId(),
-                    "create_purchase_draft", "PURCHASE_DRAFT", null, "FAILURE",
+                    "create_purchase_draft", AuditResourceType.PURCHASE_DRAFT, null, "FAILURE",
                     Map.of("itemCount", body.items().size()), request
             );
             throw exception;
@@ -193,7 +194,7 @@ public class AgentToolController {
     private <T> T audited(
             CustomUserDetails principal,
             String tool,
-            String resourceType,
+            AuditResourceType resourceType,
             String resourceId,
             Map<String, Object> summary,
             HttpServletRequest request,

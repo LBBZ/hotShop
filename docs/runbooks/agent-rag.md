@@ -1,5 +1,18 @@
 # Agent RAG runbook
 
+## RECONCILE-01：区分空结果与不可用
+
+本地演示以[README](../../README.md)的隔离启动为准。默认FakeModel/deterministic、阈值0.15，
+“售后申请应从哪里发起？”有已知语料引用；原改写“售后退换申请应该怎么做？”保留为低分安全拒答案例。
+不保证任意中文语义改写命中，不降低全局阈值来修饰结果。
+
+运行中日志`event=agent.rag.retrieval`记录hit/empty/unavailable、requestId/traceId/runId和安全errorType。
+empty表示请求成功但无合格候选；unavailable按embedding_failure、qdrant连接/超时/传输/HTTP/响应等类别诊断。
+不输出异常消息、问题正文或密钥。独立进程检索成功或healthz正常不能证明原请求成功。
+同一运行Agent的真实Qdrant断连/恢复入口为`node script/verify-reconcile-rag.mjs <本worktree项目名> <本地WebURL>`。
+脚本要求该worktree的demo配置和唯一所属容器，只Stop/Start Qdrant，不删除卷。
+历史瞬时RetrievalError根因仍未决；[证据与限制](../quality/task-21-reconcile-01.md)保留原失败。
+
 ## Start and index
 
 Qdrant is pinned to `qdrant/qdrant:v1.15.4`, has its own persistent volume, health check, CPU/memory

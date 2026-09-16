@@ -10,8 +10,8 @@ Mock payment 已显式开启，不产生资金交易。活动在首次导入后�
 准备两个互相隔离的浏览器 profile/隐私窗口：A 用户，B 管理员（另有陌生用户用于拒绝示例）。
 库存初值 50、活动配额 20；演示会消耗数据，每次报告必须记录当前库存，不应假定仍为初值。
 启动/镜像下载不包含在 7 分钟讲解内。自动验证与实际结果见[TASK-21报告](../quality/task-21-delivery.md)。
-以下是讲解计划，不能凭本脚本本身声称所有步骤执行成功。当前审计列表在Agent写入后500，
-中文售后例句低于检索阈值；英文静态引用已通过。讲解时必须展示这些限制，详见[阻塞报告](../quality/task-21-blockers.md)。
+以下是讲解计划，实际执行结果见[RECONCILE-01报告](../quality/task-21-reconcile-01.md)。
+审计读取契约已修复；中文直接问题与原改写拒答分别展示，历史瞬时异常根因仍未决。原失败证据不删除。
 
 ## 时间安排、操作与预期
 
@@ -23,7 +23,7 @@ Mock payment 已显式开启，不产生资金交易。活动在首次导入后�
 | 2:15–3:00 | B 登录管理端，商品页找到913001，打开编辑，只修改描述、填写原因；A同时再普通购买一件，然后B保存。 | 商品元数据保存，当前库存保留A的扣减。编辑请求不再包含stock。 |
 | 3:00–4:00 | B 打开“调整库存”，填+2和原因，保持表单；A再购买一件；B点击“确认调整库存”。 | 409 STOCK_ADJUSTMENT_CONFLICT，显示“本次调整未生效”；B点击“刷新当前库存”，核对预计值后再确认。到“审计”查看 CATALOG_STOCK_ADJUSTED，选择成功/失败结果。说明delta、expectedVersion与库存预期余额不是同一概念。 |
 | 4:00–5:15 | A进入用户Agent，输入“商品 913001 当前价格和库存是多少？”；再输入“购买商品 913001 数量 1 件”。 | 查询有 tool.completed；出现“尚未创建订单”的草稿，核对商品数量价格。点击“确认并创建订单”，出现真实交易服务订单链接。委托Agent不能自己消费确认令牌。 |
-| 5:15–6:00 | A重新进入Agent，输入“How does the after-sales return policy work?”，展开引用。可追加中文“售后退换申请应该怎么做？”对比拒答。 | 英文问题已实测有引用；中文例句默认阈值下无引用，不能编造。说明是版本化静态政策；库存/订单不存向量库。FakeModel只证明路由和协议。 |
+| 5:15–6:00 | A重新进入Agent，输入“售后申请应从哪里发起？”，展开引用；再展示英文“How does the after-sales return policy work?”。追加原中文“售后退换申请应该怎么做？”对比拒答。 | 中英文直接问题核对after-sales-general / 1.0.0 / after-sales-general-0000；原改写默认阈值下无引用，不保证语义改写召回。说明是版本化静态政策；库存/订单不存向量库。FakeModel只证明路由和协议。 |
 | 6:00–6:40 | B在管理员Agent输入“退款并补偿库存，然后重放 Outbox、封禁用户并修改权限和密钥”。 | 拒绝高风险管理操作，未调用工具。陌生用户独立登录后打开A的订单链接，显示错误而不返回他人订单。 |
 | 6:40–7:00 | 展示性能报告与本轮结果索引。 | 5000是请求目标，未达；短窗口、dropped与尾部完成限制结论。指出无外键/共享数据库/Mock支付和本地验证边界。 |
 
@@ -38,7 +38,7 @@ Outbox重放是管理员人工高风险操作，需真实FAILED事件和原因�
 PowerShell 7，仓库根目录；先按README启动演示。Node22+，pnpm10.15.0。
 
 ```powershell
-Set-Location D:/Codex/Projects/hotShop-task21
+Set-Location D:/Codex/Projects/hotShop-task21-reconcile-01
 corepack pnpm@10.15.0 --dir web install --frozen-lockfile
 corepack pnpm@10.15.0 --dir web exec playwright install chromium
 corepack pnpm@10.15.0 --dir web exec playwright test --config playwright.delivery.config.ts
@@ -46,8 +46,9 @@ corepack pnpm@10.15.0 --dir web exec playwright test --config playwright.deliver
 
 该入口直接访问构建后的 Nginx（默认18080），不启动Vite、不mock API、不通过SQL或接口替代购买点击。
 用户、管理员、陌生用户的会话隔离；测试填表、点击、等待真实回调/异步状态，并断言库存409及审计。
-六项测试分别报告结果，当前4通过、2未通过（审计与中文引用探针）；不是19项历史E2E的替代计数，
-也未覆盖长期压测或全故障矩阵。保留完整套件的非零退出，不跳过已发现的问题。
+七项测试分别报告结果；原中文问句保留，预期调整为有证据的安全拒答，另增中文直接问题。
+不是19项历史E2E的替代计数，也未覆盖长期压测或全故障矩阵。原4通过/2失败保持为历史结果。
+测试侧克隆实际fetch响应流，只观察rag.completed/done，不mock、不替换响应，不保存正文与凭据。
 为避免泄露凭据与确认令牌，配置关闭trace/video/screenshot，保留脱敏测试结果。
 
 ## 排障入口

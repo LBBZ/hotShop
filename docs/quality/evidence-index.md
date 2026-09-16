@@ -1,5 +1,13 @@
 # 测试与证据索引
 
+## 最新增量：TASK-21-RECONCILE-01
+
+起点`ebefde2ee158809f900a5912cbcda3ae7d58adad`，分支`task-21-reconcile-01`。
+[修复与复验报告](task-21-reconcile-01.md)单独记录红绿MySQL、UTC Java reactor、Agent/Qdrant、
+前端、运行时OpenAPI与四客户端门禁、新空卷浏览器、运行中断连恢复；不与下方历史数量相加。
+[审计清点](task21-reconcile-audit-inventory.md)覆盖全部生产写入，
+[原失败日志](task21-evidence/browser-8451b7f.txt)保留，不把当前通过反写成旧版本通过。
+
 核对基线：`10d82528aab71766ab5aa6020180ae4935f96359`。本索引由当前源码、工作流及版本化报告交叉核对，不把历史测试数相加，也不把“脚本存在”记为“已运行”。TASK-21 当次新增运行与环境以[最终交付报告](task-21-delivery.md)为准。
 
 ## 1. 基线 CI：本轮已核验的公开记录

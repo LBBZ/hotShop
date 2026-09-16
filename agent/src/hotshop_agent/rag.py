@@ -96,10 +96,12 @@ class RagRetriever:
         identity: IdentityKind,
         document_types: tuple[DocumentType, ...],
         now: datetime | None = None,
+        run_id: str = "",
     ) -> RetrievalResult:
         started = time.perf_counter()
         outcome = "unavailable"
         hits: list[SearchHit] = []
+        error_category = ""
         try:
             vector = await self._embedding.embed_query(query)
             self._metrics.embedding_requests.labels(self._embedding.name, "success").inc()
@@ -114,17 +116,39 @@ class RagRetriever:
             hits = [hit for hit in hits if hit.score >= self._minimum_score]
             outcome = "hit" if hits else "empty"
         except EmbeddingError:
+            hits = []
             self._metrics.embedding_requests.labels(self._embedding.name, "failure").inc()
-        except Exception:
-            logging.getLogger(__name__).warning(
-                "rag retrieval unavailable",
-                extra={
-                    "event": "agent.rag.retrieval",
-                    "outcome": "unavailable",
-                    "errorType": "RetrievalError",
-                    "parameterSummary": "content_omitted",
-                },
-            )
+            error_category = "embedding_failure"
+        except Exception as exc:
+            hits = []
+            # Local import avoids the SearchHit/QdrantStore module dependency cycle.
+            from hotshop_agent.qdrant import QdrantUnavailable
+
+            allowed = {
+                "qdrant_operation",
+                "qdrant_http",
+                "qdrant_response",
+                "qdrant_timeout",
+                "qdrant_connect",
+                "qdrant_transport",
+            }
+            if isinstance(exc, QdrantUnavailable) and exc.category in allowed:
+                error_category = exc.category
+            elif isinstance(exc, RuntimeError):
+                error_category = "retrieval_runtime"
+            else:
+                error_category = "retrieval_unexpected"
+        logging.getLogger(__name__).log(
+            logging.WARNING if outcome == "unavailable" else logging.INFO,
+            "rag retrieval completed",
+            extra={
+                "event": "agent.rag.retrieval",
+                "outcome": outcome,
+                "errorType": error_category,
+                "runId": run_id,
+                "parameterSummary": "content_omitted",
+            },
+        )
         elapsed = time.perf_counter() - started
         citations = tuple(
             Citation(

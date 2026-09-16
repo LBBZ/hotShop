@@ -1,6 +1,11 @@
 package com.real.common.audit;
 
 public enum AuditResourceType {
+    PURCHASE_DRAFT,
+    PURCHASE_CONFIRMATION,
+    AGENT_TOOL,
+    AGENT_CONFIGURATION_DRAFT,
+    FLASH_SALE_RESERVATION,
     AUTHENTICATION_SESSION,
     REFRESH_TOKEN_FAMILY,
     USER,

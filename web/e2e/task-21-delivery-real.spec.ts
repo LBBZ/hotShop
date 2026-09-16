@@ -1,4 +1,33 @@
+/// <reference lib="dom" />
 import { expect, test, type Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+type RagObservation = {
+  type: string;
+  data: { outcome?: string; citations?: Array<Record<string, string>> };
+};
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript({
+    path: fileURLToPath(
+      new URL("../../script/reconcile-browser-observer.js", import.meta.url),
+    ),
+  });
+});
+
+const afterSales = JSON.parse(
+  readFileSync(
+    new URL("../../agent/knowledge/after-sales.json", import.meta.url),
+    "utf8",
+  ),
+) as {
+  documentId: string;
+  documentVersion: string;
+  title: string;
+  source: string;
+  content: string;
+};
 
 async function register(page: Page, prefix: string) {
   const username = `${prefix}${Date.now().toString(36)}`;
@@ -31,12 +60,46 @@ async function buy(page: Page) {
   );
 }
 
-async function ask(page: Page, content: string) {
+async function ask(page: Page, content: string, readRag = false) {
+  await page.evaluate(() => {
+    document.documentElement.dataset.deliveryRagEvents = "[]";
+  });
   await page.getByLabel("请求").fill(content);
   await page.getByRole("button", { name: "发送请求" }).click();
   await expect(page.locator('[data-agent-event="done"]')).toBeVisible({
     timeout: 45_000,
   });
+  if (!readRag) return [];
+  await page.waitForFunction(() =>
+    (
+      JSON.parse(
+        document.documentElement.dataset.deliveryRagEvents ?? "[]",
+      ) as RagObservation[]
+    ).some((event: { type: string }) => event.type === "rag.completed"),
+  );
+  return await page.evaluate(
+    () =>
+      JSON.parse(
+        document.documentElement.dataset.deliveryRagEvents ?? "[]",
+      ) as RagObservation[],
+  );
+}
+
+async function expectCitation(page: Page, question: string) {
+  const events = await ask(page, question, true);
+  const rag = events.find((event) => event.type === "rag.completed");
+  expect(rag?.data.outcome).toBe("hit");
+  expect(rag?.data.citations).toEqual([
+    {
+      documentId: afterSales.documentId,
+      version: afterSales.documentVersion,
+      title: afterSales.title,
+      source: afterSales.source,
+      chunkId: `${afterSales.documentId}-0000`,
+    },
+  ]);
+  expect(afterSales.content).toContain("售后申请应从订单详情页发起");
+  await expect(page.getByRole("list", { name: "引用资料" })).toBeVisible();
 }
 
 test("built application: purchase, Mock payment, reservation and Agent confirmation", async ({
@@ -152,22 +215,43 @@ test("built admin: audit remains readable after Agent tools and confirmation", a
   await adminLogin(page);
   await page.goto("/admin/audit");
   await expect(
-    page
-      .getByRole("cell", { name: "CATALOG_STOCK_ADJUSTED", exact: true })
-      .first(),
+    page.getByText("CATALOG_STOCK_ADJUSTED", { exact: true }).first(),
+  ).toBeVisible();
+  await page.getByLabel("动作代码（精确）").fill("AGENT_TOOL_INVOKED");
+  await page.getByLabel("资源类型（精确）").fill("PURCHASE_DRAFT");
+  await expect(
+    page.getByText("AGENT_TOOL_INVOKED", { exact: true }).first(),
+  ).toBeVisible();
+  await expect(
+    page.getByText("PURCHASE_DRAFT", { exact: true }).first(),
   ).toBeVisible();
 });
 
-test("built Agent: Chinese static question returns a citation", async ({
+test("built Agent: original Chinese paraphrase safely returns empty at default threshold", async ({
   page,
 }) => {
   await register(page, "ragcn");
   await page.goto("/user/agent");
-  await ask(page, "售后退换申请应该怎么做？");
+  const events = await ask(page, "售后退换申请应该怎么做？", true);
   await expect(
     page.locator('[data-agent-event="rag.completed"]'),
   ).toBeVisible();
-  await expect(page.getByRole("list", { name: "引用资料" })).toBeVisible();
+  expect(events.find((event) => event.type === "rag.completed")?.data).toEqual({
+    outcome: "empty",
+    citations: [],
+  });
+  await expect(page.getByRole("list", { name: "引用资料" })).toHaveCount(0);
+  await expect(page.locator(".agent-answer-copy")).toContainText(
+    "暂无可靠资料，我不知道该问题的答案",
+  );
+});
+
+test("built Agent: Chinese direct corpus question returns a verified citation", async ({
+  page,
+}) => {
+  await register(page, "ragdirect");
+  await page.goto("/user/agent");
+  await expectCitation(page, "售后申请应从哪里发起？");
 });
 
 test("built Agent: English static question returns a citation", async ({
@@ -175,9 +259,5 @@ test("built Agent: English static question returns a citation", async ({
 }) => {
   await register(page, "ragen");
   await page.goto("/user/agent");
-  await ask(page, "How does the after-sales return policy work?");
-  await expect(
-    page.locator('[data-agent-event="rag.completed"]'),
-  ).toBeVisible();
-  await expect(page.getByRole("list", { name: "引用资料" })).toBeVisible();
+  await expectCitation(page, "How does the after-sales return policy work?");
 });

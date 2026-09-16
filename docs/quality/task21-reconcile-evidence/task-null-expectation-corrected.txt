@@ -1,0 +1,15 @@
+-------------------------------------------------------------------------------
+Test set: com.real.admin.AdminIdentitySecurityTest
+-------------------------------------------------------------------------------
+Tests run: 20, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 18.94 s <<< FAILURE! -- in com.real.admin.AdminIdentitySecurityTest
+com.real.admin.AdminIdentitySecurityTest.ordinaryTimeoutAuditPreservesNullSummaryValues -- Time elapsed: 0.021 s <<< FAILURE!
+java.lang.AssertionError: No value at JSON path "$.items[0].stateSummary.reservationNo"
+	at org.springframework.test.util.JsonPathExpectationsHelper.evaluateJsonPath(JsonPathExpectationsHelper.java:351)
+	at org.springframework.test.util.JsonPathExpectationsHelper.assertValue(JsonPathExpectationsHelper.java:106)
+	at org.springframework.test.web.servlet.result.JsonPathResultMatchers.lambda$value$0(JsonPathResultMatchers.java:88)
+	at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+	at com.real.admin.AdminIdentitySecurityTest.ordinaryTimeoutAuditPreservesNullSummaryValues(AdminIdentitySecurityTest.java:819)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+Caused by: com.jayway.jsonpath.PathNotFoundException: No results for path: $['items'][0]['stateSummary']['reservationNo']

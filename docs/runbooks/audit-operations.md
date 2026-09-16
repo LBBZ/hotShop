@@ -1,6 +1,6 @@
 # HotShop 统一审计运行手册
 
-> TASK-06 运行边界。审计日志是调查事实，不是普通业务数据；业务 API 只追加和只读查询。
+> TASK-06边界及RECONCILE-01契约补充。审计日志是调查事实，不是普通业务数据；业务 API 只追加和只读查询。
 
 ## 1. 记录模型
 
@@ -10,13 +10,16 @@
 - 可选 delegated actor type/ID；Agent delegation 签发时直接 actor 是 Service Identity，
   delegated actor 是 User；
 - action、resource type/ID、`SUCCESS/FAILURE/DENIED`；
-- request ID、trace ID、`PORTAL_API/ADMIN_API/AGENT_API` source；
+- 可选request ID、trace ID；后台Task/历史记录可能没有HTTP关联；source支持`PORTAL_API/ADMIN_API/AGENT_API/TASK/MOCK_PROVIDER`；
 - UTC `occurred_at` 和脱敏 `state_summary`。
 
-写入接口只接受公共模块定义的枚举、actor/resource 值对象以及封闭的强类型摘要。业务代码不传
-JSON、Map 或任意字段名。序列化前仍执行纵深脱敏：password、Access/Refresh Token、API Key、
-Cookie、Authorization、client assertion、完整提示词、思维链/推理字段和凭据形态值均替换为
-`[REDACTED]`。摘要只保留字段名、计数、生命周期状态和稳定原因码，不保存原始异常消息或请求体。
+通用AuditLogWriter接受共享枚举、actor/resource值对象与强类型摘要，并在序列化前纵深脱敏。
+Agent专用写入器使用共享action/resource枚举及代码固定的安全Map摘要；Task直接SQL只序列化固定摘要。
+完整入口见[写入清点](../quality/task21-reconcile-audit-inventory.md)，不能把专用写入器误称为都经过通用脱敏器。
+不得持久化password、Access/Refresh Token、API Key、
+Cookie、Authorization、client assertion、完整提示词、思维链/推理字段和凭据形态值。
+通用脱敏器将这些值替换为`[REDACTED]`；专用写入器只接收代码固定的最小摘要，不传原始请求。
+摘要只保留字段名、计数、生命周期状态和稳定原因码，不保存原始异常消息或请求体。
 
 ## 2. 事务与故障语义
 
@@ -52,6 +55,10 @@ GET /admin/api/v1/audit-logs
 ```
 
 排序固定为 `occurredAt DESC,auditId DESC`。游标绑定全部筛选条件；改变筛选后应从第一页重新查询。
+action/resourceType按开放字符串读取，包含未来或历史未知值；查询和界面不得静默丢记录。
+这两个过滤器大小写敏感、精确匹配，最大长度分别128/64，未知代码也可输入筛选。
+actor/result/source仍是与数据库CHECK一致的封闭枚举。新增这些字段的合法值必须同步迁移及契约。
+分页会取limit+1行；[MySQL回归](../quality/task-21-reconcile-01.md)覆盖异常代码位于lookahead边界的情况。
 调查时优先从告警或 Problem Details 的 request ID/trace ID 定位，再沿 actor、resource 和时间窗口
 扩展。不要向用户索要密码、Token、Cookie 或完整 Agent 提示词来“补充审计”。
 

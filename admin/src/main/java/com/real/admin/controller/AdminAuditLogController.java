@@ -4,10 +4,8 @@ import com.real.admin.service.AdminAuditLogQueryService;
 import com.real.common.api.ApiException;
 import com.real.common.api.CursorSlice;
 import com.real.common.api.dto.CursorPageResponse;
-import com.real.common.audit.AuditAction;
 import com.real.common.audit.AuditActorType;
 import com.real.common.audit.AuditLogResponse;
-import com.real.common.audit.AuditResourceType;
 import com.real.common.audit.AuditResult;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -53,8 +51,8 @@ public class AdminAuditLogController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant occurredTo,
             @RequestParam(required = false) AuditActorType actorType,
             @RequestParam(required = false) @Size(max = 128) String actorId,
-            @RequestParam(required = false) AuditAction action,
-            @RequestParam(required = false) AuditResourceType resourceType,
+            @RequestParam(required = false) @Size(min = 1, max = 128) String action,
+            @RequestParam(required = false) @Size(min = 1, max = 64) String resourceType,
             @RequestParam(required = false) @Size(max = 128) String resourceId,
             @RequestParam(required = false) AuditResult result
     ) {

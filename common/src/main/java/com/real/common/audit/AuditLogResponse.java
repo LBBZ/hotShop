@@ -21,17 +21,21 @@ public record AuditLogResponse(
         AuditActorType delegatedActorType,
         @Schema(nullable = true)
         String delegatedActorId,
-        @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
-        AuditAction action,
-        @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
-        AuditResourceType resourceType,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED,
+                description = "Stored action code, preserved verbatim including unknown/future values")
+        String action,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED,
+                description = "Stored resource type, preserved verbatim including unknown/future values")
+        String resourceType,
         @Schema(nullable = true)
         String resourceId,
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         AuditResult result,
-        @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
+        @Schema(requiredMode = Schema.RequiredMode.NOT_REQUIRED,
+                description = "May be absent for background Task or legacy audit records")
         String requestId,
-        @Schema(requiredMode = Schema.RequiredMode.REQUIRED, pattern = "^[0-9a-f]{32}$")
+        @Schema(requiredMode = Schema.RequiredMode.NOT_REQUIRED, pattern = "^[0-9a-f]{32}$",
+                description = "May be absent for background Task or legacy audit records")
         String traceId,
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         AuditSource source,

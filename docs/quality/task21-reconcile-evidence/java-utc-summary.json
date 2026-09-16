@@ -1,0 +1,332 @@
+{
+  "command": "mvnw.cmd -B -ntp verify",
+  "environment": "JAVA_TOOL_OPTIONS=-Duser.timezone=UTC; Microsoft OpenJDK 21.0.8+9; real Testcontainers MySQL/Redis/RabbitMQ",
+  "total": {
+    "tests": 320,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "suites": [
+    {
+      "module": "admin",
+      "suite": "com.real.admin.AdminApiContractTest",
+      "tests": 7,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "admin",
+      "suite": "com.real.admin.AdminFlashSaleActivityLoadServiceTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "admin",
+      "suite": "com.real.admin.AdminIdentitySecurityTest",
+      "tests": 20,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "admin",
+      "suite": "com.real.admin.AdminInventoryApiTest",
+      "tests": 7,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "admin",
+      "suite": "com.real.admin.agenttools.AdminAgentToolsControllerTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "admin",
+      "suite": "com.real.admin.agenttools.AdminAgentToolServiceTest",
+      "tests": 13,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "admin",
+      "suite": "com.real.admin.InventoryReconciliationJointContainerTest",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "common",
+      "suite": "com.real.common.api.CursorCodecTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "common",
+      "suite": "com.real.common.enums.OrderStatusCharacterizationTest",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "common",
+      "suite": "com.real.common.observability.ObservabilityRequestFilterTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "common",
+      "suite": "com.real.common.observability.ObservabilitySafetyTest",
+      "tests": 5,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "database",
+      "suite": "com.real.database.LegacyTakeoverTest",
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "database",
+      "suite": "com.real.database.MapperCompatibilityTest",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "database",
+      "suite": "com.real.database.SchemaConstraintTest",
+      "tests": 33,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "database",
+      "suite": "com.real.database.V15ToV16MigrationTest",
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "domain",
+      "suite": "com.real.domain.observability.RedisLuaObservationAspectTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "domain",
+      "suite": "com.real.domain.OrderServiceTest",
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "domain",
+      "suite": "com.real.domain.payment.MockPaymentProviderTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "domain",
+      "suite": "com.real.domain.ReliableRabbitTopologyTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "domain",
+      "suite": "com.real.domain.userjourney.TransactionTimelineWriterTest",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "portal",
+      "suite": "com.real.portal.agenttools.AgentToolsAndPurchaseConfirmationIntegrationTest",
+      "tests": 8,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "portal",
+      "suite": "com.real.portal.FlashSaleReservationIntegrationTest",
+      "tests": 12,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "portal",
+      "suite": "com.real.portal.IdentitySecurityTest",
+      "tests": 11,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "portal",
+      "suite": "com.real.portal.MockPaymentIntegrationTest",
+      "tests": 10,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "portal",
+      "suite": "com.real.portal.PaymentTerminalRaceContainerTest",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "portal",
+      "suite": "com.real.portal.PortalApiContractTest",
+      "tests": 26,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "portal",
+      "suite": "com.real.portal.sse.TransactionEventStreamServiceTest",
+      "tests": 9,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "security",
+      "suite": "com.real.security.audit.AuditSensitiveDataSanitizerTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "security",
+      "suite": "com.real.security.service.ClientAddressResolverTest",
+      "tests": 25,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "security",
+      "suite": "com.real.security.service.RefreshCookieServiceTest",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "security",
+      "suite": "com.real.security.service.SecurityAuditServiceTest",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "security",
+      "suite": "com.real.security.service.UserTransactionRateLimiterTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "task",
+      "suite": "com.real.task.observability.TaskObservabilityMetricsTest",
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "task",
+      "suite": "com.real.task.outbox.OutboxPublisherTest",
+      "tests": 18,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "task",
+      "suite": "com.real.task.outbox.ReliableMessagingContainerTest",
+      "tests": 23,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "task",
+      "suite": "com.real.task.payment.SeckillPaymentExpiredDeliveryContainerTest",
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "task",
+      "suite": "com.real.task.seckill.InventoryEditContainerTest",
+      "tests": 5,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "task",
+      "suite": "com.real.task.seckill.ReservationStreamConsumerObservationTest",
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "task",
+      "suite": "com.real.task.seckill.SeckillOrderReliabilityContainerTest",
+      "tests": 26,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "module": "task",
+      "suite": "com.real.task.timeoutOrderTask.OrderTimeoutConsumerTest",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+> hotshop-web@0.1.0 typecheck D:\Codex\Projects\hotShop-task21-reconcile-01\web
+> tsc -b --pretty false

@@ -1,5 +1,6 @@
 package com.real.domain.agenttools;
 
+import com.real.common.audit.AuditResourceType;
 import com.real.common.api.ApiException;
 import com.real.common.api.CursorSlice;
 import com.real.common.api.dto.AgentOrderListResponse;
@@ -205,7 +206,7 @@ public class AgentToolService {
                 agentClientId,
                 userId,
                 "create_purchase_draft",
-                "PURCHASE_DRAFT",
+                AuditResourceType.PURCHASE_DRAFT,
                 draftId,
                 "SUCCESS",
                 Map.of(

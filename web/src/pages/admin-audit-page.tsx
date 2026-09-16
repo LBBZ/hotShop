@@ -15,33 +15,61 @@ import {
 
 export function AdminAuditPage() {
   const [result, setResult] = useState("");
+  const [action, setAction] = useState("");
+  const [resourceType, setResourceType] = useState("");
   const [cursor, setCursor] = useState<string>();
   const resource = useAdminResource(
-    () => adminApi.auditLogs(cursor, result),
-    [cursor, result],
+    () => adminApi.auditLogs(cursor, result, action, resourceType),
+    [cursor, result, action, resourceType],
   );
   return (
     <div className="admin-page">
       <PageHeading
         eyebrow="ACCOUNTABILITY TRAIL"
         title="审计日志"
-        description="管理员、原因、结果、Request ID、Trace ID 与脱敏摘要来自后端追加式审计事实。"
+        description="操作者、委托身份与脱敏摘要来自追加式审计事实。动作与资源代码原样展示，未知代码也可精确筛选。"
         actions={
-          <label className="compact-field">
-            <span>执行结果</span>
-            <select
-              value={result}
-              onChange={(event) => {
-                setResult(event.target.value);
-                setCursor(undefined);
-              }}
-            >
-              <option value="">全部</option>
-              <option value="SUCCESS">成功</option>
-              <option value="FAILURE">失败</option>
-              <option value="DENIED">拒绝</option>
-            </select>
-          </label>
+          <>
+            <label className="compact-field">
+              <span>动作代码（精确）</span>
+              <input
+                value={action}
+                maxLength={128}
+                onChange={(event) => {
+                  setAction(event.target.value);
+                  setCursor(undefined);
+                }}
+                placeholder="AGENT_TOOL_INVOKED"
+              />
+            </label>
+            <label className="compact-field">
+              <span>资源类型（精确）</span>
+              <input
+                value={resourceType}
+                maxLength={64}
+                onChange={(event) => {
+                  setResourceType(event.target.value);
+                  setCursor(undefined);
+                }}
+                placeholder="PURCHASE_DRAFT"
+              />
+            </label>
+            <label className="compact-field">
+              <span>执行结果</span>
+              <select
+                value={result}
+                onChange={(event) => {
+                  setResult(event.target.value);
+                  setCursor(undefined);
+                }}
+              >
+                <option value="">全部</option>
+                <option value="SUCCESS">成功</option>
+                <option value="FAILURE">失败</option>
+                <option value="DENIED">拒绝</option>
+              </select>
+            </label>
+          </>
         }
       />
       <DataPanel title="审计事实" detail="按发生时间与审计 ID 稳定倒序">
@@ -58,7 +86,7 @@ export function AdminAuditPage() {
                   <thead>
                     <tr>
                       <th>时间 / 操作</th>
-                      <th>管理员</th>
+                      <th>操作者 / 委托身份</th>
                       <th>资源</th>
                       <th>结果</th>
                       <th>脱敏摘要</th>
@@ -78,6 +106,12 @@ export function AdminAuditPage() {
                           <small className="mono-cell">
                             {entry.actorId ?? "SYSTEM"}
                           </small>
+                          {entry.delegatedActorType && (
+                            <small>
+                              委托：{entry.delegatedActorType} /{" "}
+                              {entry.delegatedActorId ?? "—"}
+                            </small>
+                          )}
                         </td>
                         <td>
                           <span>{entry.resourceType}</span>
@@ -95,9 +129,9 @@ export function AdminAuditPage() {
                             {JSON.stringify(entry.stateSummary)}
                           </code>
                         </td>
-                        <td className="mono-cell">{entry.requestId}</td>
+                        <td className="mono-cell">{entry.requestId ?? "—"}</td>
                         <td>
-                          <TraceLink traceId={entry.traceId} />
+                          <TraceLink traceId={entry.traceId ?? undefined} />
                         </td>
                       </tr>
                     ))}

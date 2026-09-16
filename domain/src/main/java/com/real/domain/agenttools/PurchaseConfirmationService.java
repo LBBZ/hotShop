@@ -1,5 +1,7 @@
 package com.real.domain.agenttools;
 
+import com.real.common.audit.AuditResourceType;
+import com.real.common.audit.AuditAction;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.real.common.api.ApiException;
@@ -109,8 +111,8 @@ public class PurchaseConfirmationService {
                 """, Timestamp.from(now), draftId);
         audit.appendConfirmation(
                 userId,
-                "PURCHASE_CONFIRMATION_ISSUED",
-                "PURCHASE_CONFIRMATION",
+                AuditAction.PURCHASE_CONFIRMATION_ISSUED,
+                AuditResourceType.PURCHASE_CONFIRMATION,
                 confirmationId,
                 "SUCCESS",
                 Map.of(
@@ -191,8 +193,8 @@ public class PurchaseConfirmationService {
         );
         audit.appendConfirmation(
                 userId,
-                "PURCHASE_CONFIRMATION_CONSUMED",
-                "SALES_ORDER",
+                AuditAction.PURCHASE_CONFIRMATION_CONSUMED,
+                AuditResourceType.SALES_ORDER,
                 orderId,
                 "SUCCESS",
                 Map.of(
@@ -232,8 +234,8 @@ public class PurchaseConfirmationService {
                 """, Timestamp.from(now), draftId);
         audit.appendConfirmation(
                 userId,
-                "PURCHASE_CONFIRMATION_REVOKED",
-                "PURCHASE_CONFIRMATION",
+                AuditAction.PURCHASE_CONFIRMATION_REVOKED,
+                AuditResourceType.PURCHASE_CONFIRMATION,
                 confirmation.confirmationId(),
                 "SUCCESS",
                 Map.of("schemaVersion", 1, "draftId", draftId),

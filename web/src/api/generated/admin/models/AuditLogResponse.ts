@@ -20,11 +20,11 @@ import { mapValues } from '../runtime';
  */
 export interface AuditLogResponse {
     /**
-     *
+     * Stored action code, preserved verbatim including unknown/future values
      * @type {string}
      * @memberof AuditLogResponse
      */
-    action: AuditLogResponseActionEnum;
+    action: string;
     /**
      *
      * @type {string}
@@ -62,11 +62,11 @@ export interface AuditLogResponse {
      */
     occurredAt: Date;
     /**
-     *
+     * May be absent for background Task or legacy audit records
      * @type {string}
      * @memberof AuditLogResponse
      */
-    requestId: string;
+    requestId?: string;
     /**
      *
      * @type {string}
@@ -74,11 +74,11 @@ export interface AuditLogResponse {
      */
     resourceId?: string | null;
     /**
-     *
+     * Stored resource type, preserved verbatim including unknown/future values
      * @type {string}
      * @memberof AuditLogResponse
      */
-    resourceType: AuditLogResponseResourceTypeEnum;
+    resourceType: string;
     /**
      *
      * @type {string}
@@ -98,32 +98,13 @@ export interface AuditLogResponse {
      */
     stateSummary: { [key: string]: any; };
     /**
-     *
+     * May be absent for background Task or legacy audit records
      * @type {string}
      * @memberof AuditLogResponse
      */
-    traceId: string;
+    traceId?: string;
 }
 
-
-/**
- * @export
- */
-export const AuditLogResponseActionEnum = {
-    AuthenticationLogin: 'AUTHENTICATION_LOGIN',
-    RefreshTokenReuseDetected: 'REFRESH_TOKEN_REUSE_DETECTED',
-    AgentDelegationIssued: 'AGENT_DELEGATION_ISSUED',
-    CatalogProductCreated: 'CATALOG_PRODUCT_CREATED',
-    CatalogProductUpdated: 'CATALOG_PRODUCT_UPDATED',
-    CatalogStockAdjusted: 'CATALOG_STOCK_ADJUSTED',
-    CatalogProductDeleted: 'CATALOG_PRODUCT_DELETED',
-    FlashSaleActivityLoaded: 'FLASH_SALE_ACTIVITY_LOADED',
-    OutboxReplay: 'OUTBOX_REPLAY',
-    InventoryCompensated: 'INVENTORY_COMPENSATED',
-    MockPaymentCallbackAccepted: 'MOCK_PAYMENT_CALLBACK_ACCEPTED',
-    MockPaymentCallbackRejected: 'MOCK_PAYMENT_CALLBACK_REJECTED'
-} as const;
-export type AuditLogResponseActionEnum = typeof AuditLogResponseActionEnum[keyof typeof AuditLogResponseActionEnum];
 
 /**
  * @export
@@ -148,23 +129,6 @@ export const AuditLogResponseDelegatedActorTypeEnum = {
     System: 'SYSTEM'
 } as const;
 export type AuditLogResponseDelegatedActorTypeEnum = typeof AuditLogResponseDelegatedActorTypeEnum[keyof typeof AuditLogResponseDelegatedActorTypeEnum];
-
-/**
- * @export
- */
-export const AuditLogResponseResourceTypeEnum = {
-    AuthenticationSession: 'AUTHENTICATION_SESSION',
-    RefreshTokenFamily: 'REFRESH_TOKEN_FAMILY',
-    User: 'USER',
-    CatalogProduct: 'CATALOG_PRODUCT',
-    FlashSaleActivity: 'FLASH_SALE_ACTIVITY',
-    OutboxEvent: 'OUTBOX_EVENT',
-    SalesOrder: 'SALES_ORDER',
-    SaleReservation: 'SALE_RESERVATION',
-    PaymentOrder: 'PAYMENT_ORDER',
-    PaymentCallback: 'PAYMENT_CALLBACK'
-} as const;
-export type AuditLogResponseResourceTypeEnum = typeof AuditLogResponseResourceTypeEnum[keyof typeof AuditLogResponseResourceTypeEnum];
 
 /**
  * @export
@@ -196,12 +160,10 @@ export function instanceOfAuditLogResponse(value: object): value is AuditLogResp
     if (!('action' in value) || value['action'] === undefined) return false;
     if (!('actorType' in value) || value['actorType'] === undefined) return false;
     if (!('occurredAt' in value) || value['occurredAt'] === undefined) return false;
-    if (!('requestId' in value) || value['requestId'] === undefined) return false;
     if (!('resourceType' in value) || value['resourceType'] === undefined) return false;
     if (!('result' in value) || value['result'] === undefined) return false;
     if (!('source' in value) || value['source'] === undefined) return false;
     if (!('stateSummary' in value) || value['stateSummary'] === undefined) return false;
-    if (!('traceId' in value) || value['traceId'] === undefined) return false;
     return true;
 }
 
@@ -222,13 +184,13 @@ export function AuditLogResponseFromJSONTyped(json: any, ignoreDiscriminator: bo
         'delegatedActorId': json['delegatedActorId'] == null ? undefined : json['delegatedActorId'],
         'delegatedActorType': json['delegatedActorType'] == null ? undefined : json['delegatedActorType'],
         'occurredAt': (new Date(json['occurredAt'])),
-        'requestId': json['requestId'],
+        'requestId': json['requestId'] == null ? undefined : json['requestId'],
         'resourceId': json['resourceId'] == null ? undefined : json['resourceId'],
         'resourceType': json['resourceType'],
         'result': json['result'],
         'source': json['source'],
         'stateSummary': json['stateSummary'],
-        'traceId': json['traceId'],
+        'traceId': json['traceId'] == null ? undefined : json['traceId'],
     };
 }
 

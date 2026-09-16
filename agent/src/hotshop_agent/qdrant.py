@@ -25,7 +25,9 @@ _SAFE_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,62}$")
 
 
 class QdrantUnavailable(Exception):
-    pass
+    def __init__(self, message: str, *, category: str = "qdrant_operation") -> None:
+        super().__init__(message)
+        self.category = category
 
 
 @dataclass(frozen=True)
@@ -99,7 +101,7 @@ class QdrantStore:
             "POST", f"/collections/{self.alias}/points/search", json=body
         )
         if response.status_code != 200:
-            raise QdrantUnavailable("Qdrant search failed")
+            raise QdrantUnavailable("Qdrant search failed", category="qdrant_http")
         try:
             rows = response.json()["result"]
             if not isinstance(rows, list):
@@ -112,7 +114,9 @@ class QdrantStore:
                 for row in rows
             ]
         except (KeyError, TypeError, ValueError) as exc:
-            raise QdrantUnavailable("Qdrant search response is invalid") from exc
+            raise QdrantUnavailable(
+                "Qdrant search response is invalid", category="qdrant_response"
+            ) from exc
 
     async def collection_for_alias(self) -> str | None:
         response = await self._request("GET", "/aliases")
@@ -231,6 +235,7 @@ class QdrantStore:
         return True
 
     async def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
+        category = "qdrant_http"
         for attempt in range(self._max_retries + 1):
             try:
                 response = await self._client.request(
@@ -241,11 +246,16 @@ class QdrantStore:
                 )
                 if response.status_code not in {429, 500, 502, 503, 504}:
                     return response
-            except (httpx.TimeoutException, httpx.TransportError):
-                response = None
+                category = "qdrant_http"
+            except httpx.TimeoutException:
+                category = "qdrant_timeout"
+            except httpx.ConnectError:
+                category = "qdrant_connect"
+            except httpx.TransportError:
+                category = "qdrant_transport"
             if attempt < self._max_retries:
                 await asyncio.sleep(0.05 * (2**attempt))
-        raise QdrantUnavailable("Qdrant is unavailable")
+        raise QdrantUnavailable("Qdrant is unavailable", category=category)
 
     def _trusted_collection(self, value: str) -> bool:
         return value.startswith(f"{self.collection_prefix}_") and bool(_SAFE_NAME.fullmatch(value))

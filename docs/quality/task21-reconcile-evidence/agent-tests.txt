@@ -1,0 +1,10 @@
+...........................................................ssssss....... [ 25%]
+........................................................................ [ 51%]
+........................................................................ [ 76%]
+.................................................................        [100%]
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_container_security.py:138: set AGENT_CONTAINER_IMAGE to run the Docker runtime security tests
+SKIPPED [1] tests/test_container_security.py:226: set AGENT_CONTAINER_IMAGE to run the Docker runtime security tests
+SKIPPED [3] tests/test_container_security.py:250: set AGENT_CONTAINER_IMAGE to run the Docker runtime security tests
+SKIPPED [1] tests/test_container_security.py:290: set AGENT_CONTAINER_IMAGE to run the Docker runtime security tests
+275 passed, 6 skipped, 8 deselected in 33.86s

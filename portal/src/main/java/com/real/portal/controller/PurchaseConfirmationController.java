@@ -1,5 +1,7 @@
 package com.real.portal.controller;
 
+import com.real.common.audit.AuditAction;
+import com.real.common.audit.AuditResourceType;
 import com.real.common.api.RequestContext;
 import com.real.common.api.dto.PurchaseConfirmationConsumeRequest;
 import com.real.common.api.dto.PurchaseConfirmationIssueRequest;
@@ -64,8 +66,8 @@ public class PurchaseConfirmationController {
             return confirmations.issue(principal.getUserId(), draftId, body.actionType(), request);
         } catch (RuntimeException exception) {
             audit.appendConfirmationFailure(
-                    principal.getUserId(), "PURCHASE_CONFIRMATION_ISSUE_DENIED",
-                    "PURCHASE_DRAFT", draftId,
+                    principal.getUserId(), AuditAction.PURCHASE_CONFIRMATION_ISSUE_DENIED,
+                    AuditResourceType.PURCHASE_DRAFT, draftId,
                     Map.of("schemaVersion", 1, "actionType", body.actionType()), request
             );
             throw exception;
@@ -86,8 +88,8 @@ public class PurchaseConfirmationController {
             );
         } catch (RuntimeException exception) {
             audit.appendConfirmationFailure(
-                    principal.getUserId(), "PURCHASE_CONFIRMATION_CONSUME_DENIED",
-                    "PURCHASE_DRAFT", body.draftId(),
+                    principal.getUserId(), AuditAction.PURCHASE_CONFIRMATION_CONSUME_DENIED,
+                    AuditResourceType.PURCHASE_DRAFT, body.draftId(),
                     Map.of(
                             "schemaVersion", 1,
                             "actionType", body.actionType(),
@@ -112,8 +114,8 @@ public class PurchaseConfirmationController {
             return ResponseEntity.noContent().build();
         } catch (RuntimeException exception) {
             audit.appendConfirmationFailure(
-                    principal.getUserId(), "PURCHASE_CONFIRMATION_REVOKE_DENIED",
-                    "PURCHASE_DRAFT", draftId,
+                    principal.getUserId(), AuditAction.PURCHASE_CONFIRMATION_REVOKE_DENIED,
+                    AuditResourceType.PURCHASE_DRAFT, draftId,
                     Map.of("schemaVersion", 1), request
             );
             throw exception;

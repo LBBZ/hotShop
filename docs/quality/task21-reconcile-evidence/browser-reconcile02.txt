@@ -1,0 +1,16 @@
+
+Running 7 tests using 1 worker
+
+(node:11788) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:11788) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 1 e2e\task-21-delivery-real.spec.ts:98:1 › built application: purchase, Mock payment, reservation and Agent confirmation (15.0s)
+  ok 2 e2e\task-21-delivery-real.spec.ts:147:1 › built admin: metadata preserves a purchase and stale stock adjustment conflicts (5.1s)
+  ok 3 e2e\task-21-delivery-real.spec.ts:191:1 › built admin: high-risk Agent action is refused without a tool call (1.8s)
+  ok 4 e2e\task-21-delivery-real.spec.ts:205:1 › built admin: audit remains readable after Agent tools and confirmation (1.8s)
+  ok 5 e2e\task-21-delivery-real.spec.ts:223:1 › built Agent: original Chinese paraphrase safely returns empty at default threshold (3.7s)
+  ok 6 e2e\task-21-delivery-real.spec.ts:242:1 › built Agent: Chinese direct corpus question returns a verified citation (2.1s)
+  ok 7 e2e\task-21-delivery-real.spec.ts:250:1 › built Agent: English static question returns a citation (2.2s)
+
+  7 passed (32.8s)

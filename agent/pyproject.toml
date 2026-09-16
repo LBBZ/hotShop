@@ -11,11 +11,11 @@ dependencies = [
   "cryptography==50.0.1",
   "fastapi==0.141.1",
   "httpx==0.28.1",
-  "langgraph==0.4.8",
-  "prometheus-client==0.22.1",
-  "pydantic-settings==2.9.1",
+  "langgraph==1.2.11",
+  "prometheus-client==0.26.0",
+  "pydantic-settings==2.15.0",
   "PyJWT==2.14.0",
-  "redis==6.2.0",
+  "redis==8.1.0",
   "uvicorn[standard]==0.52.4",
 ]
 

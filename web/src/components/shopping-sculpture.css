@@ -1,0 +1,61 @@
+.shopping-sculpture {
+  position: relative;
+  width: 100%;
+  max-width: 640px;
+  aspect-ratio: 580 / 570;
+  isolation: isolate;
+}
+
+.shopping-sculpture__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.shopping-sculpture__bags {
+  transform-origin: 52% 88%;
+  animation: shopping-bag-arrive 1.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.shopping-sculpture__sphere {
+  animation: shopping-sphere-arrive 1.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes shopping-bag-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(22px) rotate(3deg);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(0);
+  }
+}
+
+@keyframes shopping-sphere-arrive {
+  from {
+    opacity: 0;
+    transform: translate(-9px, 26px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+}
+
+@media (max-width: 640px) {
+  .shopping-sculpture {
+    max-width: 440px;
+    margin-inline: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shopping-sculpture__bags,
+  .shopping-sculpture__sphere {
+    animation: none;
+  }
+}

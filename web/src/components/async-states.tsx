@@ -1,4 +1,5 @@
 import { AlertTriangle, Inbox, RotateCcw } from "lucide-react";
+import { useId } from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -35,13 +36,14 @@ interface EmptyStateProps {
 }
 
 export function EmptyState({ title, description, action }: EmptyStateProps) {
+  const titleId = useId();
   return (
-    <section className="state-panel min-h-64" aria-labelledby="empty-title">
+    <section className="state-panel min-h-64" aria-labelledby={titleId}>
       <span className="state-icon" aria-hidden="true">
         <Inbox />
       </span>
       <div className="max-w-md text-center">
-        <h2 id="empty-title" className="text-xl font-bold">
+        <h2 id={titleId} className="text-xl font-bold">
           {title}
         </h2>
         <p className="mt-2 text-sm leading-6 text-[var(--ink-muted)]">
@@ -66,17 +68,18 @@ export function ErrorState({
   requestId,
   onRetry,
 }: ErrorStateProps) {
+  const titleId = useId();
   return (
     <section
       className="state-panel min-h-64"
-      aria-labelledby="error-title"
+      aria-labelledby={titleId}
       role="alert"
     >
       <span className="state-icon state-icon-error" aria-hidden="true">
         <AlertTriangle />
       </span>
       <div className="max-w-md text-center">
-        <h2 id="error-title" className="text-xl font-bold">
+        <h2 id={titleId} className="text-xl font-bold">
           {title}
         </h2>
         <p className="mt-2 text-sm leading-6 text-[var(--ink-muted)]">

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, PackageOpen, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useStore } from "zustand";
@@ -8,6 +8,7 @@ import { apiClients } from "@/api/clients";
 import { ApiProblemError } from "@/api/core/problem";
 import { userAuth } from "@/auth/domains";
 import { ErrorState, LoadingState } from "@/components/async-states";
+import { ProductArt } from "@/components/product-art";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -113,7 +114,7 @@ export function ProductDetailPage() {
   if (query.isLoading)
     return (
       <div className="public-page">
-        <LoadingState label="正在读取商品事实" />
+        <LoadingState label="正在查看商品详情" />
       </div>
     );
   if (query.isError || !query.data)
@@ -134,9 +135,10 @@ export function ProductDetailPage() {
       </Link>
       <div className="product-detail-grid">
         <div className="product-detail-visual">
-          <span>{product.category}</span>
-          <strong>{product.productId.padStart(6, "0")}</strong>
-          <PackageOpen aria-hidden="true" />
+          <ProductArt name={product.name} category={product.category} />
+          <p className="detail-art-caption">
+            商品以名称与详情描述为准 · 图案为品类示意
+          </p>
         </div>
         <div className="product-detail-copy">
           <Badge tone={product.stock > 0 ? "healthy" : "warning"}>
@@ -164,8 +166,7 @@ export function ProductDetailPage() {
           <div className="safety-note">
             <ShieldCheck aria-hidden="true" />
             <p>
-              提交时创建一次购买意图；双击、超时和可恢复重试复用同一个
-              Idempotency-Key。
+              下单后可在「我的订单」查看进度并完成支付。重复点击不会重复创建订单。
             </p>
           </div>
           {problem ? (
@@ -179,11 +180,7 @@ export function ProductDetailPage() {
             disabled={product.stock === 0 || busy}
             onClick={() => void buy()}
           >
-            {busy
-              ? "正在确认唯一订单…"
-              : session
-                ? "创建待支付订单"
-                : "登录后购买"}
+            {busy ? "正在创建订单…" : session ? "创建待支付订单" : "登录后购买"}
           </Button>
         </div>
       </div>

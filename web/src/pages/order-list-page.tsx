@@ -30,10 +30,10 @@ export function OrderListPage() {
       <header className="dashboard-heading">
         <div>
           <p className="eyebrow">MY ORDERS</p>
-          <h2>只呈现属于你的交易。</h2>
-          <p>列表使用服务端稳定游标，不依赖前端拼接 userId。</p>
+          <h2>每一份心动，都在这里。</h2>
+          <p>查看购买记录、支付状态和订单的最新进展。</p>
         </div>
-        <Badge tone="healthy">资源归属已校验</Badge>
+        <Badge tone="healthy">我的订单</Badge>
       </header>
       {query.isLoading ? <LoadingState label="正在读取订单" /> : null}
       {query.isError ? (

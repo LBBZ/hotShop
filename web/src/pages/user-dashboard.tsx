@@ -1,10 +1,12 @@
-import { ArrowUpRight, Clock3, PackageCheck, ShoppingBag } from "lucide-react";
+import {
+  ArrowUpRight,
+  PackageCheck,
+  ShoppingBag,
+  Sparkles,
+} from "lucide-react";
 import { Link } from "react-router-dom";
 import { useStore } from "zustand";
 
-import { EmptyState } from "@/components/async-states";
-import { PulseRail } from "@/components/pulse-rail";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { userAuth } from "@/auth/domains";
 
@@ -15,58 +17,89 @@ export function UserDashboard() {
     <div className="dashboard-stack">
       <header className="dashboard-heading">
         <div>
-          <p className="eyebrow">USER WORKBENCH</p>
-          <h2>早上好，{session?.username}</h2>
-          <p>从预留到支付，只看属于你的交易。</p>
+          <p className="eyebrow">YOUR EVERYDAY FINDS</p>
+          <h2>你好，{session?.username}</h2>
+          <p>好物慢慢挑，喜欢的日常由你决定。</p>
         </div>
-        <Badge tone="healthy">Access 仅驻留内存</Badge>
+        <span className="user-welcome-note">
+          <Sparkles aria-hidden="true" />
+          很高兴，又见到你。
+        </span>
       </header>
 
-      <section className="focus-panel" aria-labelledby="focus-title">
-        <div className="focus-copy">
-          <span className="focus-icon" aria-hidden="true">
-            <PackageCheck />
-          </span>
-          <p className="eyebrow">CURRENT FLOW</p>
-          <h3 id="focus-title">你的下一笔交易，会沿这条路径推进。</h3>
-          <p>
-            Refresh Cookie 由浏览器处理；页面刷新后，工作台通过 User
-            专属边界恢复短期 Access。
-          </p>
+      <section className="user-discovery-panel" aria-labelledby="focus-title">
+        <div>
+          <p className="eyebrow">A LITTLE FIND. A BETTER DAY.</p>
+          <h3 id="focus-title">
+            把喜欢的日常，
+            <br />
+            带回家。
+          </h3>
+          <p>看看值得入手的好物，也许下一件心动就在这里。</p>
+          <div className="user-discovery-actions">
+            <Button asChild variant="dark">
+              <Link to="/">
+                发现好物
+                <ArrowUpRight aria-hidden="true" />
+              </Link>
+            </Button>
+            <Link className="user-text-link" to="/#drops">
+              看看限时活动
+              <ArrowUpRight aria-hidden="true" />
+            </Link>
+          </div>
         </div>
-        <PulseRail />
+        <div className="user-bag-mark" aria-hidden="true">
+          <ShoppingBag strokeWidth={0.9} />
+          <span>h.</span>
+          <i>✳</i>
+        </div>
       </section>
 
-      <div className="dashboard-grid">
-        <article className="metric-card">
-          <Clock3 aria-hidden="true" />
-          <span>会话到期时间</span>
-          <strong>
-            {session
-              ? new Intl.DateTimeFormat("zh-CN", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                }).format(new Date(session.expiresAt))
-              : "—"}
-          </strong>
-          <p>不会写入浏览器持久化存储</p>
+      <div className="user-shortcuts">
+        <article className="user-shortcut-card">
+          <span className="user-shortcut-icon">
+            <PackageCheck aria-hidden="true" />
+          </span>
+          <p className="eyebrow">YOUR ORDERS</p>
+          <h3>惦记的好物，进展到哪了？</h3>
+          <p>查看自己的订单，继续付款，或了解最新进度。</p>
+          <Link className="user-text-link" to="/user/orders">
+            查看我的订单
+            <ArrowUpRight aria-hidden="true" />
+          </Link>
         </article>
-        <div className="dashboard-empty">
-          <EmptyState
-            title="从一件真实商品开始"
-            description="普通订单和秒杀预约都会写入服务端事实，并通过可恢复状态流推进。"
-            action={
-              <Button asChild size="sm">
-                <Link to="/">
-                  <ShoppingBag aria-hidden="true" className="size-3.5" />
-                  浏览商品与活动
-                  <ArrowUpRight aria-hidden="true" className="size-3.5" />
-                </Link>
-              </Button>
-            }
-          />
-        </div>
+        <article className="user-shortcut-card user-shortcut-ai">
+          <span className="user-shortcut-icon">
+            <Sparkles aria-hidden="true" />
+          </span>
+          <p className="eyebrow">YOUR SHOPPING SIDEKICK</p>
+          <h3>拿不定主意？一起聊聊。</h3>
+          <p>找商品、比价格、查订单，让购物搭子帮你理清选择。</p>
+          <Link className="user-text-link" to="/user/agent">
+            和 AI 聊聊
+            <ArrowUpRight aria-hidden="true" />
+          </Link>
+        </article>
       </div>
+
+      <section className="user-shopping-steps" aria-label="购物流程">
+        <p>从喜欢，到拥有。</p>
+        <ol>
+          <li>
+            <span>01</span>挑选好物
+          </li>
+          <li>
+            <span>02</span>确认下单
+          </li>
+          <li>
+            <span>03</span>完成付款
+          </li>
+          <li>
+            <span>04</span>查看进度
+          </li>
+        </ol>
+      </section>
     </div>
   );
 }

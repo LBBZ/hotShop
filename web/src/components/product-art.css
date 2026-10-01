@@ -1,0 +1,66 @@
+.product-art {
+  --art-light: #e9e0f1;
+  --art-mid: #b49cc8;
+  --art-deep: #655076;
+  position: relative;
+  display: grid;
+  aspect-ratio: 1.45;
+  width: 100%;
+  place-items: center;
+  overflow: hidden;
+  background: #ece6f3;
+}
+.product-art[data-art-kind="keyboard"],
+.product-art[data-art-kind="coffee"] {
+  --art-light: #fff8df;
+  --art-mid: #deca83;
+  --art-deep: #8b7440;
+  background: #f5edce;
+}
+.product-art[data-art-kind="speaker"],
+.product-art[data-art-kind="apparel"] {
+  --art-light: #f8e5e9;
+  --art-mid: #cb98aa;
+  --art-deep: #875366;
+  background: #f1e3e8;
+}
+.product-art[data-art-kind="camera"],
+.product-art[data-art-kind="phone"] {
+  --art-light: #ecf0e7;
+  --art-mid: #a6b59a;
+  --art-deep: #58674e;
+  background: #e5eadd;
+}
+.product-art .product-art-scene {
+  display: block;
+  width: 94%;
+  height: 94%;
+}
+.product-art .art-floor {
+  fill: var(--art-deep);
+  opacity: 0.1;
+  transform-origin: center;
+  transition:
+    transform 350ms ease,
+    opacity 350ms ease;
+}
+.product-art .art-object {
+  transform-origin: 50% 50%;
+  transition: transform 450ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.product-art .product-art-note {
+  position: absolute;
+  right: 15px;
+  bottom: 13px;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  color: #66586e;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .product-art .art-object,
+  .product-art .art-floor {
+    transition: none;
+  }
+}

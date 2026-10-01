@@ -10,14 +10,21 @@ function accessPayload(role: "ROLE_USER" | "ROLE_ADMIN") {
   };
 }
 
-test("anonymous home exposes the transaction thesis without external services", async ({
+test("anonymous home introduces shopping and an AI assistant without external services", async ({
   page,
 }) => {
   await page.goto("/");
 
-  await expect(page.locator("h1")).toContainText("热度会突发，");
-  await expect(page.locator("h1")).toContainText("交易必须冷静。");
-  await expect(page.getByLabel("从商品发现到支付的交易路径")).toBeVisible();
+  await expect(page.locator("h1")).toContainText("GOOD FINDS.");
+  await expect(page.locator("h1")).toContainText("GREAT DAYS.");
+  await expect(page.getByRole("link", { name: "逛逛好物" })).toHaveAttribute(
+    "href",
+    "#catalog",
+  );
+  await expect(page.getByRole("link", { name: "和 AI 聊聊" })).toHaveAttribute(
+    "href",
+    "/user/agent",
+  );
 });
 
 test("User and Administrator shells restore only their own mocked sessions", async ({
@@ -25,6 +32,27 @@ test("User and Administrator shells restore only their own mocked sessions", asy
 }) => {
   let userRefreshes = 0;
   let adminRefreshes = 0;
+  await page.route("**/api/v1/**", async (route) => {
+    const url = new URL(route.request().url());
+    await route.fulfill({
+      json: url.pathname.endsWith("/operations/overview")
+        ? {
+            productsCreated: 0,
+            activitiesCreated: 0,
+            ordersCreated: 0,
+            reservationsCreated: 0,
+            paymentsCreated: 0,
+            failedOutboxUpdated: 0,
+            openReconciliationIssues: 0,
+            pendingManualReviews: 0,
+            rangeFrom: "2026-09-30T00:00:00Z",
+            rangeTo: "2026-10-01T00:00:00Z",
+            generatedAt: "2026-10-01T00:00:00Z",
+            source: "e2e-fixture",
+          }
+        : { items: [], hasMore: false },
+    });
+  });
   await page.route("**/api/v1/auth/refresh", async (route) => {
     userRefreshes += 1;
     await route.fulfill({ json: accessPayload("ROLE_USER") });
@@ -35,10 +63,8 @@ test("User and Administrator shells restore only their own mocked sessions", asy
   });
 
   await page.goto("/user");
-  await expect(
-    page.getByRole("heading", { name: "早上好，lin" }),
-  ).toBeVisible();
-  await expect(page.getByText("会话已隔离")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "你好，lin" })).toBeVisible();
+  await expect(page.getByText("已登录", { exact: true })).toBeVisible();
 
   await page.goto("/admin");
   await expect(page.getByRole("heading", { name: "运营脉冲" })).toBeVisible();

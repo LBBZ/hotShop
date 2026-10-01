@@ -140,7 +140,7 @@ test.describe("real Compose user transaction journey", () => {
     const strangerPage = await strangerContext.newPage();
     await register(strangerPage, uniqueUser("stranger", testInfo.project.name));
     await strangerPage.goto(`/user/orders/${orderId}`);
-    await expect(strangerPage.locator("#error-title")).toBeVisible();
+    await expect(strangerPage.getByRole("alert")).toBeVisible();
     await strangerContext.close();
   });
 
@@ -256,7 +256,7 @@ test.describe("real Compose user transaction journey", () => {
       uniqueUser("reservationstranger", testInfo.project.name),
     );
     await strangerPage.goto(reservationUrl);
-    await expect(strangerPage.locator("#error-title")).toBeVisible();
+    await expect(strangerPage.getByRole("alert")).toBeVisible();
     await strangerContext.close();
     await page.goto("/");
     await page.locator('[data-activity-id="913001"] button').first().click();

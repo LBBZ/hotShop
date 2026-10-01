@@ -464,13 +464,17 @@ function AgentConversation({ boundary }: { boundary: Boundary }) {
           <h2>{boundary === "user" ? "购物协作台" : "低风险排障协作台"}</h2>
           <p>
             {boundary === "user"
-              ? "静态政策带引用；价格、库存和本人订单始终查询实时事实。"
+              ? "查商品、比价格、看看订单进度。决定前，先一起聊聊。"
               : "只读统计、异常摘要和低风险配置草稿；草稿不会直接修改配置。"}
           </p>
         </div>
         <Badge tone={phase === "error" ? "warning" : "healthy"}>
           <ShieldCheck aria-hidden="true" />{" "}
-          {phase === "error" ? "降级" : "边界已锁定"}
+          {phase === "error"
+            ? "需要重试"
+            : boundary === "user"
+              ? "由你确认下单"
+              : "边界已锁定"}
         </Badge>
       </header>
 
@@ -478,7 +482,11 @@ function AgentConversation({ boundary }: { boundary: Boundary }) {
         <div className="agent-prompt-panel">
           <div>
             <Bot aria-hidden="true" />
-            <h3 id="agent-input-title">告诉 Agent 你要完成什么</h3>
+            <h3 id="agent-input-title">
+              {boundary === "user"
+                ? "告诉我，你想找什么"
+                : "告诉 Agent 你要完成什么"}
+            </h3>
           </div>
           <label className="field">
             <span>请求</span>
@@ -487,7 +495,7 @@ function AgentConversation({ boundary }: { boundary: Boundary }) {
               onChange={(event) => setQuestion(event.target.value)}
               placeholder={
                 boundary === "user"
-                  ? "例如：购买商品 916001 数量 2 件"
+                  ? "例如：帮我看看有哪些音频商品，或者查看我的订单"
                   : "例如：查看异常摘要"
               }
               maxLength={16_000}
@@ -530,7 +538,7 @@ function AgentConversation({ boundary }: { boundary: Boundary }) {
         </div>
 
         <aside className="agent-stage-rail" aria-label="Agent 运行阶段">
-          <h3>结构化阶段</h3>
+          <h3>{boundary === "user" ? "对话进展" : "结构化阶段"}</h3>
           <ol>
             {stages.map((event) => (
               <li
@@ -548,7 +556,11 @@ function AgentConversation({ boundary }: { boundary: Boundary }) {
             ))}
           </ol>
           {!stages.length ? (
-            <p>发送请求后，这里只显示阶段，不显示模型思维过程。</p>
+            <p>
+              {boundary === "user"
+                ? "开始对话后，可以在这里查看处理进展。"
+                : "发送请求后，这里只显示阶段，不显示模型思维过程。"}
+            </p>
           ) : null}
         </aside>
       </section>

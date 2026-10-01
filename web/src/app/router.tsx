@@ -133,13 +133,13 @@ export function AppRouter() {
               element={
                 <WorkspaceShell
                   domain={userAuth}
-                  title="User 工作台"
+                  title="我的购物空间"
                   eyebrow="PERSONAL COMMERCE"
                   tone="user"
                   items={[
                     { label: "总览", to: "/user", icon: "overview" },
                     { label: "我的订单", to: "/user/orders", icon: "orders" },
-                    { label: "Agent", to: "/user/agent", icon: "agent" },
+                    { label: "购物助手", to: "/user/agent", icon: "agent" },
                   ]}
                 />
               }

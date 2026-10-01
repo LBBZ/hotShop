@@ -83,7 +83,7 @@ export function WorkspaceShell({
           </span>
           <span>
             <strong>HOTSHOP</strong>
-            <small>{tone === "admin" ? "OPERATIONS" : "USER DESK"}</small>
+            <small>{tone === "admin" ? "OPERATIONS" : "MY HOTSHOP"}</small>
           </span>
         </NavLink>
         <div className="workspace-context">
@@ -117,9 +117,9 @@ export function WorkspaceShell({
           <ShieldCheck aria-hidden="true" />
           <div>
             <strong>{session?.username}</strong>
-            <span>{session?.role}</span>
+            <span>{tone === "admin" ? session?.role : "我的购物空间"}</span>
           </div>
-          <Badge tone="healthy">内存会话</Badge>
+          {tone === "admin" ? <Badge tone="healthy">内存会话</Badge> : null}
           <Button type="button" variant="ghost" size="sm" onClick={logout}>
             <LogOut aria-hidden="true" />
             退出登录
@@ -129,13 +129,15 @@ export function WorkspaceShell({
       <div className="workspace-stage">
         <header className="workspace-topbar">
           <div>
-            <span className="font-utility">LIVE DOMAIN</span>
-            <strong>{tone === "admin" ? "ADMIN" : "USER"}</strong>
+            <span className="font-utility">
+              {tone === "admin" ? "LIVE DOMAIN" : "MY HOTSHOP"}
+            </span>
+            <strong>{tone === "admin" ? "ADMIN" : "我的购物空间"}</strong>
           </div>
           <div className="workspace-topbar-actions">
             <div className="live-indicator">
               <Activity aria-hidden="true" />
-              <span>会话已隔离</span>
+              <span>{tone === "admin" ? "会话已隔离" : "已登录"}</span>
             </div>
             <Button
               className="workspace-mobile-logout"

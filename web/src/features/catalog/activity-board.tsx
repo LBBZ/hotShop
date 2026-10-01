@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Radio, TimerReset, WifiOff } from "lucide-react";
+import { ArrowRight, Radio, TimerReset, WifiOff } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -132,7 +132,7 @@ function ActivityCard({ activity }: { activity: FlashSaleActivity }) {
       <p className="drop-category">{activity.category ?? "精选商品"}</p>
       <h3>{activity.productName}</h3>
       <p className="drop-description">
-        {activity.description ?? "活动商品详情以服务端事实为准。"}
+        {activity.description ?? "查看商品详情，找到值得入手的好物。"}
       </p>
       <div className="drop-price">
         <span>¥</span>
@@ -145,8 +145,7 @@ function ActivityCard({ activity }: { activity: FlashSaleActivity }) {
         <strong>{countdown.expired ? "已结束" : countdown.label}</strong>
       </div>
       <p className="stock-line" id={availabilityId}>
-        剩余 {activity.availableStock} 件 · 时间已按服务端校准 ·{" "}
-        {availability.reason}
+        剩余 {activity.availableStock} 件 · {availability.reason}
       </p>
       {problem ? (
         <p className="inline-problem" role="alert">
@@ -162,7 +161,7 @@ function ActivityCard({ activity }: { activity: FlashSaleActivity }) {
           disabled={availability.disabled || submitting}
           aria-describedby={availability.disabled ? availabilityId : undefined}
         >
-          {submitting ? "正在确认唯一预约…" : availability.buttonLabel}
+          {submitting ? "正在提交预约…" : availability.buttonLabel}
         </Button>
         <Button asChild variant="secondary">
           <Link to={`/products/${activity.productId}`}>商品详情</Link>
@@ -178,22 +177,12 @@ export function ActivityBoard() {
     queryFn: getActivities,
     refetchInterval: 15_000,
   });
-  if (query.isLoading) return <LoadingState label="正在校准活动窗口" />;
-  if (query.isError) {
-    return (
-      <ErrorState
-        title={navigator.onLine ? "活动窗口暂时不可用" : "当前处于离线状态"}
-        description="商品浏览仍可继续；恢复网络后可重新同步活动。"
-        onRetry={() => void query.refetch()}
-      />
-    );
-  }
   return (
-    <section className="drop-board" aria-labelledby="drop-title">
+    <section className="drop-board" id="drops" aria-labelledby="drop-title">
       <div className="section-heading compact-heading">
         <div>
-          <p className="eyebrow">LIVE DROP BOARD</p>
-          <h2 id="drop-title">活动窗口，以服务端时间为准。</h2>
+          <p className="eyebrow">THE LIMITED FINDS</p>
+          <h2 id="drop-title">心动好价，把握当下。</h2>
         </div>
         <p className="board-status">
           {navigator.onLine ? (
@@ -201,19 +190,41 @@ export function ActivityBoard() {
           ) : (
             <WifiOff aria-hidden="true" />
           )}
-          {navigator.onLine ? "15 秒同步一次" : "等待网络恢复"}
+          {query.isError
+            ? "活动暂未同步"
+            : navigator.onLine
+              ? "每 15 秒更新"
+              : "等待网络恢复"}
         </p>
       </div>
-      {query.data?.length ? (
+      {query.isLoading ? (
+        <LoadingState label="正在查看限时活动" />
+      ) : query.isError ? (
+        <ErrorState
+          title={navigator.onLine ? "活动暂时无法加载" : "当前处于离线状态"}
+          description="商品浏览仍可继续，请稍后重试。"
+          onRetry={() => void query.refetch()}
+        />
+      ) : query.data?.length ? (
         <div className="drop-grid">
           {query.data.map((activity) => (
             <ActivityCard key={activity.activityId} activity={activity} />
           ))}
         </div>
       ) : (
-        <p className="empty-inline">
-          目前没有开放或即将开始的活动，请先浏览普通商品。
-        </p>
+        <div className="drop-empty">
+          <div>
+            <TimerReset aria-hidden="true" />
+            <div>
+              <h3>好机会，值得等一等。</h3>
+              <p>目前没有开放或即将开始的活动，先去看看日常好物吧。</p>
+            </div>
+          </div>
+          <a className="text-action" href="#catalog">
+            浏览商品
+            <ArrowRight aria-hidden="true" />
+          </a>
+        </div>
       )}
     </section>
   );

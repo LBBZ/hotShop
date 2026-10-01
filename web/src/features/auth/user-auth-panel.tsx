@@ -91,11 +91,14 @@ export function UserAuthPanel() {
   return (
     <section className="auth-stage" aria-labelledby="auth-title">
       <div className="auth-note">
-        <p className="eyebrow">USER ACCESS</p>
-        <h1 id="auth-title">把身份留在边界内，把交易带回来。</h1>
+        <p className="eyebrow">WELCOME TO HOTSHOP</p>
+        <h1 id="auth-title">
+          欢迎回来。
+          <br />
+          把喜欢的，带回生活。
+        </h1>
         <p>
-          Access Token 只驻留当前页面内存；刷新恢复依赖 HttpOnly
-          Cookie，不会写入 localStorage 或 sessionStorage。
+          登录后继续选购，查看你的订单与预约，也可以让 AI 购物助手陪你一起挑。
         </p>
       </div>
       <div className="auth-card">

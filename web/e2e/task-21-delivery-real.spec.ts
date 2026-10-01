@@ -141,7 +141,7 @@ test("built application: purchase, Mock payment, reservation and Agent confirmat
   const strangerPage = await stranger.newPage();
   await register(strangerPage, "denied");
   await strangerPage.goto(ownedOrderUrl);
-  await expect(strangerPage.locator("#error-title")).toBeVisible();
+  await expect(strangerPage.getByRole("alert")).toBeVisible();
   await stranger.close();
 
   await page.goto("/");

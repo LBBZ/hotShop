@@ -12,7 +12,6 @@ import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageDeliveryMode;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
-import org.springframework.amqp.rabbit.connection.ChannelProxy;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.support.DefaultMessagePropertiesConverter;
@@ -200,12 +199,17 @@ class SeckillPaymentExpiredDeliveryContainerTest {
             publish(event);
             var connection = rabbitConnection.createConnection();
             var channel = connection.createChannel(false);
-            GetResponse original = awaitGet(channel, RabbitMQConfig.SECKILL_PAYMENT_EXPIRED_QUEUE);
-            admin.deleteExchange(RabbitMQConfig.SECKILL_PAYMENT_EXPIRED_RETRY_EXCHANGE);
-            assertThatThrownBy(() -> consumer(unavailable.template(), properties)
-                    .consume(springMessage(original), channel)).isInstanceOf(RuntimeException.class);
-            ((ChannelProxy) channel).getTargetChannel().abort();
-            connection.close();
+            try {
+                GetResponse original = awaitGet(channel, RabbitMQConfig.SECKILL_PAYMENT_EXPIRED_QUEUE);
+                admin.deleteExchange(RabbitMQConfig.SECKILL_PAYMENT_EXPIRED_RETRY_EXCHANGE);
+                assertThatThrownBy(() -> consumer(unavailable.template(), properties)
+                        .consume(springMessage(original), channel)).isInstanceOf(RuntimeException.class);
+            } finally {
+                // A missing exchange closes the publisher channel asynchronously. Closing the
+                // shared connection proxy does not clear that cache; reconnect before repairing
+                // the topology, and let the broker redeliver the unacknowledged original.
+                rabbitConnection.resetConnection();
+            }
 
             admin.declareExchange(topology.seckillPaymentExpiredRetryExchange());
             admin.declareBinding(topology.seckillPaymentExpiredRetryBinding());

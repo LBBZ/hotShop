@@ -1,5 +1,7 @@
 # TASK-13 user transaction contract
 
+> 历史契约快照：本文记录 TASK-13 阶段的接口与验收范围。当前接口以[API 契约](api-contract.md)和 OpenAPI 基线为准。
+
 - `GET /api/v1/flash-sale-activities` is explicitly anonymous and returns current/upcoming activity facts with `serverTime` for calibrated countdowns.
 - `POST /api/v1/orders` requires `Idempotency-Key`. A new intent returns 201; an exact durable replay returns 200 plus the reusable boolean response header `Idempotency-Replayed: true`; reusing the key with a different request fingerprint returns 409. Both success responses use `application/json` with `OrderCreatedResponse`, preserve the original `requestId`, and expose whether the result is an idempotent replay. The 409 response explicitly uses `application/problem+json` with `ApiProblem`; it is not an undocumented empty/error response. The raw key is never persisted.
 - `GET /api/v1/orders/{orderId}` and `GET /api/v1/orders/{orderId}/timeline` expose only the authenticated User's resource. Unknown and other-User identifiers both use 404.

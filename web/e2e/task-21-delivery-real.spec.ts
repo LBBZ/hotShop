@@ -46,14 +46,14 @@ const afterSales = JSON.parse(
 async function register(page: Page, prefix: string) {
   const username = `${prefix}${Date.now().toString(36)}`;
   await page.goto("/auth");
-  await page.locator(".auth-tabs button").nth(1).click();
+  await page.getByRole("tab", { name: "注册", exact: true }).click();
   await page.getByLabel("用户名").fill(username);
   await page.getByLabel("邮箱").fill(`${username}@hotshop.invalid`);
   await page.locator('input[type="password"]').fill("Task21Browser!2026");
   await page.locator('button[type="submit"]').click();
   await expect(page).toHaveURL(/\/user$/u);
   await expect(
-    page.getByRole("heading", { name: `早上好，${username}` }),
+    page.getByRole("heading", { name: `你好，${username}` }),
   ).toBeVisible();
 }
 
@@ -125,7 +125,7 @@ test("built application: purchase, Mock payment, reservation and Agent confirmat
   await register(page, "delivery");
   await page.reload();
   await expect(page).toHaveURL(/\/user$/u);
-  await expect(page.getByRole("heading", { name: /^早上好，/u })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^你好，/u })).toBeVisible();
   await buy(page);
   const ownedOrderUrl = page.url();
   await page.locator(".scenario-panel select").selectOption("success");

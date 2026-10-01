@@ -29,7 +29,7 @@ flowchart LR
 | Java exchange 返回 | Agent Delegation | 独立 key set、issuer、audience、`typ`、时间、`azp`、scope、无管理员 claims | 不适用 | 不适用 |
 
 三类 Token 不可互换。Python 只持有 Agent Service assertion 私钥和三类验证公钥。一次性 assertion
-使用 `client-auth+jwt`、固定 audience/client ID、最长 60 秒和随机 UUID `jti`。Java 负责 assertion
+使用 `client-auth+jwt`、固定 audience/client ID、最长 60 秒和随机 UUID `jti`。Java 通过 MySQL `security_token_marker` 唯一键负责 assertion
 防重放并签发不可刷新、最长五分钟的 Delegation。
 
 ## 会话和运行状态
@@ -52,6 +52,9 @@ stateDiagram-v2
 
 `StateStore` 隔离存储实现。pytest 使用带锁的内存存储；Docker 使用 `redis-cache` 和
 `hotshop:agent:` 前缀，session/message 默认 3600 秒、run 默认 900 秒。Agent 不读取 MySQL。
+浏览器连续提问复用当前 session；开始新对话、切换身份或会话丢失时重新创建。服务端按会话保存
+最多 12 轮已完成的问答，提供给模型的历史另外限制为 24,000 字符，并标记为不可信上下文。
+历史不会替代当前身份、Delegation、scope 或工具参数校验；每次 User run 重新交换委托令牌。
 运行中的 asyncio task 和 SSE queue 只存在于创建运行的进程内；客户端断开、显式取消或进程关闭
 都会取消 task，并等待 provider 流清理。模型流使用显式 `aclosing` 生命周期，即使取消发生在
 SSE 队列写入而不是 provider 内部，provider 的 `finally` 和并发 limiter 也必须先释放，run task
@@ -81,8 +84,8 @@ DeepSeek 显式关闭 thinking，任何 `reasoning_content` 都在 transport 层
 系统策略、隐藏推理、凭据和完整模型请求不进入事件或日志。Prometheus 只使用代码 allowlist 的
 provider/model 维度记录输入/输出 token、估算费用、活跃运行数和最终状态，不记录 prompt 或响应正文。
 
-TASK-17 在模型之前增加代码拥有的事实路由。FAQ、售后政策、静态活动规则才进入 Qdrant；价格、
-实时库存、当前可售性、本人订单和预约状态强制进入 TASK-16 工具。检索 filter 的 tenant、visibility、
+模型之前有代码拥有的事实路由。FAQ、售后政策、静态活动规则才进入 Qdrant；价格、
+实时库存、当前可售性、本人订单和预约状态强制进入固定 Java 工具。检索 filter 的 tenant、visibility、
 documentType、有效期和 limit 全由服务端根据已验证身份构造。检索正文作为“不可信证据”放在固定策略
 之后，RAG 分支禁止工具调用；`rag.completed` 只返回结构化引用。无命中、低分或 Qdrant 故障时明确
 拒答/降级，不用静态知识猜动态事实。完整设计见 `docs/architecture/agent-rag.md`。
@@ -90,8 +93,9 @@ documentType、有效期和 limit 全由服务端根据已验证身份构造。�
 ## 可用性保护
 
 provider 外层统一提供整流超时、安全错误重试、熔断、全局并发和按 User 并发限制。临时故障只有在
-尚未产生 delta 时才允许重试；超时和取消通过结构化 error/done 收束。Redis 或 provider 不就绪只
-影响 Agent readiness/运行，不改变 Java 服务的依赖图。
+尚未产生 delta 时才允许重试；超时和取消通过结构化 error/done 收束。`/health/ready` 仅检查
+状态存储，不探测模型或 Qdrant。Provider 故障影响 Agent run；共享 `redis-cache` 故障还可能影响
+Java 的认证/交易限流，不能把进程隔离误写为基础设施完全隔离。
 
 每个 run 的 SSE queue 固定为 128 槽，不允许无限缓存。普通 delta 使用阻塞式背压，让模型生产速度
 受消费者约束。终态不参与阻塞背压：完成、失败或取消会在事件循环内原子地排空并重建队列，优先淘汰

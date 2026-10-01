@@ -1,11 +1,8 @@
-> 当前迁移已至 V1.10；下文按历史任务分节记录，旧测试数量只属于对应任务，不代表当前完整验证。
-
 # HotShop 数据库迁移与约束设计
 
-> TASK-02 基线、TASK-06 审计增量与 TASK-08 可靠订单处理增量；适用于 MySQL 8.0。
+> 当前结构由 Flyway V1.0–V1.11 管理，默认运行在 MySQL 8.4.11。本文说明结构与运维约束；历史验证数字不代表当前测试结果。
 
-TASK-08 只追加 `V1_4__reliable_seckill_order_processing.sql`，没有编辑已发布的 V1.0～V1.3。
-秒杀 HTTP 热路径仍只写 `redis-seckill`；`task` 消费 Redis Stream 后才在 MySQL 事务中创建
+秒杀预约业务热路径只写 `redis-seckill`；身份校验仍查询 MySQL 撤销标记。`task` 消费 Redis Stream 后才在 MySQL 事务中创建
 `sale_reservation`、Order、处理账本和 Outbox。MySQL 是最终 Order 事实来源，Redis Reservation 是
 已接受的库存承诺。
 
@@ -40,10 +37,16 @@ Compose 中只有一次性 `database-migrator` 可以执行迁移；portal、adm
 | `1.3` | `V1_3__unified_append_only_audit_log.sql` | 增加 delegated actor、source、调查索引与 UPDATE/DELETE 阻断触发器 |
 | `1.4` | `V1_4__reliable_seckill_order_processing.sql` | 扩展 Reservation immutable facts；新增 Stream 处理账本、对账问题与断点表 |
 | `1.5` | `V1_5__reliable_outbox_delivery.sql` | 增加 Outbox 租约、fencing、连续尝试、人工重放历史、CHECK 与领取/FAILED 索引 |
+| `1.6` | `V1_6__mock_payment_and_terminal_race.sql` | 支付迟到终态、callback ledger 与 nonce 去重 |
+| `1.7` | `V1_7__user_transaction_timeline.sql` | 普通订单持久幂等意图与用户交易 timeline |
+| `1.8` | `V1_8__agent_tools_and_purchase_confirmation.sql` | 购买草稿、草稿项、一次性确认、未应用管理配置草稿 |
+| `1.9` | `V1_9__inventory_accounting_and_adjustments.sql` | 实际库存/expected 库存同步基线与调整 |
+| `1.10` | `V1_10__bounded_reconciliation_evidence_index.sql` | 对账证据的有界查询索引 |
+| `1.11` | `V1_11__durable_authentication_markers.sql` | Access 撤销与 client assertion 防重放持久标记 |
 
 ## 2. 表、业务键与状态
 
-所有表都使用 InnoDB、`utf8mb4_0900_ai_ci` 和微秒时间。结构不声明数据库引用约束或级联动作；
+业务表使用 InnoDB、`utf8mb4_0900_ai_ci` 和微秒时间；安全标记的类型和 hash 列显式使用 `ascii_bin`。结构不声明数据库引用约束或级联动作；
 跨表 ID 是应用层引用。金额统一为 `DECIMAL(19,2)`，没有浮点金额。
 
 | 表 | 用途与业务键 | 关键约束/状态 |
@@ -51,10 +54,10 @@ Compose 中只有一次性 `database-migrator` 可以执行迁移；portal、adm
 | `app_user` | User；Username 与非空 Email 均为全生命周期唯一业务键，软删除后也不释放 | role=`ROLE_USER/ROLE_ADMIN`；status=`ACTIVE/LOCKED/DISABLED`；逻辑删除、version |
 | `catalog_product` | Catalog Product；`sku` 唯一 | price≥0、stock≥0；`DRAFT/ACTIVE/INACTIVE`；逻辑删除、version |
 | `flash_sale_activity` | Flash Sale Activity；`activity_code` 唯一 | 售价/库存非负，可售库存不超过总库存，每人限购>0，结束晚于开始；受限状态、version |
-| `sale_reservation` | Reservation；`reservation_no` 唯一；TASK-08 保存单价、币种、Activity Version、幂等 hash、fingerprint 和 Redis 接受时间 | quantity>0、金额/单价≥0；币种为 CNY；hash 为 64 位小写十六进制；受限状态、version |
+| `sale_reservation` | Reservation；`reservation_no` 唯一；保存单价、币种、Activity Version、幂等 hash、fingerprint 和 Redis 接受时间 | quantity>0、金额/单价≥0；币种为 CNY；hash 为 64 位小写十六进制；受限状态、version |
 | `sales_order` | Order；`order_id` 业务订单号主键；每个非空 Reservation 最多一个 Order | 金额≥0、三字母币种；`PENDING/PAID/SHIPPED/COMPLETED/CANCELED`；version |
 | `sales_order_item` | Order Item；同一 Order 的 Catalog Product 唯一 | quantity>0、单价/行金额≥0、行金额=单价×数量 |
-| `payment_order` | Payment Order；`payment_no` 唯一；order+provider 唯一；provider transaction 非空时唯一 | 金额≥0；`PENDING/SUCCEEDED/FAILED/CLOSED`；version |
+| `payment_order` | Payment Order；`payment_no` 唯一；order+provider 唯一；provider transaction 非空时唯一 | 金额≥0；`PENDING/SUCCEEDED/FAILED/CLOSED/LATE_SUCCEEDED`；version |
 | `refresh_token` | Refresh Session；应用生成 BIGINT 主键；只保存 Refresh/CSRF 的 SHA-256 hash；token hash 唯一，family 用于轮换/泄露处理 | `session_type=USER/ADMIN`；每个非空 `parent_token_id` 最多一个后继且不能指向自身；状态 `ACTIVE/ROTATED/REVOKED/EXPIRED/REUSED`；无外键；过期晚于创建 |
 | `outbox_event` | 事务事件；`event_id` 唯一 | JSON payload；`NEW/PUBLISHING/PUBLISHED/FAILED`；attempts≥0 |
 | `processed_event` | 消费去重 | `(consumer_name,event_id)` 主键，同一事件可被不同消费者各处理一次 |
@@ -63,9 +66,22 @@ Compose 中只有一次性 `database-migrator` 可以执行迁移；portal、adm
 | `seckill_reconciliation_checkpoint` | 每个 Reservation Stream 的断点 | 保存 entry ID cursor 和非负 version |
 | `audit_log` | 只追加统一审计；`audit_id` 为稳定游标 | actor/delegated actor、action、resource、result、request/trace、source、微秒发生时间和脱敏 JSON 摘要；触发器拒绝 UPDATE/DELETE |
 
-### 2.1 V1.4 可靠处理账本
+后续迁移增加的表：
 
-V1.4 为兼容迁移前可能存在的普通 Reservation，把新 immutable fact 列声明为 nullable；TASK-08 新写入
+| 表 | 用途与约束 |
+| --- | --- |
+| `payment_callback_ledger` | callbackId 唯一、payload hash 与处理结果，支持重复投递识别 |
+| `payment_callback_nonce` | nonce SHA-256 hash 唯一，不存原始 nonce 或签名 |
+| `order_purchase_intent` | User/key hash 唯一、请求摘要与订单关联，与普通下单同事务 |
+| `user_transaction_timeline` | 用户业务事实的首个持久回执，单调 event ID 用于 SSE 恢复 |
+| `purchase_draft` / `purchase_draft_item` | 有有效期的商品/数量/价格快照，不预扣库存 |
+| `purchase_confirmation` | 仅存一次性值 hash；nonce、draft、order 唯一；ISSUED/CONSUMED/REVOKED/EXPIRED |
+| `agent_configuration_draft` | 管理员低风险配置建议，草稿不自动应用 |
+| `security_token_marker` | `(marker_type, token_hash)` 联合主键；REVOKED_ACCESS/CLIENT_ASSERTION；UTC 到期时间 |
+
+### 2.1 可靠处理账本
+
+V1.4 为兼容迁移前可能存在的普通 Reservation，把新 immutable fact 列声明为 nullable；当前新写入
 的秒杀 Reservation 必须全部填充，并在应用层将 NULL 或不一致视为冲突。数据库 CHECK 约束保证非空
 单价非负、币种仅为 CNY、Activity Version 非负，两个 hash 仅接受 64 位小写十六进制。
 
@@ -96,7 +112,7 @@ Administrator 由 `session_type`、独立 issuer/audience 和独立 family 隔�
 轮换通过 `UNIQUE(parent_token_id)` 保证两个并发请求不能为同一父令牌创建第二个后继；
 MySQL 唯一键允许多个 NULL，因此根令牌不受影响。`CHECK(parent_token_id IS NULL OR
 parent_token_id <> refresh_token_id)` 拒绝自引用。MySQL 不允许 CHECK 引用自增列，因此
-`refresh_token_id` 是由应用生成的 BIGINT，而不是 AUTO_INCREMENT。由于不使用外键，后续轮换用例
+`refresh_token_id` 是由应用生成的 BIGINT，而不是 AUTO_INCREMENT。由于不使用外键，轮换服务
 在单个事务中以 `SELECT ... FOR UPDATE` 锁定当前 hash，校验其 User、family、session type、
 issuer/audience、到期时间和状态。成功时先将当前记录置为 ROTATED，再插入唯一 successor。再次使用
 ROTATED token 会将其置为 REUSED、撤销同 family 的所有 ACTIVE token，并在同一事务追加脱敏
@@ -150,12 +166,12 @@ V1.3 将 actor、delegated actor、action、resource、result 和 source 的调�
 启用 binary log 且使用非特权迁移用户的隔离环境，必须由数据库管理员预先允许受控创建 trigger。
 应用运行期只执行 INSERT/SELECT，不提供任何修改或清空审计数据的业务能力。
 
-`LIKE '%keyword%'` 不能有效使用普通 B-tree；TASK-02 不提前引入全文检索。后续搜索设计需按数据规模
+`LIKE '%keyword%'` 不能有效使用普通 B-tree；当前没有全文检索。扩展搜索需按数据规模
 选择前缀查询、专用搜索或受控降级，不能误称当前索引覆盖任意子串。
 
 ## 4. 无数据库引用约束时的一致性策略
 
-数据库允许写入缺少父记录的 ID，这是有意边界，不代表应用可以跳过校验。每个后续写用例必须：
+数据库允许写入缺少父记录的 ID，这是有意边界，不代表应用可以跳过校验。每个写用例必须：
 
 1. 在同一个本地事务中读取所需父记录，检查存在、未逻辑删除且状态允许；
 2. 使用受影响行数或条件更新再次约束会变化的状态/库存/version；
@@ -164,8 +180,8 @@ V1.3 将 actor、delegated actor、action、resource、result 和 source 的调�
 5. 校验失败返回领域错误，不把底层 ID 静默接受为有效引用。
 
 `SchemaConstraintTest.applicationReferenceGuardRejectsMissingParentBeforeWrite` 同时证明两点：数据库本身会
-接受未校验的悬空订单，而应用式 active-record guard 会在写入前拒绝缺失父记录。TASK-02 只固定策略与
-证据；后续业务任务必须在各自命令服务中实际调用相应校验。
+接受未校验的悬空订单，而应用式 active-record guard 会在写入前拒绝缺失父记录。命令服务必须实际执行
+上述校验；数据库约束测试不能单独证明所有运行路径均正确。
 
 ## 5. 空库、重复启动与校验
 
@@ -173,10 +189,13 @@ V1.3 将 actor、delegated actor、action、resource、result 和 source 的调�
 
 ```powershell
 docker compose --env-file .env.example up -d --wait
-docker compose --env-file .env.example wait database-migrator
+$migrationIds = @(docker compose --env-file .env.example ps -a -q database-migrator)
+if ($LASTEXITCODE -ne 0 -or $migrationIds.Count -ne 1) { throw 'Cannot identify the migrator' }
+$migrationExit = docker wait $migrationIds[0]
+if ($LASTEXITCODE -ne 0 -or $migrationExit -ne '0') { throw 'Database migration failed' }
 ```
 
-第一条命令启动服务；第二条命令将 migrator 的真实退出码传播给调用方。不能只依据
+先启动服务，再按容器 ID 等待并检查 migrator 的真实退出码。不能只依据
 `up --wait` 判断一次性容器已经迁移成功。`database-migrator` 在 MySQL 健康后执行 `migrate`；
 app profile 也通过 `service_completed_successfully` 阻止三个 Java 进程在迁移失败后启动。
 同一数据库再次启动或显式执行：
@@ -236,29 +255,20 @@ docker compose --env-file .env.example exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_RO
 脚本内置最大值 100,000。两份脚本以稳定业务键幂等更新自己的命名空间。不要在生产环境执行，也不要
 把性能数据规模写进迁移。
 
-## 8. TASK-02 实际验证
+## 8. 验证入口
 
-2026-07-26 使用独立 Compose project `hotshop-task02-verify3` 和独立 `mysql_data` 卷验证：
+数据库约束、旧四表接管、金额/状态检查、幂等和并发语义由 `database/src/test` 与相关业务模块的
+Testcontainers 测试验证。在具备 Java 21、仓库 Maven Wrapper 和 Docker 的环境执行：
 
-- Flyway 11.20.3 对空 MySQL 8.0.46 应用 `1.0`、`1.1`，退出码 0；
-- 同库第二次 `migrate` 输出 `Schema hotShop is up to date. No migration necessary.`；
-- `validate` 成功校验 2 个版本迁移；
-- `information_schema.referential_constraints` 对当前 schema 计数为 0；
-- 历史记录为 `1.0/1`、`1.1/1`；
-- 开发数据重复执行后仍为 2 个命名用户；压测数据重复执行后仍为 10,000 用户、1,000 商品；
-- `./mvnw -B clean verify` 的 9 个 reactor 模块成功，31 tests、0 failures、0 errors、0 skipped，
-  其中数据库模块 19 tests；
-- `docker compose --env-file .env.example config --quiet` 与 `git diff --check` 退出码均为 0。
+```powershell
+.\mvnw.cmd -B -pl database -am verify
+```
 
-TASK-02-RECONCILE-01 另外以 Testcontainers/MySQL 8.0.46 验证了：软删除 User 的 Username/Email
-仍被 exists Mapper 识别且不可由普通查询读出，重复注册被全局唯一键拒绝；两个并发 Refresh Token
-轮换只有一个后继写入成功，自引用被 CHECK 拒绝；元数据查询仍为 0 个 FOREIGN KEY。所有容器均由
-Testcontainers 隔离和回收。
+Linux/macOS 使用 `./mvnw -B -pl database -am verify`。完整 reactor 验证还需运行根项目的 `verify`，
+具体范围见 [开发与验证说明](../../README.md)。此处的命令是验证入口，不是对当前机器结果的声明。
+历史升级证据保留在 [质量报告目录](../quality)。
 
-验收没有停止、修改或删除原有 HotShop 容器/卷。隔离 project 的容器和网络在验证后移除；遵守任务
-约束，验证过程中创建的命名卷未删除。
-
-## 9. TASK-09：V1.5 Outbox 与 Inbox 约束
+## 9. Outbox 与 Inbox 约束
 
 `V1_5__reliable_outbox_delivery.sql` 只扩展现有 `outbox_event`，不修改 V1.0～V1.4，且继续禁止
 数据库外键。`event_id` 唯一键是业务事件去重边界；`status` 仍只允许 `NEW`、`PUBLISHING`、
@@ -277,15 +287,17 @@ V1.5 接管时，旧版本遗留且无法证明所有权的 `PUBLISHING` 行会�
 `failure_category` 只写稳定、有限的脱敏类别，不写 payload、凭据、SQL、异常堆栈或原始错误。
 消费者 Inbox 继续使用 `processed_event` 的 `(consumer_name, event_id)` 主键，并与业务效果在同一
 MySQL 事务提交。
-# V1.6 Mock Payment additions
+
+## 10. 模拟支付回调结构
 
 V1.6 扩展 `payment_order.status` 为 `PENDING/SUCCEEDED/FAILED/CLOSED/LATE_SUCCEEDED`，增加 `(order_id,status,payment_id)` 终态查找索引。`payment_callback_ledger` 以 callbackId 唯一并保存 payload hash、Provider 事实及处理结果；`payment_callback_nonce` 以 nonce SHA-256 hash 唯一。两表均无外键，不保存原始 nonce 或签名。延迟继续使用 `outbox_event.available_at` 和已有 `(status,available_at,lease_expires_at,outbox_id)` 领取索引。
 
-## V1.7 至 V1.10 当前补充
+## 11. 交易、Agent、库存与认证增量
 
 - V1.7：用户持久交易 timeline，供进度与重连读取。
 - V1.8：Agent 工具及购买草稿/一次性用户确认结构，不授予 Agent 消费确认的权限。
 - V1.9：`expected_stock` / `expected_available_stock`。迁移时复制现存库存建立基线，INSERT 表达式默认值只用于新行，后续合法业务 delta 在同一事务维护两列。直接仅 UPDATE 实际库存会留下差异；同时篡改两列不在该检测保证内。
 - V1.10：为有界对账证据查询增加索引；不替代完整扫描结束证据。
+- V1.11：`security_token_marker` 为 Access 撤销与一次性 client assertion 提供 MySQL 持久标记，联合主键为类型/hash，过期索引支持后台分批清理。
 
 结构事实见 [Flyway 迁移目录](../../database/src/main/resources/db/migration)，库存扫描和版本边界见 [当前架构](current-state.md)。以上迁移继续不使用外键。

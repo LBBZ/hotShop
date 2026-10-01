@@ -1,5 +1,7 @@
 # TASK-13-RECONCILE-03 verification
 
+> 历史快照：本文保留原任务或日期对应的实现与验证事实；版本、分支、工作树路径和测试计数不代表当前状态。当前使用方式见[文档中心](../README.md)。原始失败与限制保留供追溯。
+
 Verification date: 2026-08-09. Java verification runs in Docker with Java 21; it does not require a host Java installation. The RECONCILE-02 results retained below are historical baseline evidence only. Every RECONCILE-03 gate and real journey was rerun against the final working tree; the results below are the final acceptance evidence.
 
 ## RECONCILE-03 defect-to-test map

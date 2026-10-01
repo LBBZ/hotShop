@@ -1,5 +1,7 @@
 # IR-01 前端回归证据
 
+> 历史快照：本文保留原任务或日期对应的实现与验证事实；版本、分支、工作树路径和测试计数不代表当前状态。当前使用方式见[文档中心](../README.md)。原始失败与限制保留供追溯。
+
 主 agent 在 `D:/Codex/Projects/hotShop-review-integration` 执行。商品编辑相关源码在红测时仍为基线 `a3e7a6c`（此前仅合入互不相关的 Agent 修复）。Node 22.20.0、`corepack pnpm@10.15.0`；独立 worktree 安装冻结 lockfile 的依赖，无全局工具版本修改。
 
 ## 先失败、再修复

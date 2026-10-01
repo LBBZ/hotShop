@@ -1,5 +1,7 @@
 # TASK-21-RECONCILE-01：交付阻塞修复与复验
 
+> 历史快照：本文保留原任务或日期对应的实现与验证事实；版本、分支、工作树路径和测试计数不代表当前状态。当前使用方式见[文档中心](../README.md)。原始失败与限制保留供追溯。
+
 起点：`ebefde2ee158809f900a5912cbcda3ae7d58adad`，来自干净的`task-21-delivery`。
 任务分支：`task-21-reconcile-01`；独立worktree：`D:/Codex/Projects/hotShop-task21-reconcile-01`。
 未发现适用AGENTS.md；已读取TASK-21定义、原交付与阻塞报告。不合并、不推送master。

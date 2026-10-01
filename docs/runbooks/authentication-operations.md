@@ -1,7 +1,7 @@
 # HotShop 认证、密钥轮换与故障运行手册
 
-> TASK-05 运行边界。本文只覆盖 User/Administrator Access、Agent token exchange、Refresh Session、
-> Redis 认证安全状态与密钥操作，不扩展审计查询或 Agent 业务工具。
+> 覆盖 User/Administrator Access、Agent token exchange、Refresh Session、MySQL 安全标记、
+> Redis 限流与密钥操作。审计调查见 [审计手册](audit-operations.md)。
 
 ## 1. 运行时密钥边界
 
@@ -11,7 +11,7 @@ HotShop 固定使用 RS256，并维护四个互不复用的 key set：
 | --- | --- | --- | --- |
 | User Access | portal | portal、Python Agent | 签发/验证 User Access |
 | Administrator Access | admin | admin、Python Agent | 签发/验证 Administrator Access |
-| Agent Delegation | portal token-exchange 边界 | portal | 签发/验证 Agent Delegation |
+| Agent Delegation | portal token-exchange 边界 | portal、Python Agent | 签发/验证 Agent Delegation |
 | Agent Service assertion | Python Agent Service | portal | Agent Service 证明 Service Identity |
 
 portal 只配置 Agent Service 公钥，不持有其私钥。admin 不拿 User 或 Agent 私钥。仓库内 `task` 进程
@@ -60,9 +60,9 @@ docker compose --env-file .env.example config --quiet
 
 ## 4. Cookie 与浏览器接入
 
-- User cookies：`hotshop_user_refresh`（HttpOnly）和 `hotshop_user_csrf`，path `/api/v1/auth`。
-- Administrator cookies：`hotshop_admin_refresh`（HttpOnly）和 `hotshop_admin_csrf`，path
-  `/admin/api/v1/auth`。
+- User：`hotshop_user_refresh`（HttpOnly）path 为 `/api/v1/auth`，可读 `hotshop_user_csrf` path 为 `/`。
+- Administrator：`hotshop_admin_refresh`（HttpOnly）path 为 `/admin/api/v1/auth`，可读 `hotshop_admin_csrf` path 为 `/admin`。
+- 登录、轮换和退出同时清除旧认证路径上的同名 CSRF cookie，避免浏览器保留两个不同路径的值。
 - 均为 host-only、`SameSite=Strict`；生产 `Secure=true`。
 - 本机纯 HTTP 只能通过显式 `HOTSHOP_SECURE_COOKIES=false` 关闭 Secure；该值不得进入生产配置。
 - 浏览器对 refresh/logout 读取本域 CSRF cookie，并原样放入 `X-CSRF-Token`；服务端常量时间比较。
@@ -70,16 +70,22 @@ docker compose --env-file .env.example config --quiet
 
 ## 5. Redis 和数据库故障语义
 
-`redis-cache` 保存短 TTL 的限流计数、Agent assertion `jti` 防重放和 Access `jti` denylist。所有 key
-都带 `hotshop:auth:` 命名空间，只包含 hash/最小化标识，不包含原 Authorization、JWT、Refresh
-Token、cookie、username 或密码。计数用原子 Lua执行 `INCR` 和首次 `EXPIRE`。
+`redis-cache` 保存短 TTL 的认证限流计数。key 带 `hotshop:auth:` 命名空间，只包含 hash/最小化
+标识，不包含原 Authorization、JWT、Refresh Token、cookie、username 或密码。计数用原子 Lua
+执行 `INCR` 和首次 `EXPIRE`。
+
+V1.11 的 MySQL `security_token_marker` 保存不可依赖缓存淘汰的安全事实：`REVOKED_ACCESS` 是
+Access `jti` 的 SHA-256 撤销标记；`CLIENT_ASSERTION` 是一次性 assertion `jti` 的 SHA-256。
+两类标记均保留到 token 到期加配置 clock skew 及一秒余量。联合主键仲裁 assertion 重放，
+`TokenBlacklistService` 和 `ClientAssertionReplayService` 使用独立事务，调用方后续回滚不会恢复凭据。
+不得通过清空 Redis 撤销这些安全事实。Task 的 `SecurityTokenMarkerCleanup` 默认每分钟按到期时间
+清理最多 10,000 条过期标记；活跃标记不在清理范围。
 
 认证写入口采用 fail-closed：
 
-- Redis 不可用：login、refresh、token exchange 和需要即时 Access 撤销的 logout 返回脱敏 503
-  `SERVICE_UNAVAILABLE`，不会绕过限流/防重放/denylist。
+- Redis 不可用：依赖认证限流的入口返回脱敏 503 `AUTHENTICATION_SERVICE_UNAVAILABLE`，不会绕过限流。
 - 达到限额：返回 429 `RATE_LIMITED` 和 `Retry-After`。
-- MySQL 不可用：Refresh Session 无法创建/轮换/撤销；不得改为 Redis 或内存 session。
+- MySQL 不可用：Refresh Session 无法创建/轮换/撤销，Java Bearer 撤销查询与 assertion 防重放也会失败关闭，返回脱敏 503；不得改为 Redis 或内存安全标记。
 
 Redis 不是 Refresh Session 的事实来源。MySQL `refresh_token` 行锁、状态和唯一 successor 决定
 rotation/reuse 结果；即使 Redis 数据丢失，也不能让已撤销 family 恢复。
@@ -105,7 +111,7 @@ Bean 初始化时重新规范化可信代理集合。
 
 ## 6. 安全事件和处置
 
-TASK-05 只写最小事件：登录成功/失败、Agent delegation 签发和 refresh reuse。事件只包含 User ID、
+认证只写最小事件：登录成功/失败、Agent delegation 签发和 refresh reuse。事件只包含 User ID、
 client ID、scope 或 username hash 等脱敏摘要，不含凭据。
 
 检测到 refresh reuse 时，事务将旧 token 标记 `REUSED`、撤销 family 内全部 ACTIVE token，并清除
@@ -113,9 +119,10 @@ client ID、scope 或 username hash 等脱敏摘要，不含凭据。
 
 1. 将 401/reuse 的 request ID、trace ID 和时间交给后续审计调查，不索要原 token。
 2. 要求 User 重新登录；不要恢复旧 family。
-3. 若怀疑 Access 已泄露且不能等待短 TTL，到 Redis denylist 对其 `jti` hash 做即时撤销。
+3. 若怀疑 Access 已泄露且不能等待短 TTL，使用既有退出/撤销服务将当前 `jti` hash 持久标记为撤销；清空缓存无效。项目没有面向管理员的任意 token 撤销 HTTP API。
 4. 若怀疑私钥泄露，按第 3 节发布新公钥/切换签名 key，并在必要时提前撤下受损 `kid`；提前撤下会
    主动使该 key 签发的尚未过期 Access 失效。
 
-Principal 由验证后的 JWT 声明构造，不按请求查询数据库。因此 User 禁用或权限变更通常在 Access
-剩余 TTL 内最终生效；紧急禁用同时需要撤销 Refresh family，并对当前 Access `jti` 使用 denylist。
+Principal 由验证后的 JWT 声明构造，不按请求重新查询 User 资料；Java 仍逐次查询数据库撤销标记。
+因此 User 禁用或权限变更通常在 Access 剩余 TTL 内最终生效；紧急禁用同时需要撤销 Refresh family，
+并对当前 Access `jti` 使用持久撤销标记。

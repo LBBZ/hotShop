@@ -1,6 +1,6 @@
 # HotShop 统一审计运行手册
 
-> TASK-06边界及RECONCILE-01契约补充。审计日志是调查事实，不是普通业务数据；业务 API 只追加和只读查询。
+> 审计日志记录调查事实；业务 API 只追加和只读查询。
 
 ## 1. 记录模型
 
@@ -30,7 +30,7 @@ Cookie、Authorization、client assertion、完整提示词、思维链/推理�
 3. 业务写报错时，外层业务事务回滚，FAILURE 审计通过 `REQUIRES_NEW` 独立提交；
 4. 若数据库整体不可用，业务与失败审计都可能无法提交，但操作仍然失败，不能降级成“无审计成功”。
 
-TASK-05 安全事件保持相同原则：登录成功与 Refresh Session 创建共同提交；refresh reuse 与 family
+认证安全事件保持相同原则：登录成功与 Refresh Session 创建共同提交；refresh reuse 与 family
 撤销共同提交；登录失败独立提交；Agent Delegation 的审计写失败会阻止成功响应。
 
 新增 Order、User、支付、补偿或 Agent 写命令时，必须先选择上述“成功同事务、失败独立事务”模板，

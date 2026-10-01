@@ -1,5 +1,7 @@
 # TASK-04 API 契约与错误规范验证记录
 
+> 历史快照：本文保留原任务或日期对应的实现与验证事实；版本、分支、工作树路径和测试计数不代表当前状态。当前使用方式见[文档中心](../README.md)。原始失败与限制保留供追溯。
+
 > 执行日期：2026-07-27。所有 Java 命令使用 `eclipse-temurin:21-jdk` 容器和仓库 Maven Wrapper；
 > 没有 `skipTests`、静态手写 OpenAPI、commit、push、分支或 PR 操作。
 

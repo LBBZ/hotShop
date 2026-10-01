@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "hotshop-agent"
 version = "0.1.0"
-description = "Independent HotShop Agent process"
+description = "HotShop shopping assistant with authorized commerce tools and cited knowledge retrieval"
 requires-python = "==3.12.*"
 dependencies = [
   "cryptography==50.0.1",

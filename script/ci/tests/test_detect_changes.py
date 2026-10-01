@@ -70,6 +70,22 @@ class DetectChangesTest(unittest.TestCase):
             {"ci_security": True, "docs_only": False},
         )
 
+    def test_multilingual_and_component_readmes_are_documentation(self) -> None:
+        paths = ["README.en.md", "README.zh-CN.md", "CONTRIBUTING.md", "web/README.md", "agent/README.md"]
+        self.assertFalse(any(classify_paths(paths).values()))
+        self.assertTrue(change_metadata(paths)["docs_only"])
+
+    def test_api_prose_does_not_trigger_contract_generation(self) -> None:
+        self.assertFalse(any(classify_paths(["docs/api/api-contract.md"]).values()))
+
+    def test_openapi_baseline_still_runs_contract_and_web_checks(self) -> None:
+        paths = ["README.en.md", "docs/api/openapi-baseline/user.json"]
+        self.assertEqual(
+            classify_paths(paths),
+            {"java": False, "agent": False, "web": True, "openapi": True, "docker": False},
+        )
+        self.assertFalse(change_metadata(paths)["docs_only"])
+
     def test_root_pom_selects_every_component(self) -> None:
         self.assertTrue(all(classify_paths(["pom.xml"]).values()))
 

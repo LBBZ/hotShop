@@ -1,9 +1,9 @@
 # HotShop observability architecture
 
-TASK-11 establishes one reproducible local telemetry plane. It is an engineering diagnostic system,
+The repository defines a reproducible local telemetry plane. It is an engineering diagnostic system,
 not a production SLO claim.
 
-TASK-20 adds a run-scoped measurement plane. Dockerized k6 sends low-cardinality, Run-ID-tagged
+The performance harness provides a run-scoped measurement plane. Dockerized k6 sends low-cardinality, Run-ID-tagged
 metrics by Prometheus Remote Write, while its orchestrator captures persisted business facts and
 container/dependency snapshots. `sale_reservation.reserved_at` to `sales_order.created_at` is the
 canonical async-order latency; the matching identifier-free Micrometer histogram supports live
@@ -24,9 +24,10 @@ All five observability services use fixed image tags, named volumes, health chec
 and the independent Compose profile `observability`. Configuration is bind-mounted read-only, so a
 container rebuild replays the same datasources, dashboards, and alerts.
 
-The local Java container entrypoint caps tiered compilation at C1. This avoids a reproducible
-Temurin 21 Alpine C2 SIGSEGV under Docker Desktop; it is a local-stack stability choice, not a
-production JVM tuning recommendation.
+Java containers accept optional JVM tuning through `HOTSHOP_JAVA_TOOL_OPTIONS`; the current
+default is empty. The Dockerfile does not impose the old C1-only workaround. The demo overlay still
+defaults `HOTSHOP_DEMO_JAVA_TOOL_OPTIONS` to `-XX:TieredStopAtLevel=1`; this is specific to demo containers. Any deployment-specific
+tuning must be recorded alongside the environment and measurements it affects.
 
 ## Context contract
 
@@ -38,10 +39,9 @@ context. They are deliberately separate.
 2. Spring/Micrometer creates server spans and exports `service.name` plus
    `deployment.environment`. The request filter returns `X-Request-ID` and `X-Trace-ID` and adds
    `requestId`, `traceId`, and `spanId` to MDC.
-3. The Redis Lua span is a child of the HTTP span. Because the accepted Stream schema was already
-   immutable, the producer stores the W3C carrier in a seven-day, SHA-256-keyed Redis correlation
-   entry. The Stream event already carries the request ID; no database migration or mutable Stream
-   rewrite is used.
+3. The Redis Lua span is a child of the HTTP span. Reservation intake atomically appends `requestId`,
+   `traceparent`, and `tracestate` to the accepted Stream entry. There is no post-commit correlation
+   side key; workers restore context directly from that durable entry.
 4. First Stream delivery creates a `CONSUMER` span with the producer as remote parent. A claimed
    Pending/redelivery starts a new trace and adds a Micrometer `Link` to the producer context. This
    avoids pretending that a thread-local survived Redis or a process restart.
@@ -75,7 +75,7 @@ The primary rule remains “do not log sensitive input”; sanitization is a def
 
 ## Metrics and labels
 
-Standard Spring metrics provide HTTP RED, JVM memory/GC/threads, and HikariCP. TASK-11 adds real
+Standard Spring metrics provide HTTP RED, JVM memory/GC/threads, and HikariCP. Application instrumentation adds real
 code-path meters:
 
 | Area | Metrics |

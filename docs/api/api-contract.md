@@ -1,19 +1,20 @@
 # HotShop HTTP API v1 契约
 
-> TASK-04 契约。OpenAPI 必须由运行中的 Spring 应用生成；本文件解释跨接口规则，不代替运行时
-> OpenAPI JSON。
+> 本文解释当前跨接口规则。Java 契约由运行中的 Spring 应用导出，Python Agent 契约由
+> FastAPI 应用导出；精确路径和 schema 以 [OpenAPI 基线](openapi-baseline) 为准。
 
-## 1. 正式边界与一次性版本升级
+## 1. 进程、身份与 HTTP 边界
 
-正式接口只有以下三个根边界：
+Java API 使用三个身份边界，浏览器 Agent API 位于独立 Python 进程：
 
 - `/api/v1`：匿名能力和登录 User 能力；
 - `/admin/api/v1`：Administrator 能力；
-- `/agent/api/v1`：预留给 Agent 进程的边界。本任务不创建任何虚构 Agent 业务接口。
+- `/agent/api/v1`：Java 的 token exchange、受 scope 限制的商品/本人交易查询与购买草稿工具。
+- Python `/api/v1/agent`、`/admin/api/v1/agent`：分别接收 User 和 Administrator Access 的会话、消息、运行与 SSE API；浏览器通过 `/agent-api` 同源代理访问。
+- `/provider-callbacks/v1/mock-payment`：Java 本地模拟支付回调，仅通过独立 HMAC 协议验证，不是浏览器或 Agent 工具。
 
 `/portal/**` 和旧 `/admin/**` 已作为一次性 v1 升级移除，不保留双路由。MockMvc 契约测试以真实
-Spring Security 验证旧路径在已认证请求下返回 404；生成的三个正式 OpenAPI JSON 也不包含旧路径。
-调用方必须一次性迁移：
+Spring Security 验证旧路径在已认证请求下返回 404。以下对照只用于旧客户端迁移；新集成直接使用 v1：
 
 | 旧能力 | v1 |
 | --- | --- |
@@ -31,14 +32,14 @@ Spring Security 验证旧路径在已认证请求下返回 404；生成的三个
 当前接口：
 
 - public：注册、登录、商品详情、商品列表/搜索；
-- user：登出、刷新令牌、当前 User、创建普通 Order、本人 Order 列表、Redis Lua 秒杀 Reservation；
-- admin：登录、登出、Catalog Product CRUD/列表、Order 详情/列表、User 列表、只读审计日志查询、
-  审计化 Flash Sale Activity 装载/校验。
+- user：独立登录/刷新/登出、当前 User、幂等普通订单、本人订单/预约、持久 timeline 与 SSE、模拟支付、购买草稿的一次性确认；
+- admin：独立认证、Catalog Product 元数据与库存调整、活动管理/装载、订单/支付调查、运营统计、异常、FAILED Outbox 重放和只读审计；
+- agent：固定工具、连续对话、受限静态 RAG 和购买草稿；模型不能消费用户确认、付款或操作高风险后台功能。
 
 Controller 的 HTTP 签名只使用 `*Request`、`*Response` 和 `CursorPageResponse` DTO。持久化实体只在
 Controller 内部与领域服务之间使用，不进入请求/响应签名或 OpenAPI schema。
 
-### 1.1 TASK-05 身份域与令牌生命周期
+### 1.1 身份域与令牌生命周期
 
 认证边界在签名验证阶段按 issuer、audience、`typ`、`kid` 和独立公钥集合隔离，不能靠
 `role` 字符串补救错误 audience：
@@ -54,8 +55,9 @@ User、Administrator、Agent Delegation 和 Agent Service client assertion 分�
 与 key set。Access JWT 固定 RS256，必须同时验证 `alg`、`kid`、签名、`iss`、`aud`、`typ`、稳定
 User ID 形式的 `sub`、`iat`、`nbf`、`exp`、`jti`；允许时钟偏差 30 秒。拒绝 `none`、错误算法、
 未知 `kid`、跨 issuer/audience、尚未生效、过期和签名篡改令牌。Principal 完全从验证后的声明构造，
-正常请求不查询数据库；禁用 User 或权限变更最多受剩余 Access TTL 影响。高风险即时撤销可将
-SHA-256(`jti`) 加入 Redis denylist，绝不保存原 JWT。
+正常请求不重新加载用户资料，但 Java 认证过滤器会查询 MySQL `security_token_marker` 的撤销标记。
+禁用 User 或权限变更仍可能受剩余 Access TTL 影响；即时撤销以 `REVOKED_ACCESS` 类型保存
+SHA-256(`jti`)，保留至 JWT 到期加时钟偏差和一秒余量，绝不保存原 JWT。数据库不可用时返回脱敏 503。
 
 认证端点：
 
@@ -75,10 +77,10 @@ SHA-256(`jti`) 加入 Redis denylist，绝不保存原 JWT。
 
 Cookie 契约：
 
-| 域 | Refresh cookie | CSRF cookie | Path |
-| --- | --- | --- | --- |
-| User | `hotshop_user_refresh`（HttpOnly） | `hotshop_user_csrf`（前端可读） | `/api/v1/auth` |
-| Administrator | `hotshop_admin_refresh`（HttpOnly） | `hotshop_admin_csrf`（前端可读） | `/admin/api/v1/auth` |
+| 域 | Refresh cookie（HttpOnly） | Refresh Path | CSRF cookie（前端可读） | CSRF Path |
+| --- | --- | --- | --- | --- |
+| User | `hotshop_user_refresh` | `/api/v1/auth` | `hotshop_user_csrf` | `/` |
+| Administrator | `hotshop_admin_refresh` | `/admin/api/v1/auth` | `hotshop_admin_csrf` | `/admin` |
 
 四个 cookie 均为 host-only、`SameSite=Strict`。生产默认 `Secure=true`；只有显式本地 HTTP 配置
 `HOTSHOP_SECURE_COOKIES=false` 可关闭。refresh/logout 使用双提交 CSRF，并以常量时间比较 cookie
@@ -94,12 +96,12 @@ loser 观察到旧 token 已轮换后按 reuse 处理，将旧 token 标记 `REU
 
 Agent token exchange 仅接受 User Access 作为 subject token，并同时验证固定 client ID
 `hotshop-agent-service` 的 RS256 client assertion。assertion 必须具有独立 issuer/audience、正确
-`typ`、`sub`、`iat`、短 `exp`、`jti`、`kid` 和签名；Redis 以 hash(`jti`) 的 `SET NX EX` 在不超过
-assertion 剩余有效期内防重放。scope 请求必须是下列 allowlist 的子集，否则整个请求拒绝：
-`catalog:read`、`orders:self:read`、`reservations:self:read`。库存/价格写入、用户管理、Administrator
+`typ`、`sub`、`iat`、短 `exp`、`jti`、`kid` 和签名；MySQL `security_token_marker` 的
+`(CLIENT_ASSERTION, SHA-256(jti))` 唯一键阻止跨进程重放。scope 请求必须是下列 allowlist 的非空子集，否则整个请求拒绝：
+`catalog:read`、`orders:self:read`、`reservations:self:read`、`purchase-drafts:create`。库存/价格写入、用户管理、Administrator
 写操作、审计、密钥和权限管理永不进入 Agent scope。签发的 Agent Delegation 含 delegated User
 `sub`、`azp=hotshop-agent-service` 与显式 `scope`，不含 Administrator role，也不能调用 Portal 或
-Admin 边界。本任务不创建 Agent 业务成功接口。
+Admin 边界。工具与一次性确认流程见 [Agent 工具与确认](../architecture/agent-tools-and-confirmation.md)。
 
 授权矩阵的实现结果：
 
@@ -222,27 +224,24 @@ trace ID、source、`occurredAt` 和脱敏 `stateSummary`。`stateSummary` 只�
 - Trace ID 表示分布式 trace，不是 Request ID。服务端从合法 W3C `traceparent` 提取 32 位小写
   hex trace ID；缺失/非法时生成新的非零 128-bit ID。
 - Trace ID 在 `X-Trace-Id`、MDC `traceId` 和错误体 `traceId` 中一致。当前边界保留
-  `traceparent` 传播语义，TASK-13 接入 Tempo 时不得把 Request ID 复用为 Trace ID。
+  `traceparent`/`tracestate` 传播语义，异步 Redis Stream、Outbox、RabbitMQ 和模拟支付回调均保留独立关联上下文。
 
 ## 6. Idempotency-Key
 
-运行时 OpenAPI 的 components 定义 `Idempotency-Key` 和 `Idempotency-Replayed`。
-`POST /api/v1/flash-sales/{activityId}/reservations` 是第一个正式启用的操作；幂等结果保存在
-`redis-seckill` DB 0，保留 24 小时。当前 `POST /api/v1/orders` 仍不宣称支持幂等键。
+普通订单与秒杀预约均要求 `Idempotency-Key`。格式为 16–128 位可见 ASCII，正则
+`^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$`。相同 User/Key 但不同请求 fingerprint 返回
+409 `IDEMPOTENCY_KEY_CONFLICT`；相同意图重试复用 key，新意图才生成新 key。
 
-未来某个写操作启用时必须同时满足：
+| 操作 | 持久化与 fingerprint | 首次 / 重放 |
+| --- | --- | --- |
+| `POST /api/v1/orders` | MySQL `order_purchase_intent`；User + key SHA-256，排序后的 Product/quantity 请求摘要；与订单同事务 | 首次 201；重放 200，`Idempotency-Replayed: true`，返回原 orderId/requestId 与创建回执 |
+| `POST /api/v1/flash-sales/{activityId}/reservations` | `redis-seckill` DB 0；User + key SHA-256，activityId/quantity 摘要；默认保留 24 小时 | 首次与重放均 202；重放相同 body 并带 `Idempotency-Replayed: true` |
 
-- key 是 16–128 位可见 ASCII，正则
-  `^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$`；
-- scope 是“已认证 User + Flash Sale Reservation operation”；v1 fingerprint 绑定 activityId 与
-  quantity，Key 本身以 SHA-256 进入 Redis；
-- 相同 key、scope 和 fingerprint 重放首次完成的 HTTP status、业务 body 与契约相关 headers，并返回
-  `Idempotency-Replayed: true`；
-- 相同 key/scope 但 fingerprint 不同返回 409 `IDEMPOTENCY_KEY_CONFLICT`；
-- 首次请求仍处理中时返回 409 `IDEMPOTENCY_REQUEST_IN_PROGRESS` 和 `Retry-After`；
-- 5xx 或 Lua 未完整提交不得缓存为成功重放；TASK-07 保留期为 24 小时；
-- Reservation 接口用单个 Lua 同时仲裁业务事实、幂等结果与 Stream 事件；其他操作必须完成自己的
-  一致性和持久化测试后，才能把 component 挂到具体操作。
+普通订单重放返回的是创建回执中的 `PENDING`，不是最新订单状态；使用本人订单 GET 或 timeline
+查询当前事实。处理中冲突为 `ORDER_INTENT_IN_PROGRESS`。普通订单没有 Redis 24 小时保留策略。
+预约处理中为 `IDEMPOTENCY_REQUEST_IN_PROGRESS`，同时带 `Retry-After`。预约 Lua 同时仲裁业务事实、
+幂等结果与 Stream 事件；5xx 或未完整提交不得伪装为成功重放。详细普通订单流程见
+[用户交易链路](../architecture/user-transaction-journey.md)。
 
 秒杀 Reservation 成功返回 202：
 
@@ -260,7 +259,7 @@ activityId 或 quantity 返回 409 `IDEMPOTENCY_KEY_CONFLICT`。服务端只信�
 User ID，请求 body 不接受 userId。详细 Redis/Lua/Stream 契约见
 `docs/architecture/flash-sale-reservation.md`。
 
-TASK-08 增加本人 Reservation 状态查询：
+本人 Reservation 状态查询：
 
 ```text
 GET /api/v1/flash-sales/{activityId}/reservations/{reservationNo}
@@ -300,7 +299,9 @@ scope。消费、ACK 和最终一致性设计见
 
 - portal：`/v3/api-docs/public`、`/v3/api-docs/user`；
 - admin：`/v3/api-docs/admin`；
-- `/v3/api-docs/agent-boundary` 只证明 `/agent/api/v1/**` 的保留分组，不作为业务 client 输入。
+- portal `/v3/api-docs/agent-boundary`：Java 委托工具和 token exchange；此 Java 内部边界不生成浏览器客户端；
+- portal `/v3/api-docs/mock-provider-callback`：独立模拟支付回调契约；
+- Python `/openapi.json`：浏览器 User/Administrator Agent API，保存为 `agent.json`。
 
 生成命令：
 
@@ -308,9 +309,10 @@ scope。消费、ACK 和最终一致性设计见
 .\script\generate-api-client.ps1
 ```
 
-脚本用 Docker 中的 Java 21 和仓库 Maven Wrapper执行测试/打包，启动真实 portal/admin jar，抓取
-运行时 JSON 到 `target/openapi/{public,user,admin}.json`，再仅对运行时 JSON 做稳定 key 排序和空白
-规范化，最后用固定 OpenAPI Generator 7.14.0 生成：
+脚本用 Docker 中的 Java 21 和仓库 Maven Wrapper 打包（跳过测试，Java 验证由独立门禁执行），启动真实
+portal/admin jar，导出 public/user/admin/mock-provider-callback JSON，同时导出 Python Agent 契约，
+写入 `target/openapi/`。运行时 JSON 仅做稳定 key 排序和空白规范化。Java 客户端生成入口使用
+OpenAPI Generator 7.14.0，输出：
 
 ```text
 target/generated-sources/typescript/
@@ -320,6 +322,8 @@ target/generated-sources/typescript/
 ```
 
 `target/` 全部是可删除、可重复生成的输出边界；生成文件带有 `Do not edit` 声明，不得手工修改。
+前端实际使用的四组客户端位于 `web/src/api/generated/{public,user,admin,agent}`，从已评审的基线运行
+`corepack pnpm@10.15.0 --dir web api:generate` 生成，并用 `api:check` 验证漂移。
 契约的 server 是合法的同源相对 URL `/`。OpenAPI Generator 7.14.0 在其 OpenAPI 3.1 beta 路径中会
 为相对 server 输出 localhost fallback 警告；集成生成 client 时必须通过其 `Configuration.basePath`
 显式传入当前环境的 API origin，不能把生成器 fallback 当成生产地址。
@@ -340,7 +344,7 @@ response schema 和 component，至少拒绝删除路径、删除字段、改变
 HotShop 额外不变量会拒绝 `productId`/`userId` URL 参数退回 `integer/int64`，或 `orderId` path
 丢失长度和字符集约束。
 
-## 8. TASK-09 管理员 Outbox 运维契约
+## 8. 管理员 Outbox 运维契约
 
 以下接口只接受 Administrator Access；User Access、匿名请求和 Agent Delegation 在身份边界被拒绝，
 Agent OpenAPI 和工具面不提供等价能力：
@@ -352,8 +356,9 @@ Agent OpenAPI 和工具面不提供等价能力：
 failure category 与时间，不返回 payload、`last_error`、凭据、SQL 或堆栈。重放成功返回 202，只修改
 MySQL 状态并追加 append-only `audit_log`；RabbitMQ 发布由 task 异步完成。`NEW`、`PUBLISHING` 和
 `PUBLISHED` 均返回 409 `OUTBOX_NOT_FAILED`，不能借此重复发布已经完成的事件。
-# TASK-10 Mock Payment contract
 
-Mock Payment 仅供本地演示，不是真实支付。User 契约新增 `POST /api/v1/orders/{orderId}/payments`、`GET /api/v1/payments/{paymentNo}` 和返回 202 的 `POST /api/v1/payments/{paymentNo}/mock-actions`；三者只接受 `ROLE_USER` 且服务端校验 Order ownership。mock action 的 `delay` 是有上限的 ISO-8601 Duration，`duplicateCount` 为 1..10。
+## 9. Mock Payment 契约
+
+Mock Payment 仅供本地演示，不是真实支付。User 使用 `POST /api/v1/orders/{orderId}/payments`、`GET /api/v1/payments/{paymentNo}` 和返回 202 的 `POST /api/v1/payments/{paymentNo}/mock-actions`；三者只接受 `ROLE_USER` 且服务端校验 Order ownership。mock action 的 `delay` 是有上限的 ISO-8601 Duration，`duplicateCount` 为 1..10。
 
 Provider 使用独立 runtime contract `docs/api/openapi-baseline/mock-provider-callback.json`。只有精确路径 `POST /provider-callbacks/v1/mock-payment` 匿名，且必须携带 `X-Mock-Timestamp`、`X-Mock-Nonce`、`X-Mock-Signature`。此路径不生成 TypeScript 客户端，也不属于 Agent boundary。

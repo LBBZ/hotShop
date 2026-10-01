@@ -1,6 +1,6 @@
 # HotShop Commerce Context
 
-HotShop models a flash-sale purchase from product discovery through reservation, ordering, and payment. The language
+HotShop models regular and flash-sale purchases from product discovery through ordering and payment, with reservations for flash sales. The language
 below is shared by the Java application, React interface, Agent tools, tests, and interview documentation.
 
 ## Identity
@@ -80,7 +80,7 @@ _Avoid_: Successful order
 ## Ordering and payment
 
 **Order**:
-The durable purchase commitment created from an accepted Reservation and owned by one User.
+The durable purchase commitment created by a regular purchase or an accepted Reservation and owned by one User.
 _Avoid_: Reservation, transaction
 
 **Order Item**:

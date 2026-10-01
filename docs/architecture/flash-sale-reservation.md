@@ -1,15 +1,16 @@
-# TASK-07 Redis Lua 秒杀预约设计
+# Redis Lua 秒杀预约设计
 
 ## 1. 责任边界
 
-TASK-07 只接收 Reservation。`POST /api/v1/flash-sales/{activityId}/reservations` 在
+预约入口只接收 Reservation。`POST /api/v1/flash-sales/{activityId}/reservations` 在
 `redis-seckill` 的一个 Lua 脚本中完成校验、库存预扣、Reservation/User/幂等事实写入和 `XADD`，
-然后返回 `202 Accepted`。热路径不写 MySQL、不创建 Order、不调用 RabbitMQ、模型或 Agent，也没有
+然后返回 `202 Accepted`。预约业务热路径不写 MySQL、不创建 Order、不调用 RabbitMQ、模型或 Agent，也没有
 Java 全局锁或分布式锁。
 
-MySQL 仍是最终交易事实来源。Redis Stream 中的 `RESERVATION_ACCEPTED` 是 TASK-08 的输入；
-TASK-08 才负责消费、Pending List/重试/认领、创建 `sale_reservation` 与 `sales_order`、补偿和对账。
-现有 `POST /api/v1/orders` 是兼容保留的同步普通 Order 接口，不是最终秒杀入口。
+身份校验仍通过 Java `JwtFilter` 查询 MySQL 的 Access 撤销标记，因此完整 HTTP 请求不应被描述为无数据库依赖。
+MySQL 是最终交易事实来源。Redis Stream 中的 `RESERVATION_ACCEPTED` 由 `task` 消费，负责
+Pending List/重试/认领、创建 `sale_reservation` 与 `sales_order`、补偿和对账。
+`POST /api/v1/orders` 是独立的同步、幂等普通购买接口；秒杀使用预约入口。
 
 ## 2. 固定双 Redis 连接
 
@@ -17,19 +18,18 @@ TASK-08 才负责消费、Pending List/重试/认领、创建 `sale_reservation`
 
 | 实例 | Bean | 数据 |
 | --- | --- | --- |
-| `redis-cache` | Primary `cacheRedisConnectionFactory` / `cacheStringRedisTemplate` | 认证 denylist、限流、Agent replay、普通缓存；可淘汰、可重建 |
+| `redis-cache` | Primary `cacheRedisConnectionFactory` / `cacheStringRedisTemplate` | 认证/交易限流、普通缓存；Python Agent 另用它保存短期会话；可淘汰、可重建 |
 | `redis-seckill` | `seckillRedisConnectionFactory` / `seckillStringRedisTemplate` | 活动、库存、Reservation、User 占位、幂等结果、Stream；`noeviction`、AOF+RDB |
 
 安全组件按类型注入时得到 Primary cache 客户端；秒杀服务必须用
 `@Qualifier("seckillStringRedisTemplate")`。不再存在 `RedisTemplateGenerator`，请求期间不会创建
-`LettuceConnectionFactory`。旧 `RedisService` 仅为未归属本任务的 task 调用保留兼容签名，参数
-`dbIndex` 不再选择数据库，所有操作固定进入 `redis-cache` DB 0。
+`LettuceConnectionFactory`。Access 撤销与 Agent assertion 防重放使用 MySQL 持久安全标记。
 
 ## 3. Key、hash tag 与生命周期
 
 公共前缀是 `hotshop:seckill:v1:{hotshop-seckill-v1}`。所有 Lua Key 使用同一个 hash tag，因而在
 Redis Cluster 中计算到同一个 slot。使用全局 tag 是为了让 User 级 Idempotency-Key 能同时约束不同
-activityId；代价是 TASK-07 的秒杀写流量集中在一个 slot，后续若要分片，必须先重新设计跨活动幂等
+activityId；代价是当前秒杀写流量集中在一个 slot，后续若要分片，必须先重新设计跨活动幂等
 协议并升级 Key/脚本版本，不能直接改 v1。
 
 Key 不包含 Access Token、Cookie、Email、Username 或原始 Idempotency-Key。Idempotency-Key 先做
@@ -42,12 +42,12 @@ SHA-256；User 使用稳定数值 ID。
 | User 有效占位 | `...:activity:{activityId}:user:{userId}:reservation` | String reservationNo | 接受时计算 `endsAt + 7d` |
 | 幂等结果 | `...:idempotency:user:{userId}:{sha256(key)}` | Hash | 24h |
 | Reservation | `...:activity:{activityId}:reservation:{reservationNo}` | Hash | 接受时计算 `endsAt + 7d` |
-| 活动 Stream | `...:activity:{activityId}:reservations` | Stream | 无 TTL、无 `MAXLEN`；TASK-08 消费/归档策略落地前不截断 |
+| 活动 Stream | `...:activity:{activityId}:reservations` | Stream | 无 TTL、无 `MAXLEN`；消费 ACK 不删除原始记录，目前无自动截断/归档 |
 | Stream Registry | `...:registry:reservation-streams` | Set | 无 TTL；由装载 Lua v2 原子登记，消费者不使用 `KEYS` |
 | 装载 staging | `...:activity:{activityId}:load:{loadId}:{meta\|stock}` | 临时 Hash/String | 同一 Lua 内 rename 或删除，不跨请求保留 |
 
-请求热路径只按计算好的 Key 做 O(1) 访问，不使用 `KEYS` 或 `SCAN`。对账的 `XRANGE` 只出现在显式
-管理装载/校验路径，不属于秒杀请求热路径。
+预约 Lua 只按计算好的 Key 做 O(1) 访问，不使用 `KEYS` 或 `SCAN`。对账的 `XRANGE` 出现在
+管理装载/校验和后台对账路径，不属于预约 Lua 热路径。
 
 ## 4. MySQL → redis-seckill 装载
 
@@ -66,7 +66,7 @@ authority: PERM_ADMIN_FLASH_SALE_LOAD
 - per-User limit 大于 0且不超过总库存；
 - `endsAt > startsAt`，status 属于数据库允许集合，version 非负。
 
-TASK-08 起装载改用 `load-flash-sale-activity-v2.lua`，保留已发布的 v1 文件不覆写。v2 延续原装载
+当前装载使用 `load-flash-sale-activity-v2.lua`，保留已发布的 v1 文件不覆写。v2 延续原装载
 语义，并在 `LOADED` 或同版本 `IDEMPOTENT` 返回前原子 `SADD` 当前活动 Stream 到版本化 Registry
 Set。Registry、Stream 和其余 Lua Key 使用相同 hash tag。装载 Lua 比较 `databaseVersion`：
 
@@ -142,6 +142,7 @@ Lua 原始错误、Redis 地址、Key、Java 类名和堆栈不会进入 Problem
 | `unitPrice` | 两位小数字符串；币种 `currency=CNY` |
 | `status` | `RESERVED` |
 | `requestId` | 首次请求的 Request ID |
+| `traceparent`、`tracestate` | 与接受预约同次 `XADD` 写入的 W3C 关联上下文；无值时使用空字符串 |
 | `occurredAtMs` | Redis `TIME` 计算的 epoch milliseconds |
 | `activityVersion` | 装载的 MySQL activity version |
 | `idempotencyKeyHash` | 原 Key 的 SHA-256 lowercase hex |
@@ -188,14 +189,14 @@ docker compose --env-file .env.example exec -T redis-seckill redis-cli `
   XRANGE 'hotshop:seckill:v1:{hotshop-seckill-v1}:activity:7001:reservations' - +
 ```
 
-再次调用 Administrator load 会返回当前 Redis/MySQL/Stream 对账结果，但不会重置库存。SQL 检查
-TASK-07 热路径没有创建数据库事实：
+再次调用 Administrator load 会返回当前 Redis/MySQL/Stream 对账结果，但不会重置库存。以下 SQL
+用于观察异步持久化总量，不应把“始终为零”作为预约成功断言：
 
 ```powershell
 docker compose --env-file .env.example exec -T mysql sh -c `
   'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -N --user=root --database="$MYSQL_DATABASE" -e "SELECT (SELECT COUNT(*) FROM sale_reservation),(SELECT COUNT(*) FROM sales_order),(SELECT COUNT(*) FROM outbox_event)"'
 ```
 
-TASK-08 启用后，上述三张表会由异步消费者写入，不再适合作为“始终为零”的断言。Registry、
+上述三张表由异步消费者写入。调查某次预约需按 reservationNo/orderId 关联记录。Registry、
 消费者组、Pending、处理账本、补偿和对账命令见
 `docs/architecture/stream-order-processing.md`。

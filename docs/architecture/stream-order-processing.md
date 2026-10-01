@@ -1,9 +1,9 @@
-# TASK-08 Redis Stream 订单转换、补偿与对账
+# Redis Stream 订单转换、补偿与对账
 
 ## 1. 语义和边界
 
 本文记录 Stream 转单及后续集成的当前边界，由 `task` 模块消费
-`RESERVATION_ACCEPTED` Stream 事件，把 Redis Reservation 转换为 MySQL 订单。Stream 消费器只持久化 Outbox；独立 Outbox 发布器和 TASK-10 支付/超时消费者已接入，详见 [可靠消息](reliable-messaging.md) 与 [模拟支付](mock-payment.md)。
+`RESERVATION_ACCEPTED` Stream 事件，把 Redis Reservation 转换为 MySQL 订单。Stream 消费器只持久化 Outbox；独立 Outbox 发布器和支付/超时消费者负责后续消息，详见 [可靠消息](reliable-messaging.md) 与 [模拟支付](mock-payment.md)。
 实现不拆微服务、不使用数据库外键/级联删除、分布式锁或 Java 全局锁。
 
 本链路的公开语义是：
@@ -80,6 +80,7 @@ ACK。实现不使用 `XDEL`；原始 Stream 事件保留，`XACK` 只把消息�
 - `unitPrice` 为非负两位小数字符串且满足 `DECIMAL(19,2)`，`currency=CNY`；
 - `status=RESERVED`，`activityVersion` 非负，`occurredAtMs` 为合理的正毫秒时间；
 - `idempotencyKeyHash`、`requestFingerprint` 为 64 位小写十六进制；
+- `requestId` 符合关联格式；`traceparent`、`tracestate` 必须存在，非空时通过 W3C 格式校验；
 - Stream key 中的 activity ID 与事件一致；
 - Redis Reservation Hash 的 schema、Reservation/User/Activity/Product、数量、单价、币种、
   Activity Version、幂等 hash 和 fingerprint 与事件一致。
@@ -111,8 +112,7 @@ schema 损坏、Reservation Hash 缺失、不可验证的身份或事实冲突�
 整个事务回滚，包含两次库存扣减、Reservation、Order、Item、processed_event、Outbox 和处理账本。
 
 ORDER_CREATED Outbox 的 event ID 由 Reservation 确定性计算，payload 包含 `schemaVersion=1`，
-不含 Token、Cookie、原始 Idempotency-Key 或敏感身份字段。TASK-08 只写 Outbox，不发布到
-RabbitMQ。
+不含 Token、Cookie、原始 Idempotency-Key 或敏感身份字段。Stream 转单事务只写 Outbox，发布由独立 Outbox 发布器完成。
 
 ## 6. 幂等与冲突处理
 
@@ -255,7 +255,7 @@ Reservation、Order 或 MySQL 活动/Catalog 库存。问题以稳定 `issue_key
 队列。人工处置前应同时核对 Stream 原文、Redis Hash/User 占位、处理账本、Reservation/Order/Outbox
 及审计记录；不得只看一侧状态。
 
-TASK-09 已删除普通订单的定时全表扫描、Redis 锁和旧 Rabbit 消费路径。当前订单超时消费者在
+普通订单使用可靠超时事件，不使用定时全表扫描或 Redis 锁。订单超时消费者在
 MySQL 事务中核验订单 PENDING 状态、数据库到期时间和完整消息事实；当前同时处理普通及秒杀订单。秒杀超时在 MySQL 事务回库后通过 SECKILL_PAYMENT_EXPIRED 可靠事件更新 Redis 投影，详见 [模拟支付](mock-payment.md)。
 
 ## 11. 配置与指标
@@ -378,7 +378,7 @@ Principal；未知 Reservation 与他人 Reservation 统一返回 404，防止�
 - dry-run 仍会写对账 issue、checkpoint 和指标，这些是观察性元数据，不是业务修复；
 - 自动修复默认关闭，且不包含库存差值修复、创建订单或覆盖冲突事实。
 
-## TASK-21：有界守恒扫描的当前实现
+## 有界守恒扫描
 
 `task/src/main/resources/redis/reconcile-conservation-page-v1.lua` 每页使用 `XRANGE COUNT`，以 `databaseVersion:inventoryRevision` 作为扫描 fence；实际改变有效占用量的写入推进 revision。持久 checkpoint 和无 TTL 的 seen hash 在同一 Lua 中维护，按 reservationNo 跨页去重；每个 delivery 仍需校验事实，不能用 eventId 不同重复计数。fence 改变、schema 旧或 seen 缺失会重启扫描；只有 COMPLETE 才使用完整守恒结果。持续写入可能持续重启，IN_PROGRESS 不得报告通过。分页限制单次读取，不保证 seen 总空间恒定，活动历史增长也增加完成时间。
 

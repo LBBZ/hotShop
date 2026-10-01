@@ -1,5 +1,7 @@
 # 独立复核修复与联合验证（2026-09-15）
 
+> 历史快照：本文保留原任务或日期对应的实现与验证事实；版本、分支、工作树路径和测试计数不代表当前状态。当前使用方式见[文档中心](../README.md)。原始失败与限制保留供追溯。
+
 > 2026-09-16 追加：分页守恒重复预占计数补修见本文末节。此前验证结果仍对应原有 SHA，不代表本次补修重跑结果。
 
 ## 范围与工作区保护
@@ -108,7 +110,7 @@ docker run --rm --name hotshop-review-final-java --mount type=bind,source=D:/Cod
 - 两次运行时OpenAPI导出各遗留一个本次新建的MySQL匿名卷。主agent先记录该次唯一容器ID、创建时刻与Mounts，确认卷不在调用前列表且无任何容器引用后，仅删除 `c9bb928a9ff7d568e705ad0e5b4b2572c5361fba98d5360e87379b3b6c6d4c4e`、`92a5ab9d9362fba8311ebaac58610180995359d6651b1e738b003ac9d4274b76`。所有临时OpenAPI容器、网络及独有镜像标签已由脚本回收；最终卷列表与最后一次调用前一致。
 - 最后检查无运行容器、无本任务OpenAPI网络。`docker ps -a`仍有两个6／7周前的已停止历史容器，未改动；共享依赖缓存、既有卷／镜像未清理。未执行全局prune。
 - 保留功能worktree、集成worktree、node_modules、target日志与测试报告以供独立验收，不把它们误当需要删除的用户数据。
-- 交付报告提交后，集成 `git status --short` 为空；`git diff --check a3e7a6c55040bbebc8760750af4b5cfcfd0406aa HEAD`通过，变更文本严格UTF-8检查通过。最终SHA与状态快照另写入本地附录 [final-delivery.json](../../target/review-fixes/final-delivery.json)。
+- 交付报告提交后，集成 `git status --short` 为空；`git diff --check a3e7a6c55040bbebc8760750af4b5cfcfd0406aa HEAD`通过，变更文本严格UTF-8检查通过。最终SHA与状态快照另写入当时未入库的本地附录 `target/review-fixes/final-delivery.json`；仓库保留证据以本页链接的文本摘录为准。
 - 原目录仍为`master`／`a3e7a6c55040bbebc8760750af4b5cfcfd0406aa`，`git status --short`仅保留开始时的两项：`?? docs/quality/independent-review-2026-09-15.md`、`?? docs/quality/review-2026-09-15/`。三份明确列出的材料副本已核对SHA-256与原件相同。
 - 不合并master、不推送、不发布；停止在集成worktree待验收。
 

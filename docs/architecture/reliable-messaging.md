@@ -23,7 +23,8 @@ Ordinary and flash-sale orders are eligible. Flash-sale timeout additionally loc
 ## FAILED operations
 
 Administrators with `ROLE_ADMIN` list redacted failures at `/admin/api/v1/outbox/failed`, then POST `/admin/api/v1/outbox/{eventId}/replay` with a reason. HTTP only changes MySQL; publication remains asynchronous. Published events cannot be replayed. Every attempt appends an audit record, and no Agent endpoint exposes this operation.
-# TASK-10 payment messaging
+
+## Mock payment messaging
 
 `MOCK_PAYMENT_CALLBACK_REQUESTED` 使用 Outbox `available_at` 持久表达延迟，发布到 durable Mock callback queue。HTTP 5xx/连接错误进入有限 durable retry，4xx 进入 DLQ，2xx 才 ACK。`PAYMENT_SUCCEEDED`、`PAYMENT_FAILED`、`PAYMENT_LATE_SUCCEEDED` 和 `SECKILL_PAYMENT_EXPIRED` 均路由到独立 durable queue；mandatory return 和 publisher confirm 语义保持不变。at-least-once 重投由 callbackId/payload hash、nonce hash 和条件状态更新保证不重复业务效果。
 

@@ -165,7 +165,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
           New-Item -ItemType Directory -Force target/ci/openapi | Out-Null
-          docker run --rm --mount "type=bind,source=${PWD},target=/repo" -w /repo/web mcr.microsoft.com/playwright@sha256:3bed4b1a12f2338642f3d8cba28e291deef3c66bd4a964bbeb3e57bbff511dbd bash -lc 'set -euo pipefail; apt-get update >/dev/null; apt-get install -y --no-install-recommends openjdk-21-jre-headless >/dev/null; corepack enable; corepack prepare pnpm@10.15.0 --activate; pnpm install --frozen-lockfile; pnpm format:check; pnpm lint; pnpm typecheck; pnpm test:coverage; pnpm build; pnpm api:check; pnpm api:check:admin; pnpm api:check:agent; CI=true pnpm exec playwright test e2e/smoke.spec.ts'
+          docker run --rm --mount "type=bind,source=${PWD},target=/repo" -w /repo/web mcr.microsoft.com/playwright@sha256:3bed4b1a12f2338642f3d8cba28e291deef3c66bd4a964bbeb3e57bbff511dbd bash -lc 'set -euo pipefail; apt-get update >/dev/null; apt-get install -y --no-install-recommends openjdk-21-jre-headless >/dev/null; corepack enable; corepack prepare pnpm@10.15.0 --activate; pnpm install --frozen-lockfile; pnpm format:check; pnpm lint; pnpm typecheck; pnpm test:coverage; pnpm build; pnpm api:check; pnpm api:check:admin; pnpm api:check:agent; CI=true pnpm exec playwright test e2e/smoke.spec.ts e2e/storefront.spec.ts'
           & ./script/generate-openapi.ps1 *>&1 | Tee-Object target/ci/openapi/generate.log
           docker run --rm --mount "type=bind,source=${PWD},target=/repo" -w /repo python:3.12.11-slim-bookworm@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7 python script/check_openapi_compatibility.py --baseline docs/api/openapi-baseline --current target/openapi *>&1 | Tee-Object target/ci/openapi/compatibility.log
           git diff --exit-code -- web/src/api/generated *>&1 | Tee-Object target/ci/openapi/worktree-drift.log
@@ -414,7 +414,17 @@ jobs:
   gate:
     name: Full verification gate
     if: always()
-    needs: [java, agent-qdrant, web-contracts, docker-compose-smoke, security, task19-real-e2e, task19-faults, task19-security]
+    needs:
+      [
+        java,
+        agent-qdrant,
+        web-contracts,
+        docker-compose-smoke,
+        security,
+        task19-real-e2e,
+        task19-faults,
+        task19-security,
+      ]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

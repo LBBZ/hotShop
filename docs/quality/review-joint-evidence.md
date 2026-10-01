@@ -1,5 +1,7 @@
 # 库存调整与对账联合真实服务回归
 
+> 历史快照：本文保留原任务或日期对应的实现与验证事实；版本、分支、工作树路径和测试计数不代表当前状态。当前使用方式见[文档中心](../README.md)。原始失败与限制保留供追溯。
+
 ## 测试装配和边界
 
 `admin/src/test/java/com/real/admin/InventoryReconciliationJointContainerTest.java` 使用独立 Testcontainers MySQL 8.0.46、Redis 8.8.1-alpine，真实 Flyway、MyBatis、Spring 事务代理，以及生产服务：

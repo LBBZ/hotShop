@@ -1,7 +1,6 @@
 # HotShop 当前架构
 
-> TASK-21 源码快照：`10d82528aab71766ab5aa6020180ae4935f96359`，2026-09-16。
-> 本文取代 TASK-00 的运行现状盘点；TASK-21 新增演示 Compose overlay 的差异在下文明确列出，历史测试结果仍以各版本报告为准。
+> 本文说明当前源码的运行边界；依赖版本以 manifest、lockfile 和 Compose 为准，历史验证结果见质量报告。
 
 ## 1. 系统上下文与运行进程
 
@@ -34,7 +33,7 @@ flowchart LR
     AG --> M["单个活动 ModelProvider：fake、deepseek 或 qwen"]
 ```
 
-Compose 定义基础设施、一次性 `database-migrator`、`app`、`agent`、`rag`、`observability` profiles。基线根 Compose 不含浏览器静态服务；TASK-21 新增 [docker-compose.demo.yml](../../docker-compose.demo.yml) 的 `web-demo`，用 [web/Dockerfile](../../web/Dockerfile) runtime target 提供 Nginx 静态文件与同源 API 代理（默认宿主机 `127.0.0.1:18080`）。开发时仍可从 `web` 启动 Vite。图中端口是进程端口；宿主机映射由环境文件覆盖，启动以 [README](../../README.md) 为准。监控配置见 [observability](observability.md)。
+Compose 定义基础设施、一次性 `database-migrator`、`app`、`agent`、`rag`、`observability` profiles。根 Compose 不含浏览器静态服务；演示 overlay [docker-compose.demo.yml](../../docker-compose.demo.yml) 的 `web-demo`，用 [web/Dockerfile](../../web/Dockerfile) runtime target 提供 Nginx 静态文件与同源 API 代理（默认宿主机 `127.0.0.1:18080`）。开发时仍可从 `web` 启动 Vite。图中端口是进程端口；宿主机映射由环境文件覆盖，启动以 [README](../../README.md) 为准。监控配置见 [observability](observability.md)。
 
 ## 2. 模块与依赖事实
 
@@ -58,12 +57,12 @@ flowchart TD
     T["task"] --> D
     D --> C["common"]
     D --> I["infrastructure"]
-    MIG["database-migrator"] --> SQL["Flyway V1.0 至 V1.10"]
+    MIG["database-migrator"] --> SQL["Flyway V1.0 至 V1.11"]
 ```
 
 ## 3. 身份与委托权限
 
-[SecurityConfig](../../security/src/main/java/com/real/security/util/SecurityConfig.java) 按 API 边界选择身份验证；User、Administrator、Agent Delegation 使用独立 issuer/audience 和非对称签名配置。Access JWT 留在浏览器内存。Refresh 是 Cookie 中的不透明随机值，数据库只存 hash；轮换在 MySQL 事务中执行，旧值复用撤销 family。Cookie 路径、CSRF、local HTTP 例外由 [RefreshCookieService](../../security/src/main/java/com/real/security/service/RefreshCookieService.java) 与配置控制，Refresh 不是 JWT。当前仍有 [TokenBlacklistService](../../security/src/main/java/com/real/security/service/TokenBlacklistService.java)：Redis key 为 `hotshop:auth:deny:jti:` 加 jti 的 SHA-256，TTL 为 Access 剩余有效期；[JwtFilter](../../security/src/main/java/com/real/security/util/JwtFilter.java) 在验签后检查它。这里存的是 jti hash，而非原始 Access Token 或其 hash；refresh family 的持久事实仍在 MySQL。
+[SecurityConfig](../../security/src/main/java/com/real/security/util/SecurityConfig.java) 按 API 边界选择身份验证；User、Administrator、Agent Delegation 使用独立 issuer/audience 和非对称签名配置。Access JWT 留在浏览器内存。Refresh 是 Cookie 中的不透明随机值，数据库只存 hash；轮换在 MySQL 事务中执行，旧值复用撤销 family。Cookie 路径、CSRF、local HTTP 例外由 [RefreshCookieService](../../security/src/main/java/com/real/security/service/RefreshCookieService.java) 与配置控制，Refresh 不是 JWT。[TokenBlacklistService](../../security/src/main/java/com/real/security/service/TokenBlacklistService.java) 将 Access `jti` 的 SHA-256 写入 MySQL `security_token_marker`，标记类型为 `REVOKED_ACCESS`；保留到过期时间加时钟偏差及一秒余量。[JwtFilter](../../security/src/main/java/com/real/security/util/JwtFilter.java) 在验签后查此表，数据库故障时关闭认证入口。一次性 Service assertion 使用同表的 `CLIENT_ASSERTION` 唯一键防重放。两者不依赖可淘汰 Redis；认证限流仍使用 `redis-cache`，refresh family 的持久事实也在 MySQL。
 
 ```mermaid
 flowchart LR

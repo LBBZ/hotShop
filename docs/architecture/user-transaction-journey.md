@@ -1,6 +1,6 @@
 # User transaction journey
 
-TASK-13 treats the UI as a projection of server facts, never as the order state authority.
+The UI projects server facts. Java transactions, persisted timelines, and owned-resource queries determine the order state.
 
 ## Purchase intent and idempotency
 
@@ -48,7 +48,7 @@ Order, reservation, timeline, payment, and SSE lookups always include the authen
 
 ## Presentation
 
-The visual system keeps HotShop's cool navy/cool-grey surface, transaction red signal, teal success, amber warning, Barlow Condensed display type, Manrope body, and IBM Plex Mono facts. Desktop uses a commerce board plus receipt composition; mobile collapses to one readable column. Focus rings, semantic labels, `aria-live`, reduced-motion rules, and text/icon status labels are first-class.
+The storefront uses a cool-grey canvas, navy typography, coral action signals, teal success, and amber warnings. Barlow Condensed carries display headings, Manrope body text, and IBM Plex Mono compact facts. The home page, product detail, authentication, personal shopping space, and shopping assistant share this system. `/user` greets the signed-in user with “你好”; `/user/agent` is labelled “购物助手”. Desktop uses catalog grids and receipt panels; smaller viewports collapse to readable columns. Semantic labels, visible focus, `aria-live`, reduced-motion support, and text/icon statuses remain part of the implementation. The source of truth is [styles.css](../../web/src/styles.css) and [the router](../../web/src/app/router.tsx).
 
 ## Real-browser acceptance evidence
 

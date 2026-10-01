@@ -4,7 +4,7 @@
 
 Qdrant contains only versioned FAQ, after-sales policy, and static campaign rules. It is not a
 transaction system of record. Product price and current availability, live inventory, Order
-status, Reservation status, and payment state always route to the fixed TASK-16 Java tools. The
+status, Reservation status, and payment state always route to the fixed Java tools. The
 dynamic classifier runs before static retrieval, so a forged price or status embedded in a FAQ
 cannot override a live tool result. If identity or scope is missing, the tool boundary rejects the
 request; the Agent never falls back to Qdrant to guess.
@@ -16,7 +16,7 @@ and Qdrant failure affects only static-knowledge questions.
 ```mermaid
 flowchart LR
     Q["Verified user message"] --> R{"Server-owned route"}
-    R -->|"price / inventory / Order / Reservation"| T["Fixed TASK-16 ToolRegistry"]
+    R -->|"price / inventory / Order / Reservation"| T["Fixed ToolRegistry"]
     R -->|"FAQ / policy / rule"| F["Server-built Qdrant filter"]
     F --> E["Untrusted evidence envelope"]
     E --> M["ModelProvider"]

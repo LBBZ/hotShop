@@ -44,7 +44,7 @@ function uniqueUser(prefix: string, project: string) {
 
 async function register(page: Page, username: string, keyboardSubmit = false) {
   await page.goto("/auth");
-  await page.locator(".auth-tabs button").nth(1).click();
+  await page.getByRole("tab", { name: "注册", exact: true }).click();
   await page.locator('input[autocomplete="username"]').fill(username);
   await page
     .locator('input[autocomplete="email"]')
@@ -114,6 +114,10 @@ async function runPayment(page: Page, scenario: string, expectedEvent: string) {
 
 test.describe("real Compose user transaction journey", () => {
   test.describe.configure({ mode: "serial", timeout: 120_000 });
+  test.skip(
+    process.env.HOTSHOP_REAL_COMPOSE !== "1",
+    "requires the isolated real Compose stack",
+  );
 
   test("anonymous Chinese catalog, keyboard auth, refresh recovery, and ownership denial", async ({
     browser,
@@ -122,8 +126,12 @@ test.describe("real Compose user transaction journey", () => {
     const owner = uniqueUser("journey", testInfo.project.name);
     await page.goto("/");
     await expect(page.locator("h1")).toBeVisible();
-    await page.locator(".catalog-filter input").first().fill("高热交易收音机");
-    await page.locator(".catalog-filter").press("Enter");
+    await page
+      .getByRole("searchbox", { name: "搜索", exact: true })
+      .fill("高热交易收音机");
+    await page
+      .getByRole("searchbox", { name: "搜索", exact: true })
+      .press("Enter");
     await expect(page.locator(".product-card")).toHaveCount(1);
     await page.locator(".product-card a").click();
     await expect(page).toHaveURL(new RegExp(`/products/${productId}$`));
@@ -663,7 +671,7 @@ test.describe("real Compose user transaction journey", () => {
         response.request().method() === "GET" &&
         response.status() === 200,
     );
-    await page.locator('a[href="/user/orders"]').click();
+    await page.getByRole("link", { name: "我的订单", exact: true }).click();
     await refreshed;
     await protectedOrders;
     await expect(page).toHaveURL(/\/user\/orders$/);

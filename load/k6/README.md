@@ -1,9 +1,16 @@
-# TASK-20 local performance harness
+# HotShop local performance harness
 
 This directory contains the Docker-only k6 harness. The supported entry point is
 `script/verify-task20-performance.ps1`; do not run the scenario directly for a formal result,
 because the orchestrator owns data sizing, Run ID isolation, evidence capture, reconciliation,
-and cleanup.
+and cleanup. Run the commands below from the repository root with PowerShell 7, Docker and
+Compose. The load generator and application runtime execute in containers.
+
+[Project setup](../../README.md) · [Performance evidence](../../docs/quality/task-20-performance.md)
+
+The `target-5k` profile is a measurement target, not an achieved capacity claim. Existing reports
+retain their original hardware, versions, time windows and failures; rerun against the current
+checkout before making a new performance claim.
 
 ## Profiles
 
@@ -44,7 +51,7 @@ is tagged `intent=replay`; it is never counted as new-intent capacity.
 
 ## Data and secrets
 
-`database/data/load-data.sql` creates deterministic `LOAD-<seed>-...` users, one product, and
+`database/data/load-data.sql` creates deterministic `LOAD-<seed>-...` users, configurable products, and
 run-slot activities outside Flyway. New-intent setup refuses to start when the unique-user or
 inventory calculation is insufficient. Authentication uses the real login endpoint. Access
 tokens live only in k6 setup data, are never printed or persisted, and disappear with the k6

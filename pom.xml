@@ -13,8 +13,8 @@
     <groupId>com.real</groupId>
     <artifactId>hotShop</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>hotShop</name>
-    <description>hotShop</description>
+    <name>HotShop</name>
+    <description>Modular commerce platform with flash-sale reservations and an AI shopping assistant</description>
     <packaging>pom</packaging>
 
     <!-- 子模块列表 -->
@@ -29,18 +29,11 @@
         <module>task</module>
     </modules>
 
-    <url/>
-    <licenses>
-        <license/>
-    </licenses>
-    <developers>
-        <developer/>
-    </developers>
+    <url>https://github.com/LBBZ/hotShop</url>
     <scm>
-        <connection/>
-        <developerConnection/>
-        <tag/>
-        <url/>
+        <connection>scm:git:https://github.com/LBBZ/hotShop.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/LBBZ/hotShop.git</developerConnection>
+        <url>https://github.com/LBBZ/hotShop</url>
     </scm>
 
     <properties>

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -38,6 +39,15 @@ def normalize_paths(paths: list[str]) -> list[str]:
     return normalized
 
 
+def is_documentation(path: str) -> bool:
+    """Keep prose edits cheap without bypassing OpenAPI baseline verification."""
+    if path.startswith("docs/"):
+        return not path.startswith("docs/api/") or path.endswith(".md")
+    if "/" not in path and path.endswith(".md"):
+        return True
+    return bool(re.fullmatch(r"README(?:\.[A-Za-z0-9_-]+)?\.md", path.rsplit("/", 1)[-1]))
+
+
 def change_metadata(paths: list[str]) -> dict[str, bool]:
     normalized = normalize_paths(paths)
     return {
@@ -47,7 +57,7 @@ def change_metadata(paths: list[str]) -> dict[str, bool]:
             for path in normalized
         ),
         "docs_only": bool(normalized)
-        and all(path == "README.md" or path.startswith("docs/") for path in normalized),
+        and all(is_documentation(path) for path in normalized),
     }
 
 
@@ -62,6 +72,8 @@ def classify_paths(paths: list[str]) -> dict[str, bool]:
         parts = path.split("/")
         root = parts[0]
 
+        if is_documentation(path):
+            continue
         if path in GLOBAL_FILES or path.startswith((".github/", ".mvn/", "script/ci/")):
             selected.update(ALL_COMPONENTS)
         elif root in JAVA_ROOTS:
@@ -81,8 +93,6 @@ def classify_paths(paths: list[str]) -> dict[str, bool]:
             selected.update({"openapi", "web"})
         elif root == "docker":
             selected.update(ALL_COMPONENTS)
-        elif root == "docs" or path == "README.md":
-            continue
         else:
             # Unknown non-document changes run everything instead of risking a false green.
             selected.update(ALL_COMPONENTS)

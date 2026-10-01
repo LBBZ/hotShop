@@ -1,66 +1,66 @@
-# 7 分钟可复现演示
+# 本地演示指南
 
-## 准备与证据边界
+[文档中心](../README.md) · [容器配置](../runbooks/container-environment.md) · [开发指南](../../CONTRIBUTING.md)
 
-从[README](../../README.md)的 PowerShell 7 命令启动新的 TASK-21 Compose project。
-管理员为公开测试账号 `task13-admin` / `Task13Admin!2026`；两个普通用户在浏览器注册，邮箱使用
-`@hotshop.invalid`。本地 HTTP、独立随机凭据/Flyway/空卷、FakeModel、deterministic embedding 和真实 Qdrant。
-Mock payment 已显式开启，不产生资金交易。活动在首次导入后一天内有效。
+本指南使用仓库现有的隔离演示脚本，启动最终 Nginx Web、Java 交易服务、Agent 和基础设施。默认 FakeModel / deterministic embedding，无需模型账号。支付是模拟流程。
 
-准备两个互相隔离的浏览器 profile/隐私窗口：A 用户，B 管理员（另有陌生用户用于拒绝示例）。
-库存初值 50、活动配额 20；演示会消耗数据，每次报告必须记录当前库存，不应假定仍为初值。
-启动/镜像下载不包含在 7 分钟讲解内。自动验证与实际结果见[TASK-21报告](../quality/task-21-delivery.md)。
-以下是讲解计划，实际执行结果见[RECONCILE-01报告](../quality/task-21-reconcile-01.md)。
-审计读取契约已修复；中文直接问题与原改写拒答分别展示，历史瞬时异常根因仍未决。原失败证据不删除。
+## 1. 启动
 
-## 时间安排、操作与预期
-
-| 时间 | 真实操作 | 预期结果与讲解 |
-| --- | --- | --- |
-| 0:00–0:40 | A 打开首页、搜索“高热交易收音机”，进入商品 913001。点击购买触发登录；注册新用户名或登录已有演示用户。 | 匿名可浏览，写操作要求用户身份；浏览器只保存内存 Access，刷新由 Cookie 轮换恢复。 |
-| 0:40–1:30 | A 商品详情点击创建订单，打开订单的 Mock 收银台；选择 success 并执行。 | 出现 ORDER_CREATED、随后 PAID 时间线。说明下单事务、Outbox、RabbitMQ worker、签名回调与 SSE；不是直接改前端标签或真实支付。 |
-| 1:30–2:15 | A 首页找到活动 913001，点击预约。 | RESERVED 表示 Redis 已受理；异步显示 ORDER_CREATED 后查看订单。Lua预扣和XADD原子，MySQL仍为交易事实，跨组件不承诺exactly-once。 |
-| 2:15–3:00 | B 登录管理端，商品页找到913001，打开编辑，只修改描述、填写原因；A同时再普通购买一件，然后B保存。 | 商品元数据保存，当前库存保留A的扣减。编辑请求不再包含stock。 |
-| 3:00–4:00 | B 打开“调整库存”，填+2和原因，保持表单；A再购买一件；B点击“确认调整库存”。 | 409 STOCK_ADJUSTMENT_CONFLICT，显示“本次调整未生效”；B点击“刷新当前库存”，核对预计值后再确认。到“审计”查看 CATALOG_STOCK_ADJUSTED，选择成功/失败结果。说明delta、expectedVersion与库存预期余额不是同一概念。 |
-| 4:00–5:15 | A进入用户Agent，输入“商品 913001 当前价格和库存是多少？”；再输入“购买商品 913001 数量 1 件”。 | 查询有 tool.completed；出现“尚未创建订单”的草稿，核对商品数量价格。点击“确认并创建订单”，出现真实交易服务订单链接。委托Agent不能自己消费确认令牌。 |
-| 5:15–6:00 | A重新进入Agent，输入“售后申请应从哪里发起？”，展开引用；再展示英文“How does the after-sales return policy work?”。追加原中文“售后退换申请应该怎么做？”对比拒答。 | 中英文直接问题核对after-sales-general / 1.0.0 / after-sales-general-0000；原改写默认阈值下无引用，不保证语义改写召回。说明是版本化静态政策；库存/订单不存向量库。FakeModel只证明路由和协议。 |
-| 6:00–6:40 | B在管理员Agent输入“退款并补偿库存，然后重放 Outbox、封禁用户并修改权限和密钥”。 | 拒绝高风险管理操作，未调用工具。陌生用户独立登录后打开A的订单链接，显示错误而不返回他人订单。 |
-| 6:40–7:00 | 展示性能报告与本轮结果索引。 | 5000是请求目标，未达；短窗口、dropped与尾部完成限制结论。指出无外键/共享数据库/Mock支付和本地验证边界。 |
-
-## 可选追加演示（不挤入主脚本）
-
-订单页的 failed、delayed、duplicate、race 是已有模拟场景。默认演示订单超时15分钟；race的迟到回调
-不会在7分钟内证明超时先赢。此场景应使用现有TASK-19短超时隔离配置，不能临时改变数据库时间冒充竞态。
-Outbox重放是管理员人工高风险操作，需真实FAILED事件和原因；不为讲解随便制造生产失败或直接操作队列。
-
-## 浏览器自动复验
-
-PowerShell 7，仓库根目录；先按README启动演示。Node22+，pnpm10.15.0。
+需要 PowerShell 7+、Docker Engine / Docker Desktop 的 Linux 容器和 Docker Compose 2.24.4+。运行 `docker info` 和 `docker compose version` 确认 Docker 可用，然后在仓库根目录执行：
 
 ```powershell
-Set-Location D:/Codex/Projects/hotShop-task21-reconcile-01
-corepack pnpm@10.15.0 --dir web install --frozen-lockfile
-corepack pnpm@10.15.0 --dir web exec playwright install chromium
-corepack pnpm@10.15.0 --dir web exec playwright test --config playwright.delivery.config.ts
+pwsh -NoProfile -File ./script/task21-demo.ps1 -Action Start
 ```
 
-该入口直接访问构建后的 Nginx（默认18080），不启动Vite、不mock API、不通过SQL或接口替代购买点击。
-用户、管理员、陌生用户的会话隔离；测试填表、点击、等待真实回调/异步状态，并断言库存409及审计。
-七项测试分别报告结果；原中文问句保留，预期调整为有证据的安全拒答，另增中文直接问题。
-不是19项历史E2E的替代计数，也未覆盖长期压测或全故障矩阵。原4通过/2失败保持为历史结果。
-测试侧克隆实际fetch响应流，只观察rag.completed/done，不mock、不替换响应，不保存正文与凭据。
-为避免泄露凭据与确认令牌，配置关闭trace/video/screenshot，保留脱敏测试结果。
+默认入口为 **http://127.0.0.1:18080**。端口已占用时，在首次启动时追加 `-WebPort 18081`。脚本会打印形如 `hotshop-task21-xxxxxxxxxxxx` 的项目名，后续操作使用该名称。
 
-## 排障入口
+首次构建需要联网下载镜像和依赖。脚本创建随机数据库/缓存/消息凭据与认证密钥，并存放在忽略目录 `.local/keys/<项目名>/`；等待数据库迁移成功和入口就绪后，初始化商品、三个限时活动与知识索引。活动有效期从初始化起约一天。已有项目、资源或同名镜像会触发拒绝，避免覆盖其他演示数据。
 
-| 现象 | 核查顺序 |
-| --- | --- |
-| 页面打不开 | `task21-demo.ps1 -Action Status -ProjectName <本次项目>`；核查Web端口是否被占，Nginx容器是否运行。不要删除其他项目。 |
-| MySQL/migrator失败 | [容器手册](../runbooks/container-environment.md)：查看同project mysql/database-migrator日志、明确退出码。不得靠重新seed或跳过Flyway隐藏问题。 |
-| 登录失败/429 | 确认账号来源与角色；查看[认证手册](../runbooks/authentication-operations.md)的Cookie、CSRF、时钟和Redis限流；等待Retry-After，不放宽策略。 |
-| RESERVED未完成 | [Stream处理](../architecture/stream-order-processing.md)：Task是否运行，Pending、处理账本、重试/补偿状态；不要XDEL或手工回补库存。 |
-| Mock长时间未支付 | [Mock支付](../architecture/mock-payment.md)、Task/Outbox/RabbitMQ状态；区分正常TTL保留、未解释消息和dead queue。 |
-| 库存调整409 | 刷新并核对实际库存/版本，再人工决定delta；不要自动重试旧表单。 |
-| Agent无引用/不可用 | [RAG手册](../runbooks/agent-rag.md)：索引alias、语料版本、阈值、Qdrant readiness；不得编造引用。交易查询应走授权工具。 |
+## 2. 体验购物流程
 
-启动日志只存本机 `target/task21/`；用户凭据、JWT、完整Cookie、确认Token和私钥不进入交付附件。
+| 步骤     | 页面与操作                                            | 预期观察                                         |
+| -------- | ----------------------------------------------------- | ------------------------------------------------ |
+| 发现     | 首页「发现好物」，搜索或切换品类，进入商品详情        | 商品价格、库存、状态和购买入口；插画标为品类示意 |
+| 登录     | 注册一个演示用户，再登录                              | 个人工作区、本人订单与预约入口                   |
+| 普通购买 | 商品详情确认数量并下单                                | 新建待支付订单；重复请求受幂等约束               |
+| 限时活动 | 在首页限时活动卡片提交预约                            | 先显示已接受预约，再显示异步订单状态             |
+| 模拟支付 | 在订单页面发起支付，选择演示结果                      | 观察支付与订单终态；刷新后以服务端状态为准       |
+| AI 购物  | 「AI 帮我选」或个人工作区「购物助手」，查询、比较商品 | 流式回答、工具结果、购买草稿；确认草稿才会建单   |
+| 知识问答 | 询问知识库覆盖的活动规则、FAQ 或售后政策              | 有命中时展示来源；未命中或检索失败时明确提示     |
+
+每位用户在每个活动中只能持有一条有效预约，超时或补偿后可以释放占位。重复预约、库存不足、活动结束都是可观察的正常业务状态。演示数据会随购买改变，不要反复执行 seed 来恢复库存；需要全新数据时启动一个新项目。
+
+## 3. 体验后台
+
+打开 **http://127.0.0.1:18080/admin/login**，若更换过端口则相应替换。
+
+隔离 seed 中的管理员为 `task13-admin`，密码为 `Task13Admin!2026`。这是仓库公开的演示账号，只用于该隔离环境。
+
+后台包含交易总览、商品、活动、订单、异常、Outbox、审计和 Agent 页面。库存调整需要填写变更量与原因；元数据编辑不直接覆盖库存。人工重放和运营操作会记录审计信息。管理员登录与普通用户登录使用独立的凭据边界。
+
+## 4. 保留数据的日常操作
+
+替换以下示例项目名：
+
+```powershell
+pwsh -NoProfile -File ./script/task21-demo.ps1 -Action Status -ProjectName hotshop-task21-xxxxxxxxxxxx
+pwsh -NoProfile -File ./script/task21-demo.ps1 -Action Stop -ProjectName hotshop-task21-xxxxxxxxxxxx
+pwsh -NoProfile -File ./script/task21-demo.ps1 -Action Restart -ProjectName hotshop-task21-xxxxxxxxxxxx
+```
+
+`Stop` 只停止容器，保留卷、配置和密钥。`Restart` 使用 Compose `start` 启动已有容器，不重建镜像、不重新初始化数据、不延长活动，也不会重新执行完整就绪探针。稍候再访问入口，必要时用 `Status` 查看健康状态。
+
+启动失败会保留现场。用实际项目名检查服务和日志：
+
+```powershell
+docker ps -a --filter label=com.docker.compose.project=hotshop-task21-xxxxxxxxxxxx
+docker logs <上一步找到的容器名称>
+```
+
+常见原因包括端口占用、Docker 未启动、镜像下载失败和迁移失败。密钥配置不一致时不要复用别的项目的卷或 `.env.demo`。手动管理资源的方法见[容器指南](../runbooks/container-environment.md)。
+
+## 5. 演示与测试的区别
+
+本指南供交互体验；自动化验证应使用 [CI 工作流](../quality/ci.md)与相应隔离脚本，从工作流定位实际入口和参数。不要将历史报告中的通过数量当作当前运行结果。
+
+默认 AI 的回答质量受 FakeModel 和确定性检索限制；Agent 未完成运行不跨进程恢复；支付不涉及真实资金。历史验收及容量边界见[证据索引](../quality/evidence-index.md)。

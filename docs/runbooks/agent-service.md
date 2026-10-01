@@ -2,9 +2,11 @@
 
 ## 1. 边界与默认模式
 
-Agent 是独立 Python 进程，不是交易核心的一部分。它只依赖 `redis-cache` 保存可淘汰的短期会话状态，
+Agent 是独立 Python 3.12 进程，使用 FastAPI/LangGraph；依赖以 [pyproject.toml](../../agent/pyproject.toml)
+和 requirements lock 文件为准。它使用 `redis-cache` 保存可淘汰的短期会话状态，
 不访问 MySQL、`redis-seckill`、RabbitMQ，也不加入服务注册、配置中心或消息总线。Agent、模型 Provider 或
-`redis-cache` 故障时，停止或降级的是 Agent 入口；Java 的普通交易和查询入口不依赖该进程。
+检索进程故障不需要停止 Java 的普通交易和查询入口。`redis-cache` 是共享基础设施，其故障还可能影响
+Java 的认证/交易限流，不能视为仅影响 Agent。
 
 Qdrant 是仅用于 FAQ、售后政策和静态活动规则的可选 Agent 依赖。动态价格、库存、可售性、订单、
 预约和支付事实始终走固定 Java 工具。Qdrant 故障只让静态问题明确降级，动态工具仍可运行；详见
@@ -21,7 +23,8 @@ DeepSeek 请求显式携带 `thinking={"type":"disabled"}`，返回中的 `reaso
 
 ## 2. 本地启动
 
-先生成本地认证密钥：
+完整浏览器演示优先使用 [隔离启动入口](container-environment.md)。下方是从仓库根目录执行的组件
+手动启动参考；`.env.example` 中的凭据只适合本机一次性验证。先生成本地认证密钥：
 
 ```powershell
 .\script\generate-auth-keys.ps1
@@ -33,10 +36,10 @@ DeepSeek 请求显式携带 `thinking={"type":"disabled"}`，返回中的 `reaso
 docker compose --env-file .env.example --profile app --profile agent up -d --build
 ```
 
-只验证 Agent 镜像和 Redis 状态后端：
+只启动 Agent 与其状态/知识依赖（用户工具仍需要 Java 后端）：
 
 ```powershell
-docker compose --env-file .env.example --profile agent up -d --build redis-cache agent-service
+docker compose --env-file .env.example --profile agent up -d --build redis-cache qdrant agent-service
 ```
 
 首次启动或知识变更后执行原子索引：
@@ -54,7 +57,8 @@ Invoke-RestMethod http://localhost:8090/health/ready
 Invoke-WebRequest http://localhost:8090/metrics
 ```
 
-`/health/live` 仅证明进程事件循环存活。`/health/ready` 会检查状态存储；Redis 不可用时返回 503。
+`/health/live` 仅证明进程事件循环存活。`/health/ready` 只检查状态存储；Redis 不可用时返回 503。
+READY 不证明付费 Provider、Java 工具或 Qdrant 可用，需分别验证相关功能。
 
 ## 3. 密钥挂载
 
@@ -71,7 +75,7 @@ Agent 容器只读挂载：
 用户建立会话时，Agent 验证 User Access，生成最长 60 秒且 `jti` 每次唯一的 `client-auth+jwt`，
 调用 Java `/agent/api/v1/auth/token-exchange`，再验证返回的短期 Agent Delegation。原始 User Access、
 client assertion 和 Delegation 都不写入会话存储。管理会话只验证 Administrator Access，不执行
-token exchange，不获得 Agent Delegation。
+token exchange，不获得 Agent Delegation。连续提问每个 User run 重新交换 Delegation，不复用过期授权。
 
 ## 4. 状态与 Redis
 
@@ -80,8 +84,10 @@ Docker 固定使用 `redis-cache` DB 0，所有键使用 `hotshop:agent:` 前缀
 - `hotshop:agent:session:<uuid>`：默认 TTL 3600 秒；
 - `hotshop:agent:message:<uuid>`：默认 TTL 3600 秒；
 - `hotshop:agent:run:<uuid>`：默认 TTL 900 秒。
+- `hotshop:agent:history:<session-id>`：最多 12 轮已完成问答，追加时使用 session TTL；模型上下文另限 24,000 字符。
 
-这些状态可删除、可重建，不是交易事实来源。测试使用内存实现。
+这些状态可淘汰，丢失后需要开始新对话，不是交易事实来源。对话历史包含问答内容，应按短期用户数据管理；
+Token、assertion、一次性确认值不进入状态存储。测试使用内存实现。
 
 ## 5. 取消、超时与故障
 
@@ -112,7 +118,7 @@ docker build --target test -t hotshop-agent:test -f agent/Dockerfile agent
 docker run --rm --entrypoint python hotshop-agent:test -m ruff check .
 docker run --rm --entrypoint python hotshop-agent:test -m ruff format --check .
 docker run --rm --entrypoint python hotshop-agent:test -m mypy --no-incremental src tests
-docker run --rm --entrypoint python hotshop-agent:test -m pytest -p no:cacheprovider
+docker run --rm --network none -e AGENT_MODEL_PROVIDER=fake -e AGENT_EMBEDDING_PROVIDER=deterministic --entrypoint python hotshop-agent:test -m pytest -m 'not qdrant' -p pytest_asyncio.plugin -p no:cacheprovider
 docker compose --env-file .env.example config --quiet
 docker compose --env-file .env.example --profile agent config --quiet
 ```

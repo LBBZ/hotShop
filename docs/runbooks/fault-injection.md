@@ -1,4 +1,4 @@
-# TASK-19 fault injection runbook
+# Fault injection runbook
 
 本手册只允许操作脚本创建的 `hotshop-task19-<随机值>` Compose project。开始前脚本查询同 project label
 的容器、卷、网络以及预定 image tag；任一已存在即拒绝启动。禁止把 project name、资源 ID 或清理目标
@@ -12,7 +12,7 @@
 ./script/verify-task19-security.ps1
 ```
 
-三个入口只要求 Docker 与 Compose。应用、Maven、Python、pnpm、Playwright 和扫描器均在固定镜像中
+三个入口使用 PowerShell 7、Docker 与 Compose；宿主无需 Java、Node 或 Python。应用、Maven、Python、pnpm、Playwright 和扫描器在构建或验证镜像中
 执行。原始大报告进入忽略的 `target/task19-*`；仓库只保存脚本、规则和摘要文档。所有等待由健康检查、
 HTTP/SSE 事件、Awaitility 或带截止时间的轮询完成，禁止固定等待业务结果。
 

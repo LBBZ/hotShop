@@ -117,7 +117,8 @@ APIs. It has no MySQL, Redis, or RabbitMQ client for business facts. Agent/provi
 Agent sessions only; ordinary Product, Order, Reservation, payment, and transaction APIs remain
 available independently.
 
-Flyway V1.8 creates the four TASK-16 tables and no foreign keys. V1.0 through V1.7 remain
+Flyway V1.8 creates `purchase_draft`, `purchase_draft_item`, `purchase_confirmation`, and
+`agent_configuration_draft`, without foreign keys. V1.0 through V1.7 remain
 unchanged.
 
 ## Browser confirmation and streaming boundary
@@ -129,7 +130,10 @@ explicit `/agent-api` proxy/base URL; the more general Portal `/api` proxy canno
 the Agent does not enable wildcard CORS.
 
 Access tokens remain in the existing in-memory auth stores. Session and Run identifiers are
-component memory only. The clear confirmation token exists only as a local variable between the
+component memory only. Follow-up questions reuse the session; the browser retains up to 12 prior
+turns. The service separately retains up to 12 completed turns and bounds model history to 24,000
+characters of untrusted context. Every User run still exchanges fresh Delegation and permits at
+most one tool. The clear confirmation token exists only as a local variable between the
 issue response and the immediately following consume request; it is never assigned to React
 state/ref, rendered, logged, or written to Web Storage. A confirmation lock rejects double click
 at the UI while the Java row lock, digest, owner, nonce and status checks remain authoritative.

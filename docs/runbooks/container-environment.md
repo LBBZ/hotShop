@@ -1,6 +1,6 @@
 # HotShop 容器环境运行手册
 
-## TASK-21 隔离演示入口（推荐）
+## 隔离演示入口（推荐）
 
 在仓库根目录使用 **PowerShell 7+**、Docker Desktop Linux containers 和 **Compose 2.24.4+**
 （覆盖端口依赖 `!override`）。不需要宿主 Java/Node/Python；Dockerfile 会安装锁定的构建依赖。
@@ -8,7 +8,7 @@
 [交付验收报告](../quality/task-21-delivery.md)，不代表另一台新机器已验证。
 
 ```powershell
-Set-Location D:\Codex\Projects\hotShop-task21
+# 从你的 hotShop 仓库根目录执行
 pwsh -NoProfile -File .\script\task21-demo.ps1 -Action Start -ProjectName hotshop-task21-demo0001
 # 浏览器打开 http://127.0.0.1:18080
 pwsh -NoProfile -File .\script\task21-demo.ps1 -Action Status -ProjectName hotshop-task21-demo0001
@@ -54,7 +54,7 @@ RabbitMQ；`app` 为三个 Java 进程，`agent` 为 Agent + Qdrant，`observabi
 - `.gitignore` 已忽略 `.env` 和 `.env.*`，并显式保留 `.env.example`。可以使用仓库根目录下被
   忽略的本机 env 文件；更严格隔离凭据时，仍建议复制到仓库外并通过 `--env-file` 指定。
 - 直接使用 `.env.example` 仅适合一次性的本机验证，其中的 `change-me-*` 都是公开占位值。
-- MySQL 的 `MYSQL_ROOT_PASSWORD` 只在空数据卷首次初始化时生效。若复用 TASK-03 前已经初始化的
+- MySQL 的 `MYSQL_ROOT_PASSWORD` 只在空数据卷首次初始化时生效。若复用已经初始化的
   `mysql_data`，外部 env 文件必须填写该数据卷原有的 root 密码；修改 env 不会轮换数据库密码。
 
 PowerShell 示例：
@@ -92,14 +92,14 @@ if ($LASTEXITCODE -ne 0 -or "$migrationExit".Trim() -ne '0') { throw 'Database m
 docker compose --env-file .env.example --profile app up -d --build
 ```
 
-TASK-09 使用官方 RabbitMQ management 镜像支持的 TTL 队列 + DLX，不安装第三方插件。portal
+系统使用官方 RabbitMQ management 镜像支持的 TTL 队列 + DLX，不安装第三方插件。portal
 不加载 RabbitMQ 自动配置，也不依赖 RabbitMQ 健康状态；task 独占消息发布与消费职责。这里的
-`app` profile 用于清晰隔离构建与启动范围。TASK-07 起 Java 应用使用两个启动期
-固定、仅 DB 0 的具名连接：认证/缓存/限流只注入 `redis-cache`，秒杀装载与 Reservation 只注入
+`app` profile 用于清晰隔离构建与启动范围。Java 应用使用两个启动期
+固定、仅 DB 0 的具名连接：缓存/认证限流只注入 `redis-cache`，秒杀装载与 Reservation 只注入
 `redis-seckill`；请求期间不创建连接工厂，也不按 dbIndex 选择逻辑库。
 
-TASK-08 的 Redis Stream 消费者位于 `task` 容器。它依赖 MySQL 迁移到 V1.4 和
-`redis-seckill` 健康；不依赖 RabbitMQ 完成 Outbox 发布。消费开关默认开启，对账默认 dry-run 且
+Redis Stream 消费者位于 `task` 容器。它依赖 MySQL 完成当前全部迁移（至 V1.11）和
+`redis-seckill` 健康；转单事务不等待 RabbitMQ 发布，已提交的 Outbox 由独立发布器投递。消费开关默认开启，对账默认 dry-run 且
 自动修复关闭。
 
 观测组件已提供独立 `observability` profile；测试入口见交付验收报告。
@@ -108,7 +108,7 @@ TASK-08 的 Redis Stream 消费者位于 `task` 容器。它依赖 MySQL 迁移�
 
 | 服务 | 宿主机默认端口 | 数据策略 | 持久卷 |
 | --- | --- | --- | --- |
-| MySQL 8.0 | `4306` | `utf8mb4`、UTC (`+00:00`)、慢查询日志、Performance Schema | `mysql_data` |
+| MySQL 8.4.11 | `4306` | `utf8mb4`、UTC (`+00:00`)、慢查询日志、Performance Schema | `mysql_data` |
 | `redis-cache` | `7379` | 仅 DB 0，`allkeys-lfu`，RDB，可重建 | `redis_cache_data` |
 | `redis-seckill` | `7380` | 仅 DB 0，`noeviction`，AOF everysec + RDB | `redis_seckill_data` |
 | RabbitMQ Management | `6672` / `15673` | 官方 management 镜像；不安装 delayed-message 插件 | `rabbitmq_data` |
@@ -144,7 +144,7 @@ MySQL 不再挂载 `/docker-entrypoint-initdb.d` 结构脚本。`database-migrat
 
 预期输出包含 `global=+00:00 session=+00:00 deltaSeconds=0`。
 
-### 3.2 TASK-08 Stream 消费配置
+### 3.2 Stream 消费配置
 
 Compose 将以下配置传入 `task`；生产部署应按吞吐和故障恢复目标显式设置，不要通过扩大批量掩盖
 长期 Pending：
@@ -195,7 +195,7 @@ docker compose --env-file .env.example exec -T redis-seckill redis-cli CONFIG GE
 容器已设置 `REDISCLI_AUTH`，所以以上命令不需要把密码放在命令行。预期两者 `databases` 都是
 `1`；cache 为 `allkeys-lfu`/RDB，seckill 为 `noeviction`/AOF + RDB。
 
-TASK-07 活动装载与预约命令见 `docs/architecture/flash-sale-reservation.md`；TASK-08 的
+活动装载与预约命令见 `docs/architecture/flash-sale-reservation.md`；
 `XINFO GROUPS`、`XPENDING`、处理账本和 dry-run 调查命令见
 `docs/architecture/stream-order-processing.md`。`redis-seckill` OOM 时预约返回脱敏 503，不会同步
 写 MySQL；不要把 policy 改为淘汰。`redis-cache` 故障不会改变 seckill 已有库存、Reservation 或
@@ -223,7 +223,7 @@ docker compose --env-file .env.example exec -T rabbitmq rabbitmq-diagnostics -q 
 docker compose --env-file .env.example exec -T rabbitmq rabbitmq-plugins list --enabled --minimal
 ```
 
-启用列表应只包含官方 management 相关插件，不应出现第三方延迟交换机插件。
+启用列表应包含官方 management 和 prometheus 相关插件，不应出现第三方延迟交换机插件。
 
 ## 5. 停止、重启与持久性验证
 
@@ -245,12 +245,12 @@ docker compose --env-file .env.example up -d --wait
   健康检查会实际认证并执行 `SELECT 1`，不会把仅端口存活误判为就绪。
 - Redis 写入返回 OOM：`redis-seckill` 的 `noeviction` 是正确性约束，应扩容或停止接入并告警，
   不能改成淘汰业务状态；cache 则会按 LFU 淘汰。
-- 旧 `redis` 容器/`redis_data` 卷：TASK-03 将服务拆分为两个新名称，不会自动删除旧容器或旧卷；
+- 旧 `redis` 容器/`redis_data` 卷：当前服务使用 `redis-cache` 和 `redis-seckill` 两个名称，不会自动删除旧容器或旧卷；
   确认不再需要后再由环境所有者手工处理。
 
-## 7. TASK-09 可靠消息运行手册
+## 7. 可靠消息运行手册
 
-RabbitMQ wrapper 只继承官方 `rabbitmq:4.2.9-management-alpine`（基础 digest 以 `docker-compose.yml` 为准），不下载或启用第三方延迟插件。
+RabbitMQ wrapper 只继承官方 `rabbitmq:4.3.6-management-alpine`（基础 digest 以 `docker/rabbitmq/Dockerfile` 为准），不下载或启用第三方延迟插件。
 固定订单超时由 durable TTL 队列和 DLX 完成。Portal 不配置 RabbitMQ，也不依赖其健康状态；只要
 MySQL 可用，普通订单与两条 Outbox 可以提交。Task 才持有 RabbitMQ 连接，并使用 correlated
 publisher confirm、mandatory publish 和 publisher returns。
@@ -276,7 +276,8 @@ expiration，已到期事件直接进入 ready exchange。最终判断始终使�
 `UTC_TIMESTAMP(6)`。普通与秒杀订单都由同一 timeout 状态机处理。秒杀订单额外恢复 Activity stock、
 结束 Reservation，并通过 `SECKILL_PAYMENT_EXPIRED` 可靠事件异步释放 Redis User slot 和修复库存投影。
 补偿成功会追加 SYSTEM/TASK 的 `INVENTORY_COMPENSATED` 审计；重复事件不会重复补偿或审计。
-# Local Mock Payment
+
+## 8. 本地模拟支付
 
 该功能不是真实支付。保持默认 `HOTSHOP_MOCK_PAYMENT_ENABLED=false` 时无需 Secret。启用前在仓库外生成至少 32 UTF-8 字节的随机值并设置 `HOTSHOP_MOCK_PAYMENT_SECRET`，同时令 Portal 与 Task 使用同一值。可配置时钟偏差、callback URL、HTTP timeout、retry delay/attempts、最大模拟 delay/duplicate count 和 body bytes；变量名见 `.env.example`。容器内默认回调地址是 `http://portal-service:8080/provider-callbacks/v1/mock-payment`。
 

@@ -1,5 +1,7 @@
 # TASK-14 verification
 
+> 历史快照：本文保留原任务或日期对应的实现与验证事实；版本、分支、工作树路径和测试计数不代表当前状态。当前使用方式见[文档中心](../README.md)。原始失败与限制保留供追溯。
+
 Date: 2026-08-09
 Baseline: `330fbf6`
 Reconciled: 2026-08-10 (`TASK-14-RECONCILE-01`)

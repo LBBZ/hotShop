@@ -3,8 +3,8 @@
 > 项目定位：**HotShop — 智能高并发秒杀与交易平台**
 > 英文副标题：**Agentic High-Concurrency Commerce Platform**
 
-本文档是所有实现任务和验收工作的共同约束。新的 Codex 对话在开始编码前，必须完整阅读本文档及
-`TASK_CATALOG.md` 中对应的任务，不得自行改动已经确认的架构。
+本文档保留原改造阶段的目标与约束，用于解释历史任务如何拆分。它不是当前开发的强制入口；
+现有实现、运行方法和未完成事项分别见[文档中心](../README.md)、[贡献指南](../../CONTRIBUTING.md)与[后续工作](../delivery/next-iteration.md)。
 
 ## 1. 项目目标
 

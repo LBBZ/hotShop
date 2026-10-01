@@ -1,6 +1,6 @@
 # Local observability runbook
 
-TASK-20 performance runs use `script/verify-task20-performance.ps1`. The k6 dashboard requires
+Performance runs use `script/verify-task20-performance.ps1`. The k6 dashboard requires
 Run ID, Profile, and Scenario filters; formal evidence is the ignored
 `target/task20-performance/<run-id>/` artifact, not a dashboard screenshot. Prometheus Remote
 Write is enabled only on this local observability stack. Metric definitions and safe cleanup are
@@ -87,4 +87,4 @@ docker compose --env-file .env.example --profile observability config --quiet
 ```
 
 Do not put Authorization, cookies, keys, full bodies, or full model prompts into diagnostic logs or
-Grafana annotations. Rotate any real secret immediately if it was ever emitted before TASK-11.
+Grafana annotations. Rotate any real secret immediately if it was emitted in any earlier run.

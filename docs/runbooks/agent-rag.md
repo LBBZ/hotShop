@@ -1,6 +1,6 @@
 # Agent RAG runbook
 
-## RECONCILE-01：区分空结果与不可用
+## 区分空结果与不可用
 
 本地演示以[README](../../README.md)的隔离启动为准。默认FakeModel/deterministic、阈值0.15，
 “售后申请应从哪里发起？”有已知语料引用；原改写“售后退换申请应该怎么做？”保留为低分安全拒答案例。
@@ -15,9 +15,11 @@ empty表示请求成功但无合格候选；unavailable按embedding_failure、qd
 
 ## Start and index
 
-Qdrant is pinned to `qdrant/qdrant:v1.15.4`, has its own persistent volume, health check, CPU/memory
+The default Qdrant image is `qdrant/qdrant:v1.19.1` (overridable through `QDRANT_IMAGE`). It has its own persistent volume, health check, CPU/memory
 limits, configurable host port, and the existing `hotShop-network`. Agent containers use
-`http://qdrant:6333`; host tools may use `QDRANT_PORT`.
+`http://qdrant:6333`; host tools may use `QDRANT_PORT`. Run these commands from the repository root
+after preparing the local auth keys described in [Agent setup](agent-service.md). The isolated
+[demo entry point](container-environment.md) handles keys, startup and the initial index automatically.
 
 ```powershell
 docker compose --env-file .env.example --profile agent up -d --build redis-cache qdrant agent-service
@@ -35,44 +37,39 @@ collection names are not returned to Agent clients.
 Keep `AGENT_EMBEDDING_PROVIDER=deterministic` for tests, evals, and offline local verification. To
 opt into Bailian, inject `AGENT_BAILIAN_EMBEDDING_API_KEY` outside Git and set provider/model/base
 URL/timeout explicitly. Never place the key in `.env.example`, command history, evidence files, or
-logs. No real model or embedding key is used by TASK-17 automation.
+logs. No real model or embedding key is used by the Compose verification scripts.
 
 `text-embedding-v4` accepts at most 10 inputs per request. The provider advertises that capability
 and the indexer splits 25/100+ chunks accordingly; operators must not raise it by changing the
 chat-model Provider. DeepSeek/Qwen selection and Bailian/deterministic embedding selection are
 separate settings.
 
-## Evaluation and tests (Docker only)
+## Evaluation and tests
+
+The supported full integration entry point creates a unique Compose project, indexes knowledge,
+checks Agent/Qdrant outage and restart behavior, captures evidence, and cleans its owned resources:
+
+```powershell
+pwsh -NoProfile -File .\script\verify-task17-compose.ps1
+```
+
+Evidence is written to ignored `target/task17-compose-evidence`. The script uses temporary local
+keys and random host ports. Cleanup is scoped to the resources it created; do not substitute a
+shared project name or manually remove a pre-existing volume.
+
+For a standalone offline quick evaluation, build the test image and execute:
 
 ```powershell
 docker build --target test -t hotshop-agent:test -f agent/Dockerfile agent
 docker run --rm --entrypoint python hotshop-agent:test -m hotshop_agent.eval_runner --suite quick --output /tmp/quick.json
-
-docker compose -p hotshop-task17 --env-file .env.example --profile rag up -d --wait qdrant
-docker run --rm --network hotshop-task17_hotShop-network `
-  -e AGENT_QDRANT_URL=http://qdrant:6333 --entrypoint python hotshop-agent:test `
-  -m hotshop_agent.eval_runner --suite full --output /tmp/full.json
-docker run --rm --network hotshop-task17_hotShop-network `
-  -e AGENT_QDRANT_URL=http://qdrant:6333 --entrypoint python hotshop-agent:test `
-  -m pytest -p no:cacheprovider
-docker compose -p hotshop-task17 --env-file .env.example --profile rag down -v
 ```
 
-The quick suite is offline and uses in-memory vectors. Full uses real Qdrant and checks lifecycle
-semantics. Both use FakeModel/DeterministicEmbedding and produce JSON with schema/dataset/provider,
+The quick suite uses in-memory vectors; its `/tmp/quick.json` exists only inside that disposable
+container. Use the Compose verification entry point for retained integration evidence. Quick and
+full evaluations use FakeModel/DeterministicEmbedding and report schema/dataset/provider,
 category rates, thresholds, and failed IDs. Security, authorization, dynamic routing, citations,
 and refusals require 100%; quick retrieval hit@3 requires 100%; full requires at least 90%.
-
-For the complete Compose journey, including Agent, indexing, Qdrant restart/persistence, outage
-behavior, and finally cleanup:
-
-```powershell
-.\script\verify-task17-compose.ps1
-```
-
-Evidence is written to ignored `target/task17-compose-evidence`. The script uses a unique Compose
-project, temporary local keys, random host ports, and removes containers/network/volume/keys in
-`finally`.
+These are gate thresholds, not a claim that a new environment has already passed.
 
 ## Failure handling
 

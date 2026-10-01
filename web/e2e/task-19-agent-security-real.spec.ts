@@ -47,7 +47,7 @@ function uniqueUser(prefix: string) {
 
 async function register(page: Page, username: string) {
   await page.goto("/auth");
-  await page.locator(".auth-tabs button").nth(1).click();
+  await page.getByRole("tab", { name: "注册", exact: true }).click();
   await page.getByLabel("用户名").fill(username);
   await page.getByLabel("邮箱").fill(`${username}@hotshop.invalid`);
   await page.locator('input[type="password"]').fill(password);
@@ -65,7 +65,7 @@ async function register(page: Page, username: string) {
 }
 
 async function openAgent(page: Page) {
-  await page.getByRole("link", { name: "Agent" }).click();
+  await page.getByRole("link", { name: "购物助手", exact: true }).click();
   await expect(page).toHaveURL(/\/user\/agent$/u);
   await expect(page.getByRole("heading", { name: "购物协作台" })).toBeVisible();
 }
@@ -130,7 +130,7 @@ test.describe("TASK-19 real Agent and security journeys", () => {
     await register(page, uniqueUser("agentfacts"));
     await openAgent(page);
 
-    await sendAgent(page, "售后退换申请应该怎么做？");
+    await sendAgent(page, "售后申请应从哪里发起？");
     await expect(
       page.locator('[data-agent-event="rag.completed"]'),
     ).toBeVisible();
@@ -165,7 +165,6 @@ test.describe("TASK-19 real Agent and security journeys", () => {
         `SELECT COUNT(*) FROM sales_order WHERE user_id=${ownerSession.userId}`,
       ),
     );
-    let confirmationToken: string;
     const issued = page.waitForResponse(
       (response) =>
         response.url().includes("/purchase-drafts/") &&
@@ -173,103 +172,109 @@ test.describe("TASK-19 real Agent and security journeys", () => {
         response.request().method() === "POST",
     );
     await page.getByRole("button", { name: "确认并创建订单" }).dblclick();
-    const issueBody = (await (await issued).json()) as {
+    const confirmation = (await (await issued).json()) as {
       confirmationToken?: string;
       draftId?: string;
     };
-    confirmationToken = issueBody.confirmationToken ?? "";
-    expect(confirmationToken.length).toBeGreaterThan(40);
-    await expect(
-      page.getByRole("heading", { name: "订单已由真实交易服务创建" }),
-    ).toBeVisible({
-      timeout: 30_000,
-    });
-    const orderLink = page.getByRole("link", {
-      name: "打开订单与 Mock 收银台",
-    });
-    const orderId = (await orderLink.getAttribute("href"))?.split("/").at(-1);
-    expect(orderId).toBeTruthy();
-    await expect(page.locator('[data-event-type="ORDER_CREATED"]')).toHaveCount(
-      1,
-    );
-    await expect
-      .poll(() =>
-        Number(
-          mysqlScalar(
-            `SELECT COUNT(*) FROM sales_order WHERE user_id=${ownerSession.userId}`,
+    try {
+      expect((confirmation.confirmationToken ?? "").length).toBeGreaterThan(40);
+      await expect(
+        page.getByRole("heading", { name: "订单已由真实交易服务创建" }),
+      ).toBeVisible({
+        timeout: 30_000,
+      });
+      const orderLink = page.getByRole("link", {
+        name: "打开订单与 Mock 收银台",
+      });
+      const orderId = (await orderLink.getAttribute("href"))?.split("/").at(-1);
+      expect(orderId).toBeTruthy();
+      await expect(
+        page.locator('[data-event-type="ORDER_CREATED"]'),
+      ).toHaveCount(1);
+      await expect
+        .poll(() =>
+          Number(
+            mysqlScalar(
+              `SELECT COUNT(*) FROM sales_order WHERE user_id=${ownerSession.userId}`,
+            ),
           ),
-        ),
-      )
-      .toBe(beforeOrders + 1);
+        )
+        .toBe(beforeOrders + 1);
 
-    const strangerContext = await browser.newContext();
-    const strangerPage = await strangerContext.newPage();
-    const stranger = await register(strangerPage, uniqueUser("agentstranger"));
-    const crossUser = await strangerContext.request.post(
-      `${portalUrl}/api/v1/orders/purchase-confirmations/consume`,
-      {
-        headers: { Authorization: `Bearer ${stranger.accessToken}` },
-        data: {
-          confirmationToken,
-          draftId: issueBody.draftId,
-          actionType: "CREATE_ORDER",
-          items: [{ productId, quantity: 2 }],
-        },
-      },
-    );
-    expect(crossUser.status()).toBe(409);
-    await strangerPage.goto(`/user/orders/${orderId}`);
-    await expect(strangerPage.locator("#error-title")).toBeVisible();
-    await strangerContext.close();
-
-    const replay = await page
-      .context()
-      .request.post(
+      const strangerContext = await browser.newContext();
+      const strangerPage = await strangerContext.newPage();
+      const stranger = await register(
+        strangerPage,
+        uniqueUser("agentstranger"),
+      );
+      const crossUser = await strangerContext.request.post(
         `${portalUrl}/api/v1/orders/purchase-confirmations/consume`,
         {
-          headers: { Authorization: `Bearer ${ownerSession.accessToken}` },
+          headers: { Authorization: `Bearer ${stranger.accessToken}` },
           data: {
-            confirmationToken,
-            draftId: issueBody.draftId,
+            confirmationToken: confirmation.confirmationToken,
+            draftId: confirmation.draftId,
             actionType: "CREATE_ORDER",
             items: [{ productId, quantity: 2 }],
           },
         },
       );
-    expect(replay.status()).toBe(409);
-    const tamperedReplay = await page
-      .context()
-      .request.post(
-        `${portalUrl}/api/v1/orders/purchase-confirmations/consume`,
-        {
-          headers: { Authorization: `Bearer ${ownerSession.accessToken}` },
-          data: {
-            confirmationToken,
-            draftId: issueBody.draftId,
-            actionType: "CREATE_ORDER",
-            items: [{ productId, quantity: 3 }],
+      expect(crossUser.status()).toBe(409);
+      await strangerPage.goto(`/user/orders/${orderId}`);
+      await expect(strangerPage.locator("#error-title")).toBeVisible();
+      await strangerContext.close();
+
+      const replay = await page
+        .context()
+        .request.post(
+          `${portalUrl}/api/v1/orders/purchase-confirmations/consume`,
+          {
+            headers: { Authorization: `Bearer ${ownerSession.accessToken}` },
+            data: {
+              confirmationToken: confirmation.confirmationToken,
+              draftId: confirmation.draftId,
+              actionType: "CREATE_ORDER",
+              items: [{ productId, quantity: 2 }],
+            },
           },
-        },
-      );
-    // Clear the sensitive test variable after the final replay request.
-    // eslint-disable-next-line no-useless-assignment
-    confirmationToken = "";
-    expect(tamperedReplay.status()).toBe(409);
-    expect(
-      Number(
-        mysqlScalar(
-          `SELECT COUNT(*) FROM sales_order WHERE user_id=${ownerSession.userId}`,
+        );
+      expect(replay.status()).toBe(409);
+      const tamperedReplay = await page
+        .context()
+        .request.post(
+          `${portalUrl}/api/v1/orders/purchase-confirmations/consume`,
+          {
+            headers: { Authorization: `Bearer ${ownerSession.accessToken}` },
+            data: {
+              confirmationToken: confirmation.confirmationToken,
+              draftId: confirmation.draftId,
+              actionType: "CREATE_ORDER",
+              items: [{ productId, quantity: 3 }],
+            },
+          },
+        );
+      // Drop the test-owned clear value as soon as the replay requests finish.
+      delete confirmation.confirmationToken;
+      expect(tamperedReplay.status()).toBe(409);
+      expect(
+        Number(
+          mysqlScalar(
+            `SELECT COUNT(*) FROM sales_order WHERE user_id=${ownerSession.userId}`,
+          ),
         ),
-      ),
-    ).toBe(beforeOrders + 1);
-    expect(
-      Number(
-        mysqlScalar(
-          `SELECT COUNT(*) FROM user_transaction_timeline WHERE order_id='${orderId}' AND event_type='ORDER_CREATED'`,
+      ).toBe(beforeOrders + 1);
+      expect(
+        Number(
+          mysqlScalar(
+            `SELECT COUNT(*) FROM user_transaction_timeline WHERE order_id='${orderId}' AND event_type='ORDER_CREATED'`,
+          ),
         ),
-      ),
-    ).toBe(1);
-    await assertNoAgentPersistence(page.context(), page);
+      ).toBe(1);
+      await assertNoAgentPersistence(page.context(), page);
+    } finally {
+      // Also release the reference when an earlier assertion or request fails.
+      delete confirmation.confirmationToken;
+    }
   });
 
   test("two browser Users cannot cross Agent session, run, or draft ownership", async ({
@@ -405,7 +410,7 @@ test.describe("TASK-19 real Agent and security journeys", () => {
     compose("--profile", "agent", "stop", "qdrant");
     try {
       await page.goto("/user/agent");
-      await sendAgent(page, "售后退换申请应该怎么做？");
+      await sendAgent(page, "售后申请应从哪里发起？");
       await expect(page.locator(".agent-answer-copy")).toContainText(
         "暂时不可用",
       );

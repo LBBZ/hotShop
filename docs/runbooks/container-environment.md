@@ -28,7 +28,7 @@ pwsh -NoProfile -File .\script\task21-demo.ps1 -Action Restart -ProjectName hots
 将 Secure cookie 设为 false；时间统一 UTC。默认不启动 observability profile。
 
 - 管理员：`task13-admin` / `Task13Admin!2026`，公开的一次性本机演示账号。
-- 用户：浏览器注册页创建自己的用户名和密码，再登录。不会写入既有用户数据。
+- 用户：浏览器注册页创建自己的用户名和密码，注册成功后自动登录。不会写入既有用户数据。
 - 商品 `913001`，活动 `913001` 正常、`913002` 售罄、`913003` 已结束。
 - seed 复用 `web/scripts/task-13-e2e-seed.sql`，只在全新项目执行一次，将其 30 分钟活动窗口延至
   首次初始化后一日。`Restart` 不重置库存/版本/窗口；过期后用新的独立项目演示。

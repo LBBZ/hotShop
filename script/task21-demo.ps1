@@ -115,7 +115,7 @@ try {
     Write-Host "Ready: $demoUrl"
     Write-Host 'Admin: task13-admin / Task13Admin!2026 (public local demo account). Create your User account via the registration screen.'
     Write-Host "Credentials and keys (ignored): $demoDir"
-    Write-Host "Stop without deleting data: pwsh -File ./script/task21-demo.ps1 -Action Stop -ProjectName $ProjectName"
+    Write-Host "Stop without deleting data: pwsh -File ./script/demo.ps1 -Action Stop -ProjectName $ProjectName"
 } finally {
     foreach ($name in $previous.Keys) { [Environment]::SetEnvironmentVariable($name,$previous[$name],'Process') }
 }

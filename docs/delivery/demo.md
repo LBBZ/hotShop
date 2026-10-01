@@ -2,65 +2,102 @@
 
 [文档中心](../README.md) · [容器配置](../runbooks/container-environment.md) · [开发指南](../../CONTRIBUTING.md)
 
-本指南使用仓库现有的隔离演示脚本，启动最终 Nginx Web、Java 交易服务、Agent 和基础设施。默认 FakeModel / deterministic embedding，无需模型账号。支付是模拟流程。
+在本机体验商品浏览、下单、模拟支付、购物助手和后台管理。演示通过 Docker 启动完整应用，无需在本机安装 Java、Node.js 或 Python，也无需模型 API Key。
 
-## 1. 启动
+## 1. 安装与启动
 
-需要 PowerShell 7+、Docker Engine / Docker Desktop 的 Linux 容器和 Docker Compose 2.24.4+。运行 `docker info` 和 `docker compose version` 确认 Docker 可用，然后在仓库根目录执行：
+准备以下工具，并启动 Docker：
+
+- Git，用于获取项目。
+- [PowerShell 7+](https://learn.microsoft.com/powershell/scripting/install/install-powershell)，Windows、macOS 和 Linux 均可安装；启动命令为 `pwsh`。
+- [Docker Engine / Docker Desktop](https://docs.docker.com/get-started/get-docker/)，使用 Linux 容器，并确保 Docker Compose 为 2.24.4 或更新版本。
+
+在终端获取项目并检查环境：
 
 ```powershell
-pwsh -NoProfile -File ./script/task21-demo.ps1 -Action Start
+git clone https://github.com/LBBZ/hotShop.git
+cd hotShop
+pwsh --version
+docker info
+docker compose version
 ```
 
-默认入口为 **http://127.0.0.1:18080**。端口已占用时，在首次启动时追加 `-WebPort 18081`。脚本会打印形如 `hotshop-task21-xxxxxxxxxxxx` 的项目名，后续操作使用该名称。
+已克隆项目时，直接进入现有仓库根目录。确认上述检查成功后启动：
 
-首次构建需要联网下载镜像和依赖。脚本创建随机数据库/缓存/消息凭据与认证密钥，并存放在忽略目录 `.local/keys/<项目名>/`；等待数据库迁移成功和入口就绪后，初始化商品、三个限时活动与知识索引。活动有效期从初始化起约一天。已有项目、资源或同名镜像会触发拒绝，避免覆盖其他演示数据。
+```powershell
+pwsh -NoProfile -File ./script/demo.ps1 -Action Start
+```
+
+首次运行需要联网下载镜像和依赖、构建应用并初始化数据，耗时取决于网络、机器和缓存。等待终端显示 `Ready:` 后，打开 **http://127.0.0.1:18080**。记下终端打印的项目名，后续查看状态、停止和再次启动都会用到。
+
+端口已占用时，在启动命令后追加 `-WebPort 18081`，随后访问相应端口。
 
 ## 2. 体验购物流程
 
-| 步骤     | 页面与操作                                            | 预期观察                                         |
-| -------- | ----------------------------------------------------- | ------------------------------------------------ |
-| 发现     | 首页「发现好物」，搜索或切换品类，进入商品详情        | 商品价格、库存、状态和购买入口；插画标为品类示意 |
-| 登录     | 注册一个演示用户，再登录                              | 个人工作区、本人订单与预约入口                   |
-| 普通购买 | 商品详情确认数量并下单                                | 新建待支付订单；重复请求受幂等约束               |
-| 限时活动 | 在首页限时活动卡片提交预约                            | 先显示已接受预约，再显示异步订单状态             |
-| 模拟支付 | 在订单页面发起支付，选择演示结果                      | 观察支付与订单终态；刷新后以服务端状态为准       |
-| AI 购物  | 「AI 帮我选」或个人工作区「购物助手」，查询、比较商品 | 流式回答、工具结果、购买草稿；确认草稿才会建单   |
-| 知识问答 | 询问知识库覆盖的活动规则、FAQ 或售后政策              | 有命中时展示来源；未命中或检索失败时明确提示     |
+初始数据只有一个商品：**高热交易收音机（ID `913001`）**，普通售价 ¥299，初始库存 50。另有该商品的三个限时活动：
 
-每位用户在每个活动中只能持有一条有效预约，超时或补偿后可以释放占位。重复预约、库存不足、活动结束都是可观察的正常业务状态。演示数据会随购买改变，不要反复执行 seed 来恢复库存；需要全新数据时启动一个新项目。
+| 活动 ID  | 初始状态            | 用途                                               |
+| -------- | ------------------- | -------------------------------------------------- |
+| `913001` | 可预约，活动价 ¥199 | 体验预约、异步建单与支付；活动在初始化后约一天结束 |
+| `913002` | 已售罄              | 观察库存不足时的状态                               |
+| `913003` | 已结束              | 在后台查看；首页不会展示已经结束的活动             |
 
-## 3. 体验后台
+这些状态是预设的演示数据。若要比较多个商品，先在后台新增商品。
+
+1. 打开首页，进入「发现好物」中的收音机详情。
+2. 在登录页选择「注册」，创建自己的用户名和密码。注册成功后会自动登录；已有账号直接登录。
+3. 在商品详情选择数量并下单，进入「我的订单」查看待支付订单。
+4. 在订单页面发起模拟支付，选择演示结果，观察订单状态变化。这里不发生真实扣款。
+5. 回到首页，在可预约的限时活动中提交预约，观察已接受预约到订单创建的过程。
+
+每位用户在每个活动中只能持有一条有效预约，超时或补偿后可以释放占位。购买会改变库存和订单数据；请勿重复初始化已有项目来恢复库存。
+
+## 3. 体验购物助手
+
+登录后，从「AI 帮我选」或个人工作区的「购物助手」进入对话页。在「请求」中逐条输入下列内容，点击「发送请求」：
+
+| 可复制的提问                         | 预期结果                                     |
+| ------------------------------------ | -------------------------------------------- |
+| `商品 913001 当前价格和库存是多少？` | 从交易服务读取当前商品信息；库存会随购买变化 |
+| `我的订单状态`                       | 查询当前登录用户的订单；尚未下单时可以为空   |
+| `购买商品 913001 数量 1 件`          | 展示购买草稿和「尚未创建订单」提示           |
+| `售后申请应从哪里发起？`             | 展示知识库回答与「引用资料」                 |
+
+购买请求只生成草稿，不会自动下单或扣库存。核对商品和数量后，点击「确认并创建订单」才会创建订单；支付仍需在订单页面单独操作。
+
+默认使用 **FakeModel**，即用于演示固定流程的模拟模型；上述请求由现有浏览器测试覆盖。它不是通用聊天模型，其他措辞可能得到固定回复，知识检索也可能没有命中。配置真实模型的方法见 [Agent 运行手册](../runbooks/agent-service.md)。
+
+## 4. 体验后台
 
 打开 **http://127.0.0.1:18080/admin/login**，若更换过端口则相应替换。
 
-隔离 seed 中的管理员为 `task13-admin`，密码为 `Task13Admin!2026`。这是仓库公开的演示账号，只用于该隔离环境。
+- 用户名：`task13-admin`
+- 密码：`Task13Admin!2026`
 
-后台包含交易总览、商品、活动、订单、异常、Outbox、审计和 Agent 页面。库存调整需要填写变更量与原因；元数据编辑不直接覆盖库存。人工重放和运营操作会记录审计信息。管理员登录与普通用户登录使用独立的凭据边界。
+这是公开的本地演示账号。后台可以管理商品、调整库存、装载活动、查看订单与异常。调整库存需要填写变更量和原因；编辑商品名称、描述等信息不会直接覆盖库存。管理员与普通购物用户分别登录。
 
-## 4. 保留数据的日常操作
+## 5. 停止、继续与排障
 
-替换以下示例项目名：
-
-```powershell
-pwsh -NoProfile -File ./script/task21-demo.ps1 -Action Status -ProjectName hotshop-task21-xxxxxxxxxxxx
-pwsh -NoProfile -File ./script/task21-demo.ps1 -Action Stop -ProjectName hotshop-task21-xxxxxxxxxxxx
-pwsh -NoProfile -File ./script/task21-demo.ps1 -Action Restart -ProjectName hotshop-task21-xxxxxxxxxxxx
-```
-
-`Stop` 只停止容器，保留卷、配置和密钥。`Restart` 使用 Compose `start` 启动已有容器，不重建镜像、不重新初始化数据、不延长活动，也不会重新执行完整就绪探针。稍候再访问入口，必要时用 `Status` 查看健康状态。
-
-启动失败会保留现场。用实际项目名检查服务和日志：
+将下方变量替换为启动时打印的实际项目名。项目名保留 `hotshop-task21-` 前缀；这是脚本的资源命名约定。
 
 ```powershell
-docker ps -a --filter label=com.docker.compose.project=hotshop-task21-xxxxxxxxxxxx
-docker logs <上一步找到的容器名称>
+$demoProject = 'hotshop-task21-xxxxxxxxxxxx'
+pwsh -NoProfile -File ./script/demo.ps1 -Action Status -ProjectName $demoProject
+pwsh -NoProfile -File ./script/demo.ps1 -Action Stop -ProjectName $demoProject
+pwsh -NoProfile -File ./script/demo.ps1 -Action Restart -ProjectName $demoProject
 ```
 
-常见原因包括端口占用、Docker 未启动、镜像下载失败和迁移失败。密钥配置不一致时不要复用别的项目的卷或 `.env.demo`。手动管理资源的方法见[容器指南](../runbooks/container-environment.md)。
+分别按需运行以上命令：`Status` 查看服务状态；`Stop` 只停止容器，保留数据和密钥；`Restart` 启动已有容器，不重建镜像、不重置数据或延长活动。再次启动后稍候访问页面，必要时用 `Status` 查看健康状态。
 
-## 5. 演示与测试的区别
+需要全新数据时，先停止旧项目，再重新运行不带 `-ProjectName` 的 `Start` 命令。若要同时保留两个运行中的演示，为新项目指定其他 `-WebPort`。新项目不会覆盖旧项目的数据。
 
-本指南供交互体验；自动化验证应使用 [CI 工作流](../quality/ci.md)与相应隔离脚本，从工作流定位实际入口和参数。不要将历史报告中的通过数量当作当前运行结果。
+配置和密钥保存在 Git 忽略目录 `.local/keys/<项目名>/`。启动失败时也会保留资源，方便查看日志：
 
-默认 AI 的回答质量受 FakeModel 和确定性检索限制；Agent 未完成运行不跨进程恢复；支付不涉及真实资金。历史验收及容量边界见[证据索引](../quality/evidence-index.md)。
+```powershell
+docker ps -a --filter "label=com.docker.compose.project=$demoProject"
+# 将变量替换为上一步列出的实际容器名
+$demoContainer = '替换为容器名'
+docker logs --tail 100 $demoContainer
+```
+
+优先检查 Docker 是否启动、端口是否占用，以及镜像下载或数据库迁移是否报错。已有项目名、资源或同名镜像会被拒绝，继续使用原项目应执行 `Restart`。手动配置与资源管理见[容器指南](../runbooks/container-environment.md)；自动化验证另见 [CI 说明](../quality/ci.md)。

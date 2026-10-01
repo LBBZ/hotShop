@@ -1,119 +1,73 @@
 # HotShop
 
-**Good finds. Great days.** A full-stack commerce application with an AI shopping assistant, flash-sale reservations, orders, and an operations console.
+**Product discovery, AI-assisted purchases, and commerce operations in one project.**
 
-[简体中文](README.md) · **English** · [Documentation](docs/README.md) · [Demo guide](docs/delivery/demo.md)
+HotShop is a full-stack commerce application you can run locally. A React storefront, Java transaction services, and a Python shopping assistant support regular purchases, flash-sale reservations, order payments, and administration.
+
+[简体中文](README.md) · **English** · [Quick start](#quick-start) · [Documentation](docs/README.md) · [Contributing](CONTRIBUTING.md)
 
 [![CI](https://github.com/LBBZ/hotShop/actions/workflows/ci.yml/badge.svg)](https://github.com/LBBZ/hotShop/actions/workflows/ci.yml)
 
-![HotShop storefront with product discovery, flash sales, and an AI shopping entry point](docs/assets/storefront.png)
+![Storefront with search, category filters, and product cards](docs/assets/catalog.png)
 
-## From discovery to a confirmed purchase
+| Shopping assistant                                                                                                       | Operations console                                                                                                            |
+| ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| [![The assistant prepares a purchase draft for user confirmation](docs/assets/assistant.png)](docs/assets/assistant.png) | [![The administrator reviews orders, reservations, and pending work](docs/assets/operations.png)](docs/assets/operations.png) |
+| Find products, ask about policies, and review a draft before creating an order.                                          | Manage products, stock, and campaigns, with audits and operational summaries.                                                 |
 
-HotShop brings a working shopping experience and its transaction infrastructure into one repository. Users can browse products, join flash sales, track orders, or ask an assistant to compare products and prepare a purchase draft. Administrators have a separate workspace for catalog, inventory, campaigns, audits, and operational summaries.
+Screenshots show the actual frontend with fixed presentation fixtures. Click to enlarge. See [capture notes and reproduction steps](docs/assets/README.md). The application and detailed guides are primarily in Simplified Chinese.
 
-| Experience            | What is implemented                                                                                         |
-| --------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Product discovery     | Search, category filters, product details, regular purchases, original category illustrations               |
-| Flash sales           | Countdown, inventory reservation, one active reservation per user per campaign, asynchronous order progress |
-| Personal workspace    | Registration, sign-in, orders, reservations, payment status, and timeout closure status                     |
-| Shopping assistant    | Product search and comparison, the user's own orders, knowledge answers with citations                      |
-| Purchase confirmation | The assistant prepares a draft; the user confirms it before an order is created                             |
-| Operations            | Product maintenance, explicit stock adjustments, campaign loading, audits, and exception summaries          |
+## What you can explore
 
-The interface supports keyboard navigation, narrow screens, and reduced motion. Product cards label their illustrations as category artwork because the catalog API does not currently provide product photos. The application interface and detailed guides are primarily in Simplified Chinese.
+- **A complete shopping flow** — Search and filter products, view details, make regular purchases, reserve flash-sale stock, and track orders, payments, and reservations.
+- **AI purchases with user confirmation** — Product lookup and comparison, the user's own orders, and knowledge answers with citations. Purchase requests become drafts that the user confirms.
+- **A dedicated admin workspace** — Product maintenance, stock adjustments, campaign loading, audit records, transaction metrics, and exception summaries.
 
-## Run the demo
+The interface supports mobile layouts, keyboard navigation, and reduced motion. Original category illustrations are explicitly labeled as artwork.
 
-From the repository root, with **Docker Engine / Docker Desktop using Linux containers, Docker Compose 2.24.4+, and PowerShell 7+**:
+## Quick start
 
-```powershell
-pwsh -NoProfile -File ./script/task21-demo.ps1 -Action Start
-```
-
-The first run downloads dependencies and builds images. The script creates an isolated Compose project, random credentials and signing keys, migrates the database, seeds demo products and flash sales, and indexes the knowledge base. Open **http://127.0.0.1:18080** when it is ready and register a user. The [demo guide](docs/delivery/demo.md) includes the administrator entry point and demo credentials. FakeModel and deterministic embeddings are enabled by default; no model API key is required.
-
-Keep the project name printed by the script. Replace the example name below with that value:
+Install [Git](https://git-scm.com/downloads), [Docker](https://docs.docker.com/get-started/get-docker/) with Linux containers and Compose **2.24.4+**, and [PowerShell 7+](https://learn.microsoft.com/powershell/scripting/install/installing-powershell). Start Docker, then run:
 
 ```powershell
-pwsh -NoProfile -File ./script/task21-demo.ps1 -Action Status -ProjectName hotshop-task21-xxxxxxxxxxxx
-pwsh -NoProfile -File ./script/task21-demo.ps1 -Action Restart -ProjectName hotshop-task21-xxxxxxxxxxxx
-pwsh -NoProfile -File ./script/task21-demo.ps1 -Action Stop -ProjectName hotshop-task21-xxxxxxxxxxxx
+git clone https://github.com/LBBZ/hotShop.git
+cd hotShop
+pwsh -NoProfile -File ./script/demo.ps1 -Action Start
 ```
 
-`Restart` preserves data without reseeding inventory or extending campaigns. `Stop` only stops that project's containers, preserving its data and keys. To use another port, pass `-WebPort 18081` on the initial start. See the [container guide](docs/runbooks/container-environment.md) and [contribution guide](CONTRIBUTING.md) for manual setup and development.
+The first run downloads dependencies, builds images, migrates the database, and seeds the demo. After the script reports a successful start, open **http://127.0.0.1:18080** and register to enter your personal workspace.
 
-## How it works
+No model API key is needed: the default demo uses **FakeModel** with predefined responses and a **Mock Provider** for payments. To use a live model, configure DeepSeek or Qwen. The seed contains one product and three campaigns: available, sold out, and expired.
 
-HotShop is a **modular, multi-process application in one repository**. Java processes share domain code and MySQL. The Python Agent uses restricted HTTP tools, and Nginx provides a same-origin browser entry point.
+Try `购买商品 913001 数量 1 件` in the assistant (“buy one unit of product 913001”), review the draft, and confirm to create an order. The [demo guide](docs/delivery/demo.md) covers admin sign-in, knowledge queries, restart, and stop commands. If the port is busy, append `-WebPort 18081` to the initial start command.
 
-```mermaid
-flowchart LR
-    Browser[React storefront / admin] --> Nginx[Nginx]
-    Nginx --> Portal[Portal API]
-    Nginx --> Admin[Admin API]
-    Nginx --> Agent[Python Agent]
-    Portal --> MySQL[(MySQL)]
-    Admin --> MySQL
-    Portal --> Redis[(Redis reservations / Stream)]
-    Admin --> Redis
-    Redis --> Task[Background tasks]
-    Task --> MySQL
-    Task --> RabbitMQ[RabbitMQ]
-    RabbitMQ --> Task
-    Portal --> Cache[(Redis cache)]
-    Agent --> Cache
-    Agent -->|Authorized tools| Portal
-    Agent -->|Operations summaries| Admin
-    Agent --> Qdrant[(Qdrant knowledge)]
-    Agent --> Model[ModelProvider]
-```
+## Implementation highlights
 
-- **Regular purchases** validate prices, deduct stock, and create orders and Outbox records in a MySQL transaction, with idempotency keys for retries.
-- **Flash-sale reservations** use Redis Lua to validate an activity, reserve stock, and append a Stream event atomically. Background workers create orders; recovery, compensation, and reconciliation handle failures.
-- **Reliable messaging** combines a transactional Outbox, publisher confirms, and consumer idempotency for deduplication under at-least-once delivery.
-- **AI purchase boundaries** enforce identity, resource ownership, scopes, and a single-use confirmation value. Models cannot pay or bypass user confirmation.
-- **Authentication** separates user, administrator, and Agent credentials. Access tokens stay in browser memory; refresh sessions, revocation markers, and service assertion replay markers are persisted in MySQL.
+- **Two transaction paths**: Regular purchases deduct stock and create an order in a MySQL transaction. Flash-sale reservations atomically reserve stock and append a Redis Stream event through Lua; workers create the order asynchronously. The UI distinguishes reservation and order states.
+- **Recovery after failure**: A transactional Outbox, RabbitMQ publisher confirms, and consumer idempotency handle duplicate delivery. Payment timeouts, stock compensation, and reconciliation cover failure paths.
+- **AI connected to business tools**: The Agent calls restricted HTTP tools with identity and resource-ownership checks. Purchases require a single-use confirmation; the model cannot pay directly.
 
-Read the [current architecture](docs/architecture/current-state.md), [transaction journey](docs/architecture/user-transaction-journey.md), and [API contract](docs/api/api-contract.md) for details.
+The application is modular and runs as multiple processes in one repository. Java services share domain code and MySQL. See the [current architecture](docs/architecture/current-state.md) and [transaction journey](docs/architecture/user-transaction-journey.md) for diagrams and details.
 
-## Stack and source map
+## Stack and source
 
-| Layer                       | Current baseline                                         | Source                                      |
-| --------------------------- | -------------------------------------------------------- | ------------------------------------------- |
-| Web                         | React 19, TypeScript 6, Vite 8, Tailwind CSS 4, pnpm 10  | [`web/`](web/README.md)                     |
-| Commerce and administration | Java 21, Spring Boot 4.1, Jackson 3, MyBatis             | `portal/`, `admin/`, `domain/`, `security/` |
-| Background processing       | Redis Lua / Stream, RabbitMQ, transactional Outbox       | `task/`, `common/`, `infrastructure/`       |
-| Data                        | MySQL 8.4, Flyway, two Redis 8.8 instances, RabbitMQ 4.3 | `database/`, [Compose](docker-compose.yml)  |
-| AI                          | Python 3.12, FastAPI, LangGraph, Qdrant 1.19             | `agent/`                                    |
-| Observability               | Prometheus, Grafana, Loki, Tempo, Alloy                  | `docker/observability/`                     |
+| Component                   | Technology                                  | Start here                                                 |
+| --------------------------- | ------------------------------------------- | ---------------------------------------------------------- |
+| Storefront and admin UI     | React · TypeScript · Vite · Tailwind CSS    | [Web development](web/README.md)                           |
+| Commerce and administration | Java 21 · Spring Boot · MyBatis · Flyway    | [Backend architecture](docs/architecture/current-state.md) |
+| Shopping assistant          | Python · FastAPI · LangGraph · Qdrant       | [Agent development](docs/runbooks/agent-service.md)        |
+| Data and messaging          | MySQL · Redis Lua / Stream · RabbitMQ       | [Container configuration](docker-compose.yml)              |
+| Observability               | Prometheus · Grafana · Loki · Tempo · Alloy | [Observability guide](docs/runbooks/observability.md)      |
 
-Exact versions live in the [Maven POM](pom.xml), [Web manifest](web/package.json), [Python manifest](agent/pyproject.toml), lockfiles, and Compose image references. Chat providers include Fake, DeepSeek, and Qwen; embedding providers include deterministic and Bailian. Configuration selects one provider at a time.
+Exact dependency versions are recorded in the [Maven](pom.xml), [Web](web/package.json), and [Python](agent/pyproject.toml) manifests and lockfiles.
 
-## Development and checks
+## Documentation and contributions
 
-```powershell
-# Documentation links and heading anchors; requires only Node.js
-node script/check-docs.mjs
+- [Contribution guide](CONTRIBUTING.md): Development prerequisites, checks, and submission conventions.
+- [API contract](docs/api/api-contract.md): User, administrator, and Agent interfaces.
+- [CI and verification](docs/quality/ci.md): Automated checks and how to run them.
+- [Documentation hub](docs/README.md): Architecture, operations, historical reports, and the [backlog](docs/delivery/next-iteration.md).
 
-# Java unit and integration tests; requires JDK 21 and Docker
-./mvnw.cmd -B -ntp verify
+This project is intended for local demos and engineering practice. Mock payments do not settle real money; unfinished Agent streams do not survive process restarts; existing load tests do not establish production capacity. See the [evidence index](docs/quality/evidence-index.md) for verification scope.
 
-# Web; requires Node.js 22.13+ (22.x) or 24+, and pnpm 10.15.0
-cd web
-pnpm install --frozen-lockfile
-pnpm check
-pnpm exec playwright install chromium
-pnpm exec playwright test e2e/smoke.spec.ts e2e/storefront.spec.ts
-```
-
-Use `./mvnw` on Linux/macOS. The [contribution guide](CONTRIBUTING.md) and [CI guide](docs/quality/ci.md) cover Agent checks, real-backend E2E, API drift, and full verification. Several scripts retain their original `taskNN` names and remain active integration harnesses.
-
-## Scope and limitations
-
-- Payments use a **Mock Provider** to exercise callbacks, retries, timeout closure, and inventory recovery. There is no real money settlement.
-- The default AI setup verifies flows and authorization boundaries. Live model quality and cost require a separate evaluation.
-- Agent runs and event queues are process-local; unfinished streaming runs do not survive process restarts.
-- Historical load tests did not meet the 5000 requested RPS target. Configuration targets and short-window results are not production capacity claims.
-
-The [documentation hub](docs/README.md) separates current guides, architecture decisions, runbooks, and historical reports. The [evidence index](docs/quality/evidence-index.md) records verification scope and versions; the [backlog](docs/delivery/next-iteration.md) tracks unresolved work.
+Report bugs and suggest improvements in [Issues](https://github.com/LBBZ/hotShop/issues).

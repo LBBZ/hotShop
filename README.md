@@ -51,13 +51,13 @@ pwsh -NoProfile -File ./script/demo.ps1 -Action Start
 
 ## 技术与代码
 
-| 组成           | 技术                                        | 入口                                           |
-| -------------- | ------------------------------------------- | ---------------------------------------------- |
-| 商城与后台界面 | React · TypeScript · Vite · Tailwind CSS    | [Web 开发](web/README.md)                      |
-| 交易与管理服务 | Java 21 · Spring Boot · MyBatis · Flyway    | [后端架构](docs/architecture/current-state.md) |
-| 购物助手       | Python · FastAPI · LangGraph · Qdrant       | [Agent 开发](docs/runbooks/agent-service.md)   |
-| 数据与消息     | MySQL · Redis Lua / Stream · RabbitMQ       | [容器配置](docker-compose.yml)                 |
-| 可观测性       | Prometheus · Grafana · Loki · Tempo · Alloy | [观测指南](docs/runbooks/observability.md)     |
+| 模块                                       | 技术                                        |
+| ------------------------------------------ | ------------------------------------------- |
+| [前端](web/README.md)                      | React · TypeScript · Vite · Tailwind CSS    |
+| [交易](docs/architecture/current-state.md) | Java 21 · Spring Boot · MyBatis · Flyway    |
+| [Agent](docs/runbooks/agent-service.md)    | Python · FastAPI · LangGraph · Qdrant       |
+| [数据](docker-compose.yml)                 | MySQL · Redis Lua / Stream · RabbitMQ       |
+| [监控](docs/runbooks/observability.md)     | Prometheus · Grafana · Loki · Tempo · Alloy |
 
 依赖版本以 [Maven](pom.xml)、[Web](web/package.json)、[Python](agent/pyproject.toml) 清单和锁文件为准。
 

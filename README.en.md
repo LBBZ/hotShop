@@ -51,13 +51,13 @@ The application is modular and runs as multiple processes in one repository. Jav
 
 ## Stack and source
 
-| Component                   | Technology                                  | Start here                                                 |
-| --------------------------- | ------------------------------------------- | ---------------------------------------------------------- |
-| Storefront and admin UI     | React · TypeScript · Vite · Tailwind CSS    | [Web development](web/README.md)                           |
-| Commerce and administration | Java 21 · Spring Boot · MyBatis · Flyway    | [Backend architecture](docs/architecture/current-state.md) |
-| Shopping assistant          | Python · FastAPI · LangGraph · Qdrant       | [Agent development](docs/runbooks/agent-service.md)        |
-| Data and messaging          | MySQL · Redis Lua / Stream · RabbitMQ       | [Container configuration](docker-compose.yml)              |
-| Observability               | Prometheus · Grafana · Loki · Tempo · Alloy | [Observability guide](docs/runbooks/observability.md)      |
+| Component and guide                            | Technology                                  |
+| ---------------------------------------------- | ------------------------------------------- |
+| [Web UI](web/README.md)                        | React · TypeScript · Vite · Tailwind CSS    |
+| [Commerce](docs/architecture/current-state.md) | Java 21 · Spring Boot · MyBatis · Flyway    |
+| [Assistant](docs/runbooks/agent-service.md)    | Python · FastAPI · LangGraph · Qdrant       |
+| [Data](docker-compose.yml)                     | MySQL · Redis Lua / Stream · RabbitMQ       |
+| [Monitoring](docs/runbooks/observability.md)   | Prometheus · Grafana · Loki · Tempo · Alloy |
 
 Exact dependency versions are recorded in the [Maven](pom.xml), [Web](web/package.json), and [Python](agent/pyproject.toml) manifests and lockfiles.
 

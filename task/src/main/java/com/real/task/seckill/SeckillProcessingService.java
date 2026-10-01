@@ -2,8 +2,8 @@ package com.real.task.seckill;
 
 import com.real.common.audit.AuditAction;
 import com.real.common.audit.AuditResourceType;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import com.real.common.observability.AsyncTraceContext;
 import com.real.domain.userjourney.TransactionTimelineWriter;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -1216,7 +1216,7 @@ public class SeckillProcessingService {
     private String json(Map<String, ?> value) {
         try {
             return objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException exception) {
+        } catch (JacksonException exception) {
             throw new IllegalStateException("Safe evidence serialization failed", exception);
         }
     }

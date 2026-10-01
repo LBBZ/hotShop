@@ -47,6 +47,7 @@ describe("transaction SSE", () => {
             controller.close();
           },
         }),
+        { headers: { "content-type": "text/event-stream" } },
       ),
     );
     const received: unknown[] = [];
@@ -71,6 +72,7 @@ describe("transaction SSE", () => {
             controller.close();
           },
         }),
+        { headers: { "content-type": "text/event-stream" } },
       ),
     );
     const received: unknown[] = [];
@@ -110,6 +112,7 @@ describe("transaction SSE", () => {
             controller.close();
           },
         }),
+        { headers: { "content-type": "text/event-stream" } },
       ),
     );
     const received: unknown[] = [];
@@ -139,6 +142,7 @@ describe("transaction SSE", () => {
             controller.close();
           },
         }),
+        { headers: { "content-type": "text/event-stream" } },
       ),
     );
     const received: unknown[] = [];
@@ -159,6 +163,7 @@ describe("transaction SSE", () => {
         new ReadableStream({
           cancel: canceled,
         }),
+        { headers: { "content-type": "text/event-stream" } },
       ),
     );
 
@@ -179,8 +184,12 @@ describe("transaction SSE", () => {
   });
 
   it("uses bounded exponential reconnect delays", () => {
-    expect(transactionReconnectDelay(1)).toBe(2000);
-    expect(transactionReconnectDelay(3)).toBe(8000);
-    expect(transactionReconnectDelay(20)).toBe(8000);
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    expect(transactionReconnectDelay(1)).toBe(1000);
+    expect(transactionReconnectDelay(3)).toBe(4000);
+    random.mockReturnValue(0.999);
+    expect(transactionReconnectDelay(1)).toBeLessThanOrEqual(2000);
+    expect(transactionReconnectDelay(20)).toBeLessThanOrEqual(8000);
+    random.mockRestore();
   });
 });

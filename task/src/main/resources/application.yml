@@ -81,6 +81,7 @@ hotshop:
       read-block: ${HOTSHOP_SECKILL_ORDER_READ_BLOCK:1s}
       poll-delay: ${HOTSHOP_SECKILL_ORDER_POLL_DELAY:250ms}
       discovery-interval: ${HOTSHOP_SECKILL_ORDER_DISCOVERY_INTERVAL:10s}
+      lag-refresh-interval: ${HOTSHOP_SECKILL_ORDER_LAG_REFRESH_INTERVAL:10s}
       claim-idle: ${HOTSHOP_SECKILL_ORDER_CLAIM_IDLE:30s}
       claim-batch: ${HOTSHOP_SECKILL_ORDER_CLAIM_BATCH:20}
       retry-initial-backoff: ${HOTSHOP_SECKILL_ORDER_RETRY_INITIAL_BACKOFF:1s}
@@ -89,12 +90,23 @@ hotshop:
       deterministic-failure-attempts: ${HOTSHOP_SECKILL_ORDER_DETERMINISTIC_FAILURE_ATTEMPTS:3}
       order-timeout: ${HOTSHOP_SECKILL_ORDER_TIMEOUT:15m}
       payment-timeout: ${HOTSHOP_SECKILL_PAYMENT_TIMEOUT:15m}
-      reconciliation-interval: ${HOTSHOP_SECKILL_RECONCILIATION_INTERVAL:5m}
+      reconciliation-interval: ${HOTSHOP_SECKILL_RECONCILIATION_INTERVAL:30s}
+      reconciliation-activities: ${HOTSHOP_SECKILL_RECONCILIATION_ACTIVITIES:10}
+      reconciliation-time-budget: ${HOTSHOP_SECKILL_RECONCILIATION_TIME_BUDGET:2s}
       reconciliation-batch: ${HOTSHOP_SECKILL_RECONCILIATION_BATCH:100}
       reconciliation-dry-run: ${HOTSHOP_SECKILL_RECONCILIATION_DRY_RUN:true}
       auto-repair: ${HOTSHOP_SECKILL_RECONCILIATION_AUTO_REPAIR:false}
 
 management:
+  # Metrics use Prometheus; JSON stdout logs are collected by Alloy.
+  otlp:
+    metrics:
+      export:
+        enabled: false
+  logging:
+    export:
+      otlp:
+        enabled: false
   endpoints:
     web:
       exposure:
@@ -107,9 +119,11 @@ management:
   tracing:
     sampling:
       probability: ${HOTSHOP_TRACE_SAMPLING_PROBABILITY:1.0}
-  otlp:
+  opentelemetry:
     tracing:
-      endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
+      export:
+        otlp:
+          endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
   metrics:
     tags:
       application: ${spring.application.name}

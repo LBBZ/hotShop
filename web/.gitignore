@@ -5,3 +5,4 @@ test-results/
 coverage/
 .vite/
 *.tsbuildinfo
+.pnpm-store/

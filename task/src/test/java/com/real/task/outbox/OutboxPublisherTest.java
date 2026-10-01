@@ -1,6 +1,6 @@
 package com.real.task.outbox;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.real.domain.messaging.OutboxEvent;
 import com.real.domain.messaging.OutboxMapper;
 import com.real.task.observability.TaskObservabilityMetrics;
@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -371,7 +372,7 @@ class OutboxPublisherTest {
         OutboxEvent exhausted = new OutboxEvent(13, UUID.randomUUID().toString(), "ORDER", "order-1",
                 "ORDER_CREATED", "{}", "PUBLISHING", 15, 8, "expired-lease",
                 now().minusSeconds(1), 9, now());
-        when(mapper.lockClaimable(50, now())).thenReturn(List.of(exhausted));
+        when(mapper.lockClaimable(1, now())).thenReturn(List.of(exhausted));
         when(mapper.failExpiredExhausted(13, "expired-lease", 9, now(), 8)).thenReturn(1);
 
         assertThat(publisher(8, new OutboxPublishFailpoint() { }).claimBatch()).isEmpty();
@@ -405,6 +406,112 @@ class OutboxPublisherTest {
         assertThatThrownBy(() -> new OutboxPublisherProperties(true, 50, Duration.ofMillis(1),
                 Duration.ofSeconds(30), Duration.ofSeconds(5), Duration.ofSeconds(5),
                 Duration.ofSeconds(1), 2, 8)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void pollClaimsNextEventOnlyAfterPreviousPublishCompletes() {
+        OutboxEvent first = event("ORDER_CREATED", 1, "lease-first", 4);
+        OutboxEvent second = new OutboxEvent(11, UUID.randomUUID().toString(), "ORDER", "order-2",
+                "ORDER_CREATED", "{}", "PUBLISHING", 1, 1, "lease-second",
+                now().plusSeconds(30), 4, now());
+        when(mapper.lockClaimable(1, now()))
+                .thenReturn(List.of(first), List.of(second), List.of());
+        when(mapper.claim(anyLong(), anyLong(), anyString(), any(), any(), anyInt()))
+                .thenReturn(1);
+        when(mapper.find(first.outboxId())).thenReturn(first);
+        when(mapper.find(second.outboxId())).thenReturn(second);
+        when(mapper.published(anyLong(), anyString(), anyLong(), any())).thenReturn(1);
+        completeConfirm(true, false);
+
+        publisher(8, new OutboxPublishFailpoint() { }).poll();
+
+        var ordered = inOrder(mapper);
+        ordered.verify(mapper).lockClaimable(1, now());
+        ordered.verify(mapper).published(first.outboxId(), first.leaseToken(), first.version(), now());
+        ordered.verify(mapper).lockClaimable(1, now());
+        ordered.verify(mapper).published(second.outboxId(), second.leaseToken(), second.version(), now());
+        ordered.verify(mapper).lockClaimable(1, now());
+    }
+
+    @Test
+    void pollContinuesPastExpiredExhaustedLeaseWithinTheSameBudget() {
+        OutboxEvent exhausted = new OutboxEvent(13, UUID.randomUUID().toString(), "ORDER", "order-old",
+                "ORDER_CREATED", "{}", "PUBLISHING", 15, 8, "expired-lease",
+                now().minusSeconds(1), 9, now());
+        OutboxEvent next = event("ORDER_CREATED", 1, "lease-next", 4);
+        when(mapper.lockClaimable(1, now())).thenReturn(List.of(exhausted), List.of(next), List.of());
+        when(mapper.failExpiredExhausted(13, "expired-lease", 9, now(), 8)).thenReturn(1);
+        when(mapper.claim(anyLong(), anyLong(), anyString(), any(), any(), anyInt())).thenReturn(1);
+        when(mapper.find(next.outboxId())).thenReturn(next);
+        when(mapper.published(anyLong(), anyString(), anyLong(), any())).thenReturn(1);
+        completeConfirm(true, false);
+
+        publisher(8, new OutboxPublishFailpoint() { }).poll();
+
+        var ordered = inOrder(mapper);
+        ordered.verify(mapper).failExpiredExhausted(13, "expired-lease", 9, now(), 8);
+        ordered.verify(mapper).published(next.outboxId(), next.leaseToken(), next.version(), now());
+        verify(mapper, times(3)).lockClaimable(1, now());
+    }
+
+    @Test
+    void failureBecomingEligibleDuringSlowPollWaitsForTheNextPoll() {
+        var instant = new AtomicReference<>(clock.instant());
+        Clock advancingClock = mock(Clock.class);
+        when(advancingClock.instant()).thenAnswer(ignored -> instant.get());
+        var availableAt = new AtomicReference<LocalDateTime>();
+        OutboxEvent event = event("ORDER_CREATED", 1, "lease-retry", 4);
+        when(mapper.lockClaimable(eq(1), any())).thenAnswer(invocation -> {
+            LocalDateTime cutoff = invocation.getArgument(1);
+            return availableAt.get() == null || !cutoff.isBefore(availableAt.get())
+                    ? List.of(event) : List.of();
+        });
+        when(mapper.claim(anyLong(), anyLong(), anyString(), any(), any(), anyInt())).thenReturn(1);
+        when(mapper.find(event.outboxId())).thenReturn(event);
+        when(mapper.recordFailure(anyLong(), anyString(), anyLong(), anyString(), any(), anyString()))
+                .thenAnswer(invocation -> {
+                    availableAt.set(invocation.getArgument(4));
+                    // Publishing/DB work can outlast the retry backoff before the next claim.
+                    instant.updateAndGet(value -> value.plusSeconds(2));
+                    return 1;
+                });
+        completeConfirm(false, false);
+        var properties = new OutboxPublisherProperties(true, 50, Duration.ofMillis(250),
+                Duration.ofSeconds(30), Duration.ofSeconds(5), Duration.ofMillis(100),
+                Duration.ofSeconds(2), 2, 8);
+        var publisher = new OutboxPublisher(mapper, rabbit, new ObjectMapper(), transactions,
+                properties, new OutboxPublishFailpoint() { }, advancingClock, UUID::randomUUID);
+
+        publisher.poll();
+
+        verify(mapper, times(2)).lockClaimable(1, now());
+        verify(mapper).recordFailure(eq(event.outboxId()), eq(event.leaseToken()),
+                eq(event.version()), eq("NEW"), any(), eq("BROKER_NACK"));
+        assertThat(availableAt.get()).isBefore(LocalDateTime.ofInstant(instant.get(), ZoneOffset.UTC));
+    }
+
+    @Test
+    void emptyPollPerformsOnlyOneClaimQuery() {
+        when(mapper.lockClaimable(1, now())).thenReturn(List.of());
+
+        publisher(8, new OutboxPublishFailpoint() { }).poll();
+
+        verify(mapper).lockClaimable(1, now());
+        verifyNoMoreInteractions(mapper);
+    }
+
+    @Test
+    void expiredOrNearlyExpiredLeaseNeverReachesBroker() {
+        for (int remainingSeconds : List.of(-1, 4)) {
+            OutboxEvent stale = new OutboxEvent(20, UUID.randomUUID().toString(), "ORDER", "order-stale",
+                    "ORDER_CREATED", "{}", "PUBLISHING", 1, 1, "stale-lease",
+                    now().plusSeconds(remainingSeconds), 1, now());
+            assertThatThrownBy(() -> publisher(8, new OutboxPublishFailpoint() { }).publish(stale))
+                    .isInstanceOf(OutboxLeaseLostException.class);
+        }
+        verifyNoInteractions(rabbit);
+        verify(mapper, never()).published(anyLong(), anyString(), anyLong(), any());
+        verify(mapper, never()).recordFailure(anyLong(), anyString(), anyLong(), anyString(), any(), anyString());
     }
 
     private void completeConfirm(boolean ack, boolean returned) {

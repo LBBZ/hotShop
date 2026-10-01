@@ -4,7 +4,12 @@ import logging
 
 import httpx
 
-from hotshop_agent.embeddings.base import EmbeddingError, validate_inputs, validate_vectors
+from hotshop_agent.embeddings.base import (
+    EmbeddingError,
+    embedding_fingerprint,
+    validate_inputs,
+    validate_vectors,
+)
 
 
 class BailianEmbedding:
@@ -29,6 +34,9 @@ class BailianEmbedding:
         self._api_key = api_key
         self._model = model
         self.dimension = dimension
+        self.fingerprint = embedding_fingerprint(
+            provider=self.name, model=model, dimension=dimension, endpoint=self._url
+        )
         self._timeout = timeout_seconds
         self.max_batch_size = min(max_items, 10)
         self._max_chars = max_chars

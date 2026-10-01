@@ -13,6 +13,7 @@ import pytest
 
 IMAGE = os.environ.get("AGENT_CONTAINER_IMAGE", "")
 TASK19_PROJECT = os.environ.get("TASK19_PROJECT", "")
+RESOURCE_PREFIX = TASK19_PROJECT or "hotshop-agent"
 DOCKER = shutil.which("docker") or "docker"
 pytestmark = pytest.mark.skipif(
     not IMAGE,
@@ -77,9 +78,9 @@ def volume_metadata(volume: str, filename: str) -> str:
 @pytest.fixture
 def runtime_container() -> Iterator[dict[str, str]]:
     suffix = uuid.uuid4().hex[:12]
-    name = f"hotshop-agent-security-{suffix}"
-    private_volume = f"hotshop-agent-private-{suffix}"
-    public_volume = f"hotshop-agent-public-{suffix}"
+    name = f"{RESOURCE_PREFIX}-security-{suffix}"
+    private_volume = f"{RESOURCE_PREFIX}-private-{suffix}"
+    public_volume = f"{RESOURCE_PREFIX}-public-{suffix}"
     source_before = ""
     try:
         docker("volume", "create", *ownership_label_arguments(), private_volume)
@@ -250,7 +251,7 @@ def test_runtime_logs_and_api_do_not_expose_private_key(
 @pytest.mark.parametrize("case", ("missing", "empty", "nonroot"))
 def test_entrypoint_fails_fast_without_usable_root_only_source(case: str) -> None:
     suffix = uuid.uuid4().hex[:12]
-    volume = f"hotshop-agent-empty-{suffix}"
+    volume = f"{RESOURCE_PREFIX}-empty-{suffix}"
     arguments = ["run", "--rm"]
     try:
         if case == "empty":

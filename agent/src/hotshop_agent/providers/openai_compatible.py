@@ -55,6 +55,7 @@ class OpenAICompatibleChatTransport:
         response_bytes = 0
         tool_candidate_possible = True
         deferred_usage: ModelUsage | None = None
+        completed_stream = False
         try:
             async with self._client.stream(
                 "POST",
@@ -74,6 +75,7 @@ class OpenAICompatibleChatTransport:
                         continue
                     raw = line[6:]
                     if raw == "[DONE]":
+                        completed_stream = True
                         break
                     event = json.loads(raw)
                     choices = event.get("choices") or []
@@ -112,6 +114,8 @@ class OpenAICompatibleChatTransport:
                             deferred_usage = item
                         else:
                             yield item
+                if not completed_stream:
+                    raise ModelTemporaryError("model provider stream ended before completion")
                 if buffered is not None:
                     completed = "".join(buffered)
                     tool_call: ModelToolCall | None = parse_tool_call(completed)

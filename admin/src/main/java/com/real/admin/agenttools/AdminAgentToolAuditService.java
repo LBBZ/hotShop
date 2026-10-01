@@ -2,8 +2,8 @@ package com.real.admin.agenttools;
 
 import com.real.common.audit.AuditResourceType;
 import com.real.common.audit.AuditAction;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import com.real.common.api.RequestContext;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -131,7 +131,7 @@ public class AdminAgentToolAuditService {
     private String json(Map<String, Object> summary) {
         try {
             return objectMapper.writeValueAsString(summary);
-        } catch (JsonProcessingException exception) {
+        } catch (JacksonException exception) {
             throw new IllegalStateException("Could not serialize Agent tool audit summary", exception);
         }
     }

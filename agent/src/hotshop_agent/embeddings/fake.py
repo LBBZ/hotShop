@@ -5,7 +5,7 @@ import math
 import re
 import unicodedata
 
-from hotshop_agent.embeddings.base import validate_inputs, validate_vectors
+from hotshop_agent.embeddings.base import embedding_fingerprint, validate_inputs, validate_vectors
 
 _ASCII_TOKEN = re.compile(r"[a-z0-9]+")
 
@@ -25,6 +25,9 @@ class DeterministicEmbedding:
         if not 16 <= dimension <= 4096:
             raise ValueError("embedding dimension must be between 16 and 4096")
         self.dimension = dimension
+        self.fingerprint = embedding_fingerprint(
+            provider=self.name, model="feature-hash-v1", dimension=dimension
+        )
         self.max_batch_size = max_items
         self.max_chars = max_chars
 

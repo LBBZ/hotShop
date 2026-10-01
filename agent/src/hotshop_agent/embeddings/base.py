@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from typing import Protocol
 
@@ -12,6 +14,7 @@ class EmbeddingProvider(Protocol):
     name: str
     dimension: int
     max_batch_size: int
+    fingerprint: str
 
     async def embed_documents(self, texts: list[str]) -> list[list[float]]: ...
 
@@ -42,3 +45,15 @@ def validate_vectors(vectors: object, *, expected_count: int, dimension: int) ->
             values.append(value)
         checked.append(values)
     return checked
+
+
+def embedding_fingerprint(*, provider: str, model: str, dimension: int, endpoint: str = "") -> str:
+    """Identify a vector space, without including credentials or operational limits."""
+    manifest = {
+        "provider": provider,
+        "model": model,
+        "dimension": dimension,
+        "endpoint": endpoint.rstrip("/"),
+        "normalization": "provider-native-v1",
+    }
+    return hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest()

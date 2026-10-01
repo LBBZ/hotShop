@@ -1,20 +1,19 @@
 package com.real.common.api.json;
 
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonToken;
-import com.fasterxml.jackson.databind.DeserializationContext;
-import com.fasterxml.jackson.databind.JsonDeserializer;
-import com.fasterxml.jackson.databind.exc.InvalidFormatException;
+import tools.jackson.core.JsonParser;
+import tools.jackson.core.JsonToken;
+import tools.jackson.databind.DeserializationContext;
+import tools.jackson.databind.ValueDeserializer;
+import tools.jackson.databind.exc.InvalidFormatException;
 
-import java.io.IOException;
 
 /** Inventory deltas must not be truncated or coerced from strings or booleans. */
-public final class StrictSignedIntegerDeserializer extends JsonDeserializer<Integer> {
+public final class StrictSignedIntegerDeserializer extends ValueDeserializer<Integer> {
     @Override
-    public Integer deserialize(JsonParser parser, DeserializationContext context) throws IOException {
+    public Integer deserialize(JsonParser parser, DeserializationContext context) {
         if (parser.currentToken() != JsonToken.VALUE_NUMBER_INT) {
             throw InvalidFormatException.from(parser, "Delta must be a signed JSON integer",
-                    parser.getText(), Integer.class);
+                    parser.getString(), Integer.class);
         }
         return parser.getIntValue();
     }

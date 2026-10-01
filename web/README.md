@@ -14,9 +14,19 @@
 - 同一身份域的并发 401 共用一个 refresh Promise；refresh 失败会一次性清空整个
   Access Session。两个身份域没有共享 refresh 状态。
 
+## 查询与流式请求
+
+- 私人查询的 key 包含身份域和用户 ID；退出或换账号会同步移除并取消旧身份查询。
+- 迟到的刷新响应和请求响应不能覆盖新登录身份；同账号正常 token 刷新保留查询缓存。
+- 订单与预约收到 SSE 事件后合并刷新事实，连接中断或快照暂时读取失败时每 10 秒兜底重试，成功取得终态后停止轮询。
+- SSE 保留 Last-Event-ID 恢复、心跳超时和带抖动退避，并遵守 429/503 的 Retry-After；永久授权/资源错误停止重连。
+- Agent 只将明确的 `done` 事件视作运行结束，截断或超时会显示未完成；每条帧独立限长。
+- 当前页面内的连续提问复用同一个 Agent session，最多展示 12 轮历史；开始新对话或切账号会重置会话。
+- Nginx 对带内容 hash 的 assets 设置一年 immutable 缓存并压缩文本资源，HTML 重新验证；API 缓存策略由服务端控制。
+
 ## OpenAPI 客户端
 
-输入是仓库中只读的 `docs/api/openapi-baseline/{public,user,admin}.json`，生成器固定为
+输入是仓库中只读的 `docs/api/openapi-baseline/{public,user,admin,agent}.json`，生成器固定为
 OpenAPI Generator 7.14.0。`src/api/generated/*` 中的 TypeScript 文件禁止手工修改。
 
 ```bash
@@ -27,10 +37,14 @@ pnpm api:check
 运行时 API origin 来自 `VITE_API_BASE_URL`；缺省使用同源地址。生成器的 localhost
 fallback 不作为运行配置。
 
+页面需要浏览器安全上下文：本地使用 `http://localhost` 或 `http://127.0.0.1`，部署使用 HTTPS。
+容器浏览器直接访问 HTTP `host.docker.internal` 不满足此条件，需使用容器内 localhost 代理，
+以便请求 ID 和购买幂等键的 `crypto.randomUUID()` 正常工作。
+
 ## 本地命令
 
-以下命令在 `web` 目录的 Bash 终端执行，Node22+、pnpm10.15.0。完整本地环境优先使用
-[根README](../README.md) 的PowerShell7隔离启动入口；Docker运行镜像无需宿主Node。
+以下命令在 `web` 目录的 Bash 终端执行，Node22.13+或Node24+、pnpm10.15.0。完整本地环境优先使用
+[根README](../README.md) 的PowerShell7隔离启动入口；Docker运行镜像无需宿主Node。Vitest 固定最多 2 个 worker，避免 Docker VM 按宿主 CPU 数并发耗尽内存。
 
 ```bash
 pnpm install --frozen-lockfile

@@ -165,7 +165,7 @@ test.describe("TASK-19 real Agent and security journeys", () => {
         `SELECT COUNT(*) FROM sales_order WHERE user_id=${ownerSession.userId}`,
       ),
     );
-    let confirmationToken = "";
+    let confirmationToken: string;
     const issued = page.waitForResponse(
       (response) =>
         response.url().includes("/purchase-drafts/") &&
@@ -251,6 +251,8 @@ test.describe("TASK-19 real Agent and security journeys", () => {
           },
         },
       );
+    // Clear the sensitive test variable after the final replay request.
+    // eslint-disable-next-line no-useless-assignment
     confirmationToken = "";
     expect(tamperedReplay.status()).toBe(409);
     expect(

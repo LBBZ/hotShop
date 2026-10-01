@@ -1,10 +1,11 @@
 package com.real.admin.agenttools;
 
 import com.real.common.audit.AuditResourceType;
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.StreamReadFeature;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.real.common.api.ApiException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,7 +13,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.io.IOException;
 import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Instant;
@@ -308,19 +308,18 @@ public class AdminAgentToolService {
             throw schemaError("Request body must contain a small JSON object");
         }
         JsonNode root;
-        try (JsonParser parser = objectMapper.getFactory().createParser(rawBody)) {
-            parser.enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
-            root = objectMapper.readTree(parser);
-            if (parser.nextToken() != null) {
-                throw schemaError("Request body must contain one JSON value");
-            }
-        } catch (IOException exception) {
+        try {
+            root = objectMapper.reader()
+                    .with(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
+                    .with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+                    .readTree(rawBody);
+        } catch (JacksonException exception) {
             throw schemaError("Request body must be valid JSON");
         }
         if (root == null || !root.isObject() || root.size() != REQUEST_FIELDS.size()) {
             throw schemaError("Request body must contain exactly the allowed fields");
         }
-        root.fieldNames().forEachRemaining(field -> {
+        root.propertyNames().forEach(field -> {
             if (!REQUEST_FIELDS.contains(field)) {
                 throw schemaError("Request body contains an extra field");
             }
@@ -375,7 +374,7 @@ public class AdminAgentToolService {
     private String json(JsonNode value) {
         try {
             return objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException exception) {
+        } catch (JacksonException exception) {
             throw new IllegalStateException("Could not serialize configuration draft value", exception);
         }
     }

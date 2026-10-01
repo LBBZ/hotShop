@@ -1,7 +1,7 @@
 package com.real.portal;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
@@ -10,6 +10,8 @@ import com.real.security.entity.CustomUserDetails;
 import com.real.security.identity.IdentityType;
 import com.real.security.identity.IssuedAccessToken;
 import com.real.security.service.RefreshCookieService;
+import com.real.security.service.ClientAssertionReplayService;
+import com.real.security.service.TokenBlacklistService;
 import com.real.security.util.JwtTokenUtil;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
@@ -24,7 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
@@ -40,7 +42,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.mysql.MySQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
 import java.nio.charset.StandardCharsets;
@@ -90,15 +92,16 @@ class IdentitySecurityTest {
     private static final String ADMIN_USERNAME = "task05-admin";
     private static final String PASSWORD = "Task05-Password!";
 
-    static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0.46")
+    static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.4.11")
             .withDatabaseName("hotShop")
             .withUsername("hotshop")
             .withPassword("hotshop-test")
             .withUrlParam("connectTimeout", "5000")
+            .withUrlParam("socketTimeout", "3000")
             .withCommand("--log-bin-trust-function-creators=1");
 
     static final GenericContainer<?> REDIS =
-            new GenericContainer<>(DockerImageName.parse("redis:8.8.1-alpine"))
+            new GenericContainer<>(DockerImageName.parse("redis:8.8.3-alpine"))
                     .withExposedPorts(6379);
 
     static final TestKeys KEYS = TestKeys.create();
@@ -131,6 +134,10 @@ class IdentitySecurityTest {
     @Autowired
     Validator validator;
     @Autowired
+    ClientAssertionReplayService assertionReplayService;
+    @Autowired
+    TokenBlacklistService tokenBlacklistService;
+    @Autowired
     @Qualifier("cacheRedisConnectionFactory")
     LettuceConnectionFactory cacheRedisConnectionFactory;
     @Autowired
@@ -147,10 +154,10 @@ class IdentitySecurityTest {
                 .validateMigrationNaming(true)
                 .cleanDisabled(true)
                 .load();
-        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(11);
+        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(12);
         assertThat(flyway.migrate().migrationsExecuted).isZero();
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1.10");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1.11");
 
         String passwordHash = new BCryptPasswordEncoder().encode(PASSWORD);
         jdbcTemplate.update(
@@ -406,6 +413,12 @@ class IdentitySecurityTest {
                 .andExpect(status().isOk())
                 .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"));
 
+        // Simulate a full cache loss after logout; revocation lives in MySQL.
+        assertThat(REDIS.execInContainer("redis-cli", "FLUSHALL").getExitCode()).isZero();
+        mockMvc.perform(get("/api/v1/orders")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(login.accessToken())))
+                .andExpect(status().isUnauthorized());
+
         refresh(login.refreshToken(), login.csrfToken(), null)
                 .andExpect(status().isUnauthorized());
 
@@ -499,6 +512,7 @@ class IdentitySecurityTest {
         assertThat(validated.authorizedParty()).isEqualTo("hotshop-agent-service");
         assertThat(validated.subjectUserId()).isEqualTo(userId);
         assertThat(validated.scopes()).containsExactlyInAnyOrderElementsOf(allowedScopes);
+        assertThat(REDIS.execInContainer("redis-cli", "FLUSHALL").getExitCode()).isZero();
 
         mockMvc.perform(post("/agent/api/v1/auth/token-exchange")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -676,6 +690,66 @@ class IdentitySecurityTest {
                 .andExpect(status().isTooManyRequests())
                 .andExpect(header().exists(HttpHeaders.RETRY_AFTER))
                 .andExpect(jsonPath("$.code").value("RATE_LIMITED"));
+    }
+
+    @Test
+    @Order(11)
+    void concurrentAssertionConsumptionHasOneWinnerAcrossDatabaseConnections() throws Exception {
+        String jti = UUID.randomUUID().toString();
+        Instant expires = Instant.now().plusSeconds(60);
+        var start = new java.util.concurrent.CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(8)) {
+            List<java.util.concurrent.Future<Boolean>> attempts = new java.util.ArrayList<>();
+            for (int i = 0; i < 8; i++) {
+                attempts.add(executor.submit(() -> {
+                    start.await();
+                    try {
+                        assertionReplayService.consumeOnce(jti, expires);
+                        return true;
+                    } catch (org.springframework.security.authentication.BadCredentialsException expected) {
+                        return false;
+                    }
+                }));
+            }
+            start.countDown();
+            int winners = 0;
+            for (var attempt : attempts) {
+                if (attempt.get(10, java.util.concurrent.TimeUnit.SECONDS)) winners++;
+            }
+            assertThat(winners).isEqualTo(1);
+        }
+    }
+
+    @Test
+    @Order(12)
+    void revocationCoversTheEntireAcceptedJwtClockSkewWindow() throws Exception {
+        Instant now = Instant.now();
+        String jti = UUID.randomUUID().toString();
+        String token = signedUserToken(now.minusSeconds(120), now.minusSeconds(120),
+                now.minusSeconds(5), jti, Map.of("authorities", List.of("ROLE_USER")));
+        // The verifier accepts this token inside its configured 30 second skew.
+        assertThat(jwtTokenUtil.validate(token, IdentityType.USER_ACCESS).jti()).isEqualTo(jti);
+        tokenBlacklistService.revoke(jti, now.minusSeconds(5));
+        assertThat(REDIS.execInContainer("redis-cli", "FLUSHALL").getExitCode()).isZero();
+        mockMvc.perform(get("/api/v1/orders")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token)))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @Order(13)
+    void databaseFailureIsFailClosedForBearerAuthentication() throws Exception {
+        String access = jwtTokenUtil.issueUserAccess(principal(userId, USERNAME, "ROLE_USER")).value();
+        MYSQL.getDockerClient().pauseContainerCmd(MYSQL.getContainerId()).exec();
+        try {
+            org.junit.jupiter.api.Assertions.assertTimeout(java.time.Duration.ofSeconds(10),
+                    () -> mockMvc.perform(get("/api/v1/orders")
+                                    .header(HttpHeaders.AUTHORIZATION, bearer(access)))
+                            .andExpect(status().isServiceUnavailable())
+                            .andExpect(jsonPath("$.code").value("AUTHENTICATION_SERVICE_UNAVAILABLE")));
+        } finally {
+            MYSQL.getDockerClient().unpauseContainerCmd(MYSQL.getContainerId()).exec();
+        }
     }
 
     @Test

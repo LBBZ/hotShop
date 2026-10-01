@@ -157,8 +157,8 @@ try {
     docker run -d --name $mysql --network $network `
         -e MYSQL_ROOT_PASSWORD=task05-root `
         -e MYSQL_DATABASE=hotShop `
-        mysql:8.0.46 | Out-Null
-    docker run -d --name $redis --network $network redis:8.8.1-alpine | Out-Null
+        mysql:8.4.11 | Out-Null
+    docker run -d --name $redis --network $network redis:8.8.3-alpine | Out-Null
     if ($LASTEXITCODE -ne 0) {
         throw 'Could not start isolated data dependencies'
     }

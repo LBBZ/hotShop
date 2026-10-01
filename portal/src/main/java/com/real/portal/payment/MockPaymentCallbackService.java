@@ -1,7 +1,7 @@
 package com.real.portal.payment;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.real.common.api.dto.MockPaymentCallbackResponse;
 import com.real.domain.payment.MockPaymentProperties;
 import com.real.domain.payment.PaymentProvider;
@@ -16,7 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.io.IOException;
+import tools.jackson.core.JacksonException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -220,7 +220,7 @@ public class MockPaymentCallbackService {
                 INSERT INTO outbox_event(event_id,aggregate_type,aggregate_id,event_type,payload)
                 VALUES(?,'PAYMENT',?,?,CAST(? AS JSON))
                 """, eventId, c.paymentNo(), type, json.writeValueAsString(payload));
-        } catch (IOException exception) {
+        } catch (JacksonException exception) {
             throw new IllegalStateException("Payment event serialization failed", exception);
         }
     }
@@ -279,7 +279,7 @@ public class MockPaymentCallbackService {
         try {
             JsonNode root = json.readTree(body);
             if (root == null || !root.isObject() || root.size() != FIELDS.size()) throw reject("BODY_INVALID", HttpStatus.BAD_REQUEST);
-            Set<String> actual = new HashSet<>(); root.fieldNames().forEachRemaining(actual::add);
+            Set<String> actual = new HashSet<>(root.propertyNames());
             if (!actual.equals(FIELDS)) throw reject("BODY_INVALID", HttpStatus.BAD_REQUEST);
             String callbackId = text(root, "callbackId", 36);
             if (!UUID.fromString(callbackId).toString().equals(callbackId)) throw reject("BODY_INVALID", HttpStatus.BAD_REQUEST);

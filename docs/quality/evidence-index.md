@@ -1,6 +1,11 @@
 # 测试与证据索引
 
-## 最新增量：TASK-21-RECONCILE-01
+## 最新增量：2026-09-30 / 2026-10-01 Docker 升级
+
+分支 `codex/modernize-hotshop`，提交基线 `e90d5326c938cb5ac5c7912594a8d27324e18fe5` 之上的工作树。
+[第一轮优化](modernization-2026-09-30.md) 与 [Spring Boot 4 升级](boot4-upgrade-2026-10-01.md) 分别记录实际运行范围、源码清单和保留限制；这是本地 Docker 验证，不代表新的 GitHub Actions 托管运行。
+
+## 历史增量：TASK-21-RECONCILE-01
 
 起点`ebefde2ee158809f900a5912cbcda3ae7d58adad`，分支`task-21-reconcile-01`。
 [修复与复验报告](task-21-reconcile-01.md)单独记录红绿MySQL、UTC Java reactor、Agent/Qdrant、

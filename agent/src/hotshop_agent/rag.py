@@ -270,8 +270,15 @@ def route_query(query: str, identity: IdentityKind, owner_id: str) -> RouteDecis
     return RouteDecision(RouteKind.GENERAL)
 
 
-def serialize_evidence(result: RetrievalResult, *, max_chars: int) -> str:
+@dataclass(frozen=True)
+class EvidenceContext:
+    serialized: str
+    citations: tuple[Citation, ...]
+
+
+def build_evidence_context(result: RetrievalResult, *, max_chars: int) -> EvidenceContext:
     evidence: list[dict[str, Any]] = []
+    citations: list[Citation] = []
     for hit in result.hits:
         item = {
             "documentId": hit.chunk.documentId,
@@ -288,11 +295,27 @@ def serialize_evidence(result: RetrievalResult, *, max_chars: int) -> str:
             excess = max(1, len(encoded) - max_chars)
             item["content"] = item["content"][:-excess]
             encoded = json.dumps(evidence, ensure_ascii=False, separators=(",", ":"))
-        if len(encoded) > max_chars:
+        if len(encoded) > max_chars or not item["content"]:
             evidence.pop()
-        if len(encoded) >= max_chars or not item["content"]:
             break
-    return json.dumps(evidence, ensure_ascii=False, separators=(",", ":"))
+        citations.append(
+            Citation(
+                documentId=hit.chunk.documentId,
+                title=hit.chunk.title,
+                version=hit.chunk.documentVersion,
+                source=hit.chunk.source,
+                chunkId=hit.chunk.chunkId,
+            )
+        )
+        if len(encoded) >= max_chars:
+            break
+    return EvidenceContext(
+        json.dumps(evidence, ensure_ascii=False, separators=(",", ":")), tuple(citations)
+    )
+
+
+def serialize_evidence(result: RetrievalResult, *, max_chars: int) -> str:
+    return build_evidence_context(result, max_chars=max_chars).serialized
 
 
 def allowed_visibilities(identity: IdentityKind) -> tuple[Visibility, ...]:

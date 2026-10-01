@@ -1,7 +1,7 @@
 package com.real.admin;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.real.admin.service.AdminProductAuditService;
 import com.real.common.api.RequestContext;
 import com.real.common.audit.AuditResourceType;
@@ -19,7 +19,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -32,7 +32,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.mysql.MySQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
 import java.nio.file.Files;
@@ -76,13 +76,13 @@ class AdminIdentitySecurityTest {
     private static final String USERNAME = "task05-real-user";
     private static final String PASSWORD = "Task05-Admin-Password!";
 
-    static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0.46")
+    static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.4.11")
             .withDatabaseName("hotShop")
             .withUsername("hotshop")
             .withPassword("hotshop-test")
             .withCommand("--log-bin-trust-function-creators=1");
     static final GenericContainer<?> REDIS =
-            new GenericContainer<>(DockerImageName.parse("redis:8.8.1-alpine"))
+            new GenericContainer<>(DockerImageName.parse("redis:8.8.3-alpine"))
                     .withExposedPorts(6379);
     static final TestKeys KEYS = TestKeys.create();
 
@@ -819,6 +819,66 @@ class AdminIdentitySecurityTest {
                 .andExpect(jsonPath("$.items[0].stateSummary.reservationNo").doesNotExist())
                 .andExpect(jsonPath("$.items[0].requestId").doesNotExist())
                 .andExpect(jsonPath("$.items[0].traceId").doesNotExist());
+    }
+
+    @Test
+    void historicalNullSummaryRemainsReadableAtLookaheadAndOnTheFollowingPage() throws Exception {
+        // A literal models already persisted Task data; the current application mapper
+        // omits null record properties and would otherwise hide the historical failure.
+        String historical = """
+                {"orderType":"ORDINARY","reason":"PAYMENT_TIMEOUT","orderId":"legacy-null-summary",
+                 "reservationNo":null,"restoredRows":1}
+                """;
+        String recent = """
+                {"orderType":"ORDINARY","reason":"PAYMENT_TIMEOUT","orderId":"legacy-null-summary",
+                 "restoredRows":1}
+                """;
+        LocalDateTime occurredAt = LocalDateTime.of(2030, 1, 1, 0, 0);
+        for (int index = 0; index < 2; index++) {
+            jdbcTemplate.update("""
+                    INSERT INTO audit_log(occurred_at,actor_type,actor_id,action,resource_type,resource_id,
+                        result,request_id,trace_id,source,state_summary)
+                    VALUES(?,'SYSTEM',NULL,'INVENTORY_COMPENSATED','SALES_ORDER',
+                        'legacy-null-summary','SUCCESS',NULL,NULL,'TASK',CAST(? AS JSON))
+                    """, occurredAt.plusSeconds(index), index == 0 ? historical : recent);
+        }
+        long historicalId = jdbcTemplate.queryForObject("""
+                SELECT audit_id FROM audit_log
+                WHERE resource_id='legacy-null-summary' AND occurred_at=?
+                """, Long.class, occurredAt);
+        String access = bearer(adminAccess());
+
+        // LIMIT + 1 maps the historical row even before it becomes a visible item.
+        MvcResult first = mockMvc.perform(get("/admin/api/v1/audit-logs")
+                        .header(HttpHeaders.AUTHORIZATION, access)
+                        .param("actorType", "SYSTEM").param("resourceId", "legacy-null-summary")
+                        .param("limit", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.hasMore").value(true)).andReturn();
+        String cursor = objectMapper.readTree(first.getResponse().getContentAsString())
+                .path("nextCursor").asText();
+
+        MvcResult second = mockMvc.perform(get("/admin/api/v1/audit-logs")
+                        .header(HttpHeaders.AUTHORIZATION, access)
+                        .param("actorType", "SYSTEM").param("resourceId", "legacy-null-summary")
+                        .param("limit", "1").param("cursor", cursor))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].auditId").value(Long.toString(historicalId)))
+                .andExpect(jsonPath("$.items[0].source").value("TASK"))
+                .andExpect(jsonPath("$.items[0].stateSummary.orderType").value("ORDINARY"))
+                .andExpect(jsonPath("$.items[0].requestId").doesNotExist())
+                .andExpect(jsonPath("$.items[0].traceId").doesNotExist())
+                .andExpect(jsonPath("$.hasMore").value(false)).andReturn();
+        JsonNode summary = objectMapper.readTree(second.getResponse().getContentAsString())
+                .path("items").get(0).path("stateSummary");
+        assertThat(summary.has("reservationNo")).isTrue();
+        assertThat(summary.path("reservationNo").isNull()).isTrue();
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT JSON_TYPE(JSON_EXTRACT(state_summary,'$.reservationNo'))
+                FROM audit_log WHERE audit_id=?
+                """, String.class, historicalId)).isEqualTo("NULL");
     }
 
     @Test

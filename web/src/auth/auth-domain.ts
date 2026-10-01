@@ -72,6 +72,15 @@ export function createAuthDomain(
 ): AuthDomain {
   const store = createAuthStore();
   let refreshInFlight: Promise<AccessSession> | null = null;
+  let identityEpoch = 0;
+  let refreshEpoch = -1;
+  store.subscribe((state, previous) => {
+    if (
+      state.session?.userId !== previous.session?.userId ||
+      state.session === null
+    )
+      identityEpoch += 1;
+  });
 
   async function rawFetch(
     input: RequestInfo | URL,
@@ -79,12 +88,12 @@ export function createAuthDomain(
   ): Promise<Response> {
     return fetcher(toApiUrl(config.baseUrl, input), {
       ...init,
-      credentials: "include",
+      credentials: init.credentials ?? "include",
       headers: withRequestId(init.headers),
     });
   }
 
-  async function performRefresh(): Promise<AccessSession> {
+  async function performRefresh(epoch: number): Promise<AccessSession> {
     const csrfToken = readCookie(config.csrfCookieName);
     const headers = new Headers();
     if (csrfToken) {
@@ -96,13 +105,12 @@ export function createAuthDomain(
       headers,
     });
     if (!response.ok) {
-      store.getState().clearSession("expired");
       throw await mapProblemResponse(response);
     }
 
     const session = parseAccessSession(await response.json(), config.role);
+    if (epoch !== identityEpoch) throw new SessionExpiredError(config.name);
     if (!session) {
-      store.getState().clearSession("expired");
       throw new Error(
         `The ${config.name} refresh response did not match its identity domain.`,
       );
@@ -112,15 +120,18 @@ export function createAuthDomain(
   }
 
   function refresh(): Promise<AccessSession> {
-    if (!refreshInFlight) {
-      refreshInFlight = performRefresh()
+    if (!refreshInFlight || refreshEpoch !== identityEpoch) {
+      const epoch = identityEpoch;
+      refreshEpoch = epoch;
+      const pending = performRefresh(epoch)
         .catch((error: unknown) => {
-          store.getState().clearSession("expired");
+          if (epoch === identityEpoch) store.getState().clearSession("expired");
           throw error;
         })
         .finally(() => {
-          refreshInFlight = null;
+          if (refreshInFlight === pending) refreshInFlight = null;
         });
+      refreshInFlight = pending;
     }
     return refreshInFlight;
   }
@@ -129,6 +140,8 @@ export function createAuthDomain(
     input: RequestInfo | URL,
     init: RequestInit = {},
   ): Promise<Response> {
+    const epoch = identityEpoch;
+    const initialUserId = store.getState().session?.userId;
     const initialHeaders = withRequestId(init.headers);
     const initialToken = store.getState().session?.accessToken;
     if (initialToken) {
@@ -139,6 +152,8 @@ export function createAuthDomain(
       ...init,
       headers: initialHeaders,
     });
+    init.signal?.throwIfAborted();
+    if (epoch !== identityEpoch) throw new SessionExpiredError(config.name);
     if (response.ok) {
       return response;
     }
@@ -150,17 +165,24 @@ export function createAuthDomain(
     }
 
     try {
-      await refresh();
+      if (store.getState().session?.accessToken === initialToken)
+        await refresh();
     } catch {
       throw new SessionExpiredError(config.name);
     }
 
+    init.signal?.throwIfAborted();
+    if (initialUserId && initialUserId !== store.getState().session?.userId)
+      throw new SessionExpiredError(config.name);
+    const replayEpoch = identityEpoch;
     const replayHeaders = withRequestId(initialHeaders);
     const refreshedToken = store.getState().session?.accessToken;
     if (refreshedToken) {
       replayHeaders.set("Authorization", `Bearer ${refreshedToken}`);
     }
     const replay = await rawFetch(input, { ...init, headers: replayHeaders });
+    if (replayEpoch !== identityEpoch)
+      throw new SessionExpiredError(config.name);
     if (!replay.ok) {
       if (replay.status === 401) {
         store.getState().clearSession("expired");

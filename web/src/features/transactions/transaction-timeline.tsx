@@ -34,13 +34,15 @@ export function TransactionTimeline({
   connection: StreamConnection;
 }) {
   const connectionLabel =
-    connection === "live"
-      ? "实时连接"
-      : connection === "offline"
-        ? "离线等待"
-        : connection === "reconnecting"
-          ? "正在重连"
-          : "正在连接";
+    connection === "unavailable"
+      ? "状态流不可访问"
+      : connection === "live"
+        ? "实时连接"
+        : connection === "offline"
+          ? "离线等待"
+          : connection === "reconnecting"
+            ? "正在重连"
+            : "正在连接";
   return (
     <section
       className="transaction-receipt"

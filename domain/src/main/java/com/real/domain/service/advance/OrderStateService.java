@@ -1,7 +1,7 @@
 package com.real.domain.service.advance;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import com.real.common.enums.OrderStatus;
 import com.real.common.exception.InventoryShortageException;
 import com.real.domain.entity.Order;
@@ -118,7 +118,7 @@ public class OrderStateService {
         try { String body=json.writeValueAsString(p);
             outbox.insert(eventId("ORDER_CREATED",order.getOrderId()),"ORDER",order.getOrderId(),"ORDER_CREATED",body);
             outbox.insert(eventId("LEGACY_ORDER_TIMEOUT_REQUESTED",order.getOrderId()),"ORDER",order.getOrderId(),"LEGACY_ORDER_TIMEOUT_REQUESTED",body);
-        } catch(JsonProcessingException e) { throw new IllegalStateException("Cannot serialize order event",e); }
+        } catch(JacksonException e) { throw new IllegalStateException("Cannot serialize order event",e); }
     }
     static String eventId(String type,String id) { return UUID.nameUUIDFromBytes(("hotshop/outbox/v1/"+type+"/"+id).getBytes(StandardCharsets.UTF_8)).toString(); }
 }

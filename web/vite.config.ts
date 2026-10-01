@@ -35,6 +35,14 @@ export default defineConfig({
     host: "0.0.0.0",
     port: 4173,
     headers: developmentSecurityHeaders,
+    watch: {
+      ignored: [
+        "**/.pnpm-store/**",
+        "**/coverage/**",
+        "**/playwright-report/**",
+        "**/test-results/**",
+      ],
+    },
     proxy: {
       "/agent-api": {
         target: process.env.HOTSHOP_AGENT_URL ?? "http://127.0.0.1:8090",
@@ -61,6 +69,8 @@ export default defineConfig({
     headers: securityHeaders,
   },
   test: {
+    // Docker Desktop may report host CPU count despite a small VM memory budget.
+    maxWorkers: 2,
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
     exclude: [...configDefaults.exclude, "e2e/**"],

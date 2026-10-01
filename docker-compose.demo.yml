@@ -11,14 +11,33 @@ services:
   qdrant:
     ports: !override ["127.0.0.1::6333"]
   admin-service:
+    build:
+      args:
+        BUILD_JAVA_TOOL_OPTIONS: "${HOTSHOP_DEMO_JAVA_TOOL_OPTIONS:--XX:TieredStopAtLevel=1}"
+    # Work around the reproducible local Docker Desktop C2 crash.
+    environment:
+      JAVA_TOOL_OPTIONS: "${HOTSHOP_DEMO_JAVA_TOOL_OPTIONS:--XX:TieredStopAtLevel=1}"
     ports: !override ["127.0.0.1::8088"]
   portal-service:
+    build:
+      args:
+        BUILD_JAVA_TOOL_OPTIONS: "${HOTSHOP_DEMO_JAVA_TOOL_OPTIONS:--XX:TieredStopAtLevel=1}"
+    # Work around the reproducible local Docker Desktop C2 crash.
+    environment:
+      JAVA_TOOL_OPTIONS: "${HOTSHOP_DEMO_JAVA_TOOL_OPTIONS:--XX:TieredStopAtLevel=1}"
     ports: !override ["127.0.0.1::8080"]
   task-service:
+    build:
+      args:
+        BUILD_JAVA_TOOL_OPTIONS: "${HOTSHOP_DEMO_JAVA_TOOL_OPTIONS:--XX:TieredStopAtLevel=1}"
+    # Work around the reproducible local Docker Desktop C2 crash.
+    environment:
+      JAVA_TOOL_OPTIONS: "${HOTSHOP_DEMO_JAVA_TOOL_OPTIONS:--XX:TieredStopAtLevel=1}"
     ports: !override ["127.0.0.1::8888"]
   agent-service:
     ports: !override ["127.0.0.1::8090"]
   web-demo:
+    restart: unless-stopped
     build:
       context: ./web
       dockerfile: Dockerfile

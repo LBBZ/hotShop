@@ -8,6 +8,8 @@ HotShop 围绕商品浏览、普通购买、秒杀预约、订单支付和后台
 
 项目的设计重点是三件事：**用原子预约承接秒杀请求，用事务与幂等保证订单处理，用明确的权限和确认流程把 AI 接入真实业务。**
 
+Docker 开发、验证结果与升级注意事项见 [2026-09-30 优化记录](docs/quality/modernization-2026-09-30.md) 和 [2026-10-01 Spring Boot 4 升级记录](docs/quality/boot4-upgrade-2026-10-01.md)。
+
 ## 功能概览
 
 | 场景 | 功能 |
@@ -70,9 +72,9 @@ flowchart LR
 | 层次 | 技术 |
 | --- | --- |
 | 前端 | React 19、TypeScript、Vite、pnpm、Nginx |
-| 交易与后台 | Java 21、Spring Boot 3.5、Spring Security、MyBatis |
-| 数据与缓存 | MySQL 8、Flyway、两个独立 Redis 实例 |
-| 异步处理 | Redis Lua / Stream、RabbitMQ、Transactional Outbox |
+| 交易与后台 | Java 21、Spring Boot 4.1、Jackson 3、Spring Security、MyBatis |
+| 数据与缓存 | MySQL 8.4 LTS、Flyway、两个独立 Redis 8.8 实例 |
+| 异步处理 | Redis Lua / Stream、RabbitMQ 4.3、Transactional Outbox |
 | AI | Python 3.12、FastAPI、LangGraph、Qdrant |
 | 部署与观测 | Docker Compose、Prometheus、Grafana、Loki、Tempo、Alloy |
 
@@ -108,7 +110,9 @@ sequenceDiagram
 
 ### 2. 两个 Redis 实例对应两种数据生命周期
 
-`redis-cache` 保存缓存、限流及安全临时状态，使用可淘汰策略；`redis-seckill` 保存库存预约、幂等结果和待消费事件，使用 `noeviction`、AOF 与 RDB。
+`redis-cache` 保存缓存、限流及 Agent 会话临时状态，使用可淘汰策略；`redis-seckill` 保存库存预约、幂等结果和待消费事件，使用 `noeviction`、AOF 与 RDB。
+
+JWT 撤销与客户端断言防重放记录保存在 MySQL `security_token_marker`，覆盖 JWT 时钟容差；缓存淘汰不会解除撤销或防重放限制。Task 定期按到期索引有界清理记录。
 
 采用独立实例，是因为缓存数据和预约数据对内存淘汰的要求不同。隔离后，普通缓存增长不会按缓存淘汰规则挤掉秒杀预约和待处理事件，两类数据也可以分别配置资源和持久化策略。
 

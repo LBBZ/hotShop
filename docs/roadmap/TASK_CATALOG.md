@@ -60,8 +60,8 @@
 
 ### 工作范围
 
-- 升级 Java 21 和当前稳定的 Spring Boot 3.5.x，统一 Spring 依赖版本管理。
-- 校验 MyBatis Starter 3.0.x 与其他依赖兼容性，删除无必要的显式 Spring 版本。
+- 升级 Java 21 和Spring Boot 4.1.1，统一 Spring 依赖版本管理。
+- 校验 MyBatis Spring Boot Starter 4.1.0 与其他依赖兼容性，删除无必要的显式 Spring 版本。
 - 补全并验证 Maven Wrapper，固定插件版本和 UTF-8 编码。
 - 配置编译、单元测试、集成测试分层执行，以及合理的构建失败策略。
 - 修复升级造成的编译或测试问题，但不改变交易架构。
@@ -70,7 +70,7 @@
 ### 验收标准
 
 - Windows 和 Linux 容器均可使用 `./mvnw` 或 `mvnw.cmd` 构建。
-- `java.version` 为 21，Spring Boot 统一为选定的 3.5.x。
+- `java.version` 为 21，Spring Boot 统一为选定的 4.1.1。
 - 所有模块完成 clean verify；如旧测试需要外部环境，应被明确分到集成测试而非直接跳过。
 - README 中不再要求开发者自行安装不一致的 Maven 版本。
 

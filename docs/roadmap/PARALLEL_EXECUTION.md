@@ -107,7 +107,7 @@ docker-compose.yml、.dockerignore、docker/**、Java 生产代码、application
 git status 中会出现 TASK-03 和用户的改动，不得还原、删除、格式化、暂存或提交它们。
 
 要求：
-- Java 21、当前稳定的 Spring Boot 3.5.x、MyBatis 3.0.x；
+- Java 21、Spring Boot 4.1.1、MyBatis Spring Boot Starter 4.1.0；
 - 补全 Maven Wrapper，统一 UTF-8 和构建插件；
 - 把外部依赖测试与默认单元测试正确分层，不得靠 skipTests 制造绿色；
 - 解决或明确规避 TASK-00 记录的 Maven 依赖解析/可复现构建问题；

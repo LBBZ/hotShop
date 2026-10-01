@@ -9,12 +9,12 @@ import org.mybatis.spring.SqlSessionTemplate;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.mysql.MySQLContainer;
 import java.math.BigDecimal;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class InventoryEditContainerTest {
-    static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0.46")
+    static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.4.11")
             .withCommand("--log-bin-trust-function-creators=1");
     static JdbcTemplate jdbc;
     static ProductMapper mapper;

@@ -1,6 +1,7 @@
 package com.real.portal;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.real.common.api.dto.MockPaymentCallbackResponse;
 import com.real.domain.payment.MockPaymentProperties;
 import com.real.domain.payment.MockPaymentProvider;
@@ -22,7 +23,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
 import org.springframework.transaction.interceptor.TransactionInterceptor;
 import org.springframework.transaction.support.TransactionTemplate;
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.mysql.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
@@ -40,7 +41,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Testcontainers
 class PaymentTerminalRaceContainerTest {
     @Container
-    static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0.46")
+    static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.4.11")
             .withDatabaseName("hotshop_payment_race").withUsername("hotshop").withPassword("hotshop-test")
             .withCommand("--log-bin-trust-function-creators=1");
 
@@ -66,7 +67,7 @@ class PaymentTerminalRaceContainerTest {
         jdbc = new JdbcTemplate(dataSource);
         transactionManager = new DataSourceTransactionManager(dataSource);
         tx = new TransactionTemplate(transactionManager);
-        json = new ObjectMapper().findAndRegisterModules();
+        json = JsonMapper.builder().findAndAddModules().build();
 
         MockPaymentProperties properties = new MockPaymentProperties();
         properties.setEnabled(true);

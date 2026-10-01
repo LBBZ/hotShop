@@ -30,7 +30,7 @@ import com.real.common.api.dto.MockPaymentCallbackResponse;
 import com.real.common.api.dto.MockPaymentActionResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.http.HttpHeaders;
@@ -650,6 +650,21 @@ class PortalApiContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.paths['/provider-callbacks/v1/mock-payment'].post").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/payments/{paymentNo}']").doesNotExist());
+    }
+
+    @Test
+    void runtimeUserSchemaPreservesNullableSseAndDescribesExistingInputValidation() throws Exception {
+        mockMvc.perform(get("/v3/api-docs/user"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.components.schemas.SseEmitter.properties.timeout.type")
+                        .value(org.hamcrest.Matchers.containsInAnyOrder("integer", "null")))
+                .andExpect(jsonPath("$.components.schemas.SseEmitter.properties.timeout.format").value("int64"))
+                .andExpect(jsonPath("$.components.schemas.CreateOrderItemRequest.properties.quantity.exclusiveMinimum")
+                        .value(0))
+                .andExpect(jsonPath("$.components.schemas.MockPaymentActionRequest.properties.delay.type")
+                        .value("string"))
+                .andExpect(jsonPath("$.components.schemas.MockPaymentActionRequest.properties.delay.format")
+                        .value("duration"));
     }
 
     @Test

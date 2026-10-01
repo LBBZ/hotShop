@@ -1,7 +1,7 @@
-# 生产环境配置（完全保持原有内容）
+# Production processes share a schema; use distinct least-privilege database users.
 spring:
   datasource:
-    url: jdbc:mysql://${DB_HOST:prod-db}:3306/hotShop_prod?useSSL=false&serverTimezone=UTC
+    url: jdbc:mysql://${DB_HOST:prod-db}:${DB_PORT:3306}/${DB_NAME:hotShop_portal_prod}?sslMode=${DB_SSL_MODE:VERIFY_IDENTITY}&serverTimezone=UTC
     username: ${DB_USER:prod_admin}
     password: ${DB_PASSWORD}
   data:

@@ -1,7 +1,10 @@
 package com.real.admin;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.rabbitmq.client.Channel;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import com.real.admin.controller.AdminProductController;
 import com.real.admin.service.AdminProductAuditService;
 import com.real.common.handler.GlobalExceptionHandler;
@@ -51,7 +54,6 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -61,7 +63,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
 import org.springframework.transaction.interceptor.TransactionInterceptor;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.mysql.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
@@ -88,12 +90,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Testcontainers
 class InventoryReconciliationJointContainerTest {
     @Container
-    static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0.46")
+    static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.4.11")
             .withDatabaseName("hotshop_review_joint").withUsername("hotshop").withPassword("joint-test")
             .withCommand("--log-bin-trust-function-creators=1");
     @Container
-    static final GenericContainer<?> REDIS = new GenericContainer<>("redis:8.8.1-alpine")
+    static final GenericContainer<?> REDIS = new GenericContainer<>("redis:8.8.3-alpine")
             .withExposedPorts(6379);
+    static HikariDataSource source;
     static JdbcTemplate jdbc;
     static ObjectMapper json;
     static ProductMapper products;
@@ -111,11 +114,21 @@ class InventoryReconciliationJointContainerTest {
 
     @BeforeAll
     static void setup() throws Exception {
-        var source = new DriverManagerDataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword());
+        // Match production connection reuse: reconciliation issues many small JDBC statements.
+        // Opening a fresh TCP connection per statement adds Docker Desktop NAT churn to this test.
+        var pool = new HikariConfig();
+        pool.setJdbcUrl(MYSQL.getJdbcUrl());
+        pool.setUsername(MYSQL.getUsername());
+        pool.setPassword(MYSQL.getPassword());
+        pool.setMaximumPoolSize(4);
+        pool.setMinimumIdle(1);
+        pool.setConnectionTimeout(5000);
+        pool.setValidationTimeout(3000);
+        source = new HikariDataSource(pool);
         Flyway.configure().dataSource(source).locations("classpath:db/migration").load().migrate();
         jdbc = new JdbcTemplate(source);
         transactions = new DataSourceTransactionManager(source);
-        json = new ObjectMapper().findAndRegisterModules();
+        json = JsonMapper.builder().findAndAddModules().build();
         var factory = new SqlSessionFactoryBean();
         factory.setDataSource(source);
         factory.setTypeAliasesPackage("com.real.domain.entity");
@@ -167,6 +180,7 @@ class InventoryReconciliationJointContainerTest {
         SecurityContextHolder.clearContext();
         if (connection != null) connection.destroy();
         if (meters != null) meters.close();
+        if (source != null) source.close();
     }
 
     @Test

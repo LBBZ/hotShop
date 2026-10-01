@@ -29,6 +29,11 @@ class AgentMetrics:
             ("outcome",),
             registry=self.registry,
         )
+        self.first_delta_latency = Histogram(
+            "hotshop_agent_first_delta_seconds",
+            "Time to the first user-visible answer delta",
+            registry=self.registry,
+        )
         self.latency = Histogram(
             "hotshop_agent_latency_seconds",
             "End-to-end Agent run latency",

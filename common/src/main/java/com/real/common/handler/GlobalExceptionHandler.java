@@ -10,6 +10,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -325,11 +326,21 @@ public class GlobalExceptionHandler {
             Exception exception,
             HttpServletRequest request
     ) {
-        LOGGER.error(
-                "Unhandled request failure requestId={} traceId={}",
-                RequestContext.requestId(request),
-                RequestContext.traceId(request)
-        );
+        String previousErrorType = MDC.get("errorType");
+        try {
+            MDC.put("errorType", exception.getClass().getName());
+            LOGGER.error(
+                    "Unhandled request failure requestId={} traceId={}",
+                    RequestContext.requestId(request),
+                    RequestContext.traceId(request)
+            );
+        } finally {
+            if (previousErrorType == null) {
+                MDC.remove("errorType");
+            } else {
+                MDC.put("errorType", previousErrorType);
+            }
+        }
         return response(
                 request,
                 HttpStatus.INTERNAL_SERVER_ERROR,

@@ -1,3 +1,5 @@
+import { readStreamChunk } from "@/api/core/stream-reader";
+
 export type AgentEventType =
   | "session.created"
   | "message.started"
@@ -77,6 +79,18 @@ const dataKeys: Record<AgentEventType, ReadonlySet<string>> = {
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const maxFrameCharacters = 64_000;
+export const AGENT_STREAM_IDLE_TIMEOUT_MS = 45_000;
+export type AgentRunOutcome =
+  | "COMPLETED"
+  | "FAILED"
+  | "CANCELLED"
+  | "TIMED_OUT";
+const terminalStates: ReadonlySet<string> = new Set<AgentRunOutcome>([
+  "COMPLETED",
+  "FAILED",
+  "CANCELLED",
+  "TIMED_OUT",
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -123,8 +137,9 @@ function dataShapeIsSafe(type: AgentEventType, data: Record<string, unknown>) {
       );
     case "message.started":
     case "message.completed":
-    case "done":
       return safeString(data.state, 50);
+    case "done":
+      return typeof data.state === "string" && terminalStates.has(data.state);
     case "message.delta":
       return safeString(data.delta, 16_000);
     case "tool.started":
@@ -231,7 +246,8 @@ export async function consumeAgentSse(
   expected: { sessionId: string; runId: string },
   onEvent: (event: AgentStreamEvent) => void,
   signal: AbortSignal,
-) {
+  idleTimeoutMs = AGENT_STREAM_IDLE_TIMEOUT_MS,
+): Promise<AgentRunOutcome> {
   if (!response.ok || !response.body)
     throw new Error("Agent stream is unavailable.");
   const contentType = response.headers.get("content-type") ?? "";
@@ -242,53 +258,61 @@ export async function consumeAgentSse(
   const decoder = new TextDecoder();
   let buffer = "";
   let lastSequence = 0;
-  const abort = () => void reader.cancel();
-  signal.addEventListener("abort", abort, { once: true });
+  // CRLF, LF and CR can be mixed or split across transport chunks.
+  const frameBoundary =
+    /(?:\r\n|\r(?!\n)|(?<!\r)\n)(?:\r\n|\r(?!\n)|(?<!\r)\n)/u;
   try {
     while (!signal.aborted) {
-      const { done, value } = await reader.read();
+      const { done, value } = await readStreamChunk(
+        reader,
+        signal,
+        idleTimeoutMs,
+        () => new Error("Agent 连接长时间没有响应，回答尚未完成。请重试。"),
+      );
       buffer += decoder.decode(value, { stream: !done });
+      let delimiter = frameBoundary.exec(buffer);
+      while (delimiter?.index !== undefined) {
+        const rawFrame = buffer.slice(0, delimiter.index);
+        buffer = buffer.slice(delimiter.index + delimiter[0].length);
+        if (rawFrame.length > maxFrameCharacters) {
+          throw new Error("Agent stream frame exceeded its safe size.");
+        }
+        const lines = rawFrame.split(/\r\n|\r|\n/u);
+        const eventLine = lines.find((line) => line.startsWith("event:"));
+        const dataLines = lines
+          .filter((line) => line.startsWith("data:"))
+          .map((line) => line.slice(5).trimStart());
+        if (eventLine && dataLines.length > 0) {
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(dataLines.join("\n"));
+          } catch {
+            parsed = null;
+          }
+          const event = guardAgentEvent(parsed, expected);
+          if (
+            event &&
+            eventLine.slice(6).trim() === event.type &&
+            event.sequence > lastSequence
+          ) {
+            lastSequence = event.sequence;
+            onEvent(event);
+            if (event.type === "done")
+              return event.data.state as AgentRunOutcome;
+          }
+        }
+        delimiter = frameBoundary.exec(buffer);
+      }
+      // This limit applies to one incomplete frame, never the combined network chunk.
       if (buffer.length > maxFrameCharacters) {
         throw new Error("Agent stream frame exceeded its safe size.");
       }
-      const frames: string[] = [];
-      let delimiter = /\r\n\r\n|\n\n|\r\r/u.exec(buffer);
-      while (delimiter?.index !== undefined) {
-        frames.push(buffer.slice(0, delimiter.index));
-        buffer = buffer.slice(delimiter.index + delimiter[0].length);
-        delimiter = /\r\n\r\n|\n\n|\r\r/u.exec(buffer);
-      }
-      for (const rawFrame of frames) {
-        const frame = rawFrame.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
-        const eventLine = frame
-          .split("\n")
-          .find((line) => line.startsWith("event:"));
-        const dataLines = frame
-          .split("\n")
-          .filter((line) => line.startsWith("data:"))
-          .map((line) => line.slice(5).trimStart());
-        if (!eventLine || dataLines.length === 0) continue;
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(dataLines.join("\n"));
-        } catch {
-          continue;
-        }
-        const event = guardAgentEvent(parsed, expected);
-        if (
-          !event ||
-          eventLine.slice(6).trim() !== event.type ||
-          event.sequence <= lastSequence
-        ) {
-          continue;
-        }
-        lastSequence = event.sequence;
-        onEvent(event);
-      }
-      if (done) break;
+      if (done) throw new Error("Agent 连接中断，回答尚未完成。请重试。");
     }
+    throw new DOMException("Agent 请求已取消", "AbortError");
   } finally {
-    signal.removeEventListener("abort", abort);
+    // Release the HTTP stream on completion, malformed input, timeout and cancellation.
+    await reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
 }

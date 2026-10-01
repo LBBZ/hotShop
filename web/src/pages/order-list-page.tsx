@@ -2,6 +2,8 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { ArrowRight, ReceiptText } from "lucide-react";
 import { Link } from "react-router-dom";
 
+import { useUserQueryKey } from "@/auth/query-scope";
+
 import { apiClients } from "@/api/clients";
 import {
   EmptyState,
@@ -13,10 +15,13 @@ import { Button } from "@/components/ui/button";
 
 export function OrderListPage() {
   const query = useInfiniteQuery({
-    queryKey: ["my-orders"],
+    queryKey: useUserQueryKey("my-orders"),
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) =>
-      apiClients.user.orders.getOrders({ limit: 10, cursor: pageParam }),
+    queryFn: ({ pageParam, signal }) =>
+      apiClients.user.orders.getOrders(
+        { limit: 10, cursor: pageParam },
+        { signal },
+      ),
     getNextPageParam: (page) => page.nextCursor ?? undefined,
   });
   const orders = query.data?.pages.flatMap((page) => page.items) ?? [];

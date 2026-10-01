@@ -11,6 +11,7 @@ import com.real.security.util.JwtTokenUtil;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.dao.DataAccessException;
+import org.springframework.transaction.TransactionException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.stereotype.Service;
 
@@ -84,7 +85,7 @@ public class AgentTokenExchangeService {
             );
         } catch (ApiException | BadCredentialsException exception) {
             throw exception;
-        } catch (DataAccessException exception) {
+        } catch (DataAccessException | TransactionException exception) {
             throw ApiException.serviceUnavailable(
                     "AUTHENTICATION_SERVICE_UNAVAILABLE",
                     "Authentication services are temporarily unavailable"

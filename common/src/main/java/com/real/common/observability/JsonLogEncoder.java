@@ -3,8 +3,8 @@ package com.real.common.observability;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.classic.spi.IThrowableProxy;
 import ch.qos.logback.core.encoder.EncoderBase;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -13,7 +13,7 @@ import java.util.Map;
 
 /** Small dependency-free JSON encoder with a deliberately narrow, redacted schema. */
 public final class JsonLogEncoder extends EncoderBase<ILoggingEvent> {
-    private static final ObjectMapper JSON = new ObjectMapper();
+    private static final JsonMapper JSON = JsonMapper.builder().build();
     private String service = "unknown";
     private String environment = "local";
 
@@ -52,13 +52,13 @@ public final class JsonLogEncoder extends EncoderBase<ILoggingEvent> {
         try {
             return (JSON.writeValueAsString(json) + System.lineSeparator())
                     .getBytes(StandardCharsets.UTF_8);
-        } catch (JsonProcessingException exception) {
+        } catch (JacksonException exception) {
             return ("{\"timestamp\":\"" + Instant.now()
                     + "\",\"level\":\"ERROR\",\"service\":\"logging\","
                     + "\"environment\":\"" + safe(environment)
                     + "\",\"event\":\"logging.encode.failure\",\"name\":\"logger\","
                     + "\"requestId\":\"\",\"traceId\":\"\",\"spanId\":\"\","
-                    + "\"outcome\":\"failure\",\"errorType\":\"JsonProcessingException\"}"
+                    + "\"outcome\":\"failure\",\"errorType\":\"JacksonException\"}"
                     + System.lineSeparator()).getBytes(StandardCharsets.UTF_8);
         }
     }

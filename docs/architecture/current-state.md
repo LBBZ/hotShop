@@ -38,7 +38,7 @@ Compose 定义基础设施、一次性 `database-migrator`、`app`、`agent`、`
 
 ## 2. 模块与依赖事实
 
-根 [pom.xml](../../pom.xml) 固定 Java 21、Spring Boot 3.5.16、MyBatis Starter 3.0.5；使用仓库 Maven Wrapper。React/TypeScript/Vite 位于 `web`，Python FastAPI/LangGraph 位于 `agent`，精确依赖以各 lockfile 为准。
+根 [pom.xml](../../pom.xml) 固定 Java 21、Spring Boot 4.1.1、Jackson 3.1.7、MyBatis Spring Boot Starter 4.1.0；使用仓库 Maven Wrapper。React/TypeScript/Vite 位于 `web`，Python FastAPI/LangGraph 位于 `agent`，精确依赖以各 lockfile 为准。
 
 | 模块 | 职责 |
 | --- | --- |

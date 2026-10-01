@@ -70,6 +70,15 @@ jobs:
           & ./script/ci/tests/test_task19_native_preference.ps1
           & ./script/ci/tests/test_compose_cleanup_ownership.ps1
           & ./script/ci/tests/test_task19_resource_ownership.ps1
+      - name: Verify Prometheus alert semantics
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --network none \
+            -v "$PWD/docker/observability/prometheus:/rules:ro" -w /rules \
+            --entrypoint /bin/promtool \
+            prom/prometheus@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996 \
+            test rules alerts.test.yml
       - name: Validate workflow syntax
         shell: bash
         run: |

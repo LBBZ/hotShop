@@ -1,7 +1,7 @@
 package com.real.admin.agenttools;
 
 import com.real.common.audit.AuditResourceType;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.real.common.api.ApiException;
 import com.real.common.api.RequestContext;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,7 +43,7 @@ class AdminAgentToolServiceTest {
         auditService = mock(AdminAgentToolAuditService.class);
         service = new AdminAgentToolService(
                 jdbcTemplate,
-                new ObjectMapper(),
+                JsonMapper.builder().build(),
                 auditService,
                 Clock.fixed(NOW, ZoneOffset.UTC)
         );

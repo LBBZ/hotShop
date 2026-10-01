@@ -5,7 +5,7 @@ import jakarta.validation.constraints.*;
 
 public record AdminStockAdjustmentRequest(
         @NotNull
-        @com.fasterxml.jackson.databind.annotation.JsonDeserialize(
+        @tools.jackson.databind.annotation.JsonDeserialize(
                 using = com.real.common.api.json.StrictSignedIntegerDeserializer.class)
         Integer delta,
         @NotBlank @Pattern(regexp = "^(0|[1-9][0-9]{0,9})$")

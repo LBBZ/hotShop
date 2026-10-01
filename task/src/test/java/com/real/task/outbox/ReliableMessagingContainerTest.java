@@ -1,7 +1,7 @@
 package com.real.task.outbox;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.mysql.cj.jdbc.MysqlDataSource;
 import com.real.common.enums.OrderStatus;
 import com.real.common.exception.InventoryShortageException;
@@ -36,8 +36,8 @@ import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
 import org.springframework.transaction.interceptor.TransactionInterceptor;
 import org.springframework.transaction.support.TransactionTemplate;
-import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.containers.RabbitMQContainer;
+import org.testcontainers.mysql.MySQLContainer;
+import org.testcontainers.rabbitmq.RabbitMQContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
@@ -68,12 +68,12 @@ import static org.awaitility.Awaitility.await;
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class ReliableMessagingContainerTest {
     @Container
-    static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0.46")
+    static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.4.11")
             .withDatabaseName("hotshop_reliable").withUsername("hotshop").withPassword("hotshop-test")
             .withCommand("--log-bin-trust-function-creators=1");
     @Container
     static final RabbitMQContainer RABBIT = new RabbitMQContainer(DockerImageName.parse(
-            "rabbitmq:4.2.9-management-alpine@sha256:009a0e55d269a643930f797016d48aebe100986bc5ea836fea195199b26633ac"
+            "rabbitmq:4.3.6-management-alpine@sha256:95312f53d5b1115d410f1a56fba03a6325e3e03b4c60a845237bd345f341a097"
     ).asCompatibleSubstituteFor("rabbitmq"));
 
     static JdbcTemplate jdbc;

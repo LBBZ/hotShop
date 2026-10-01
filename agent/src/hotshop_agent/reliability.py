@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+from hotshop_agent.metrics import AgentMetrics
 from hotshop_agent.providers.base import (
     ModelChunk,
     ModelPermanentError,
@@ -147,6 +148,7 @@ class ReliableModel:
         retry_base_seconds: float,
         breaker: CircuitBreaker,
         limiter: ConcurrencyLimiter,
+        metrics: AgentMetrics | None = None,
     ) -> None:
         validate_model_capabilities(provider.capabilities)
         self.provider = provider
@@ -155,6 +157,7 @@ class ReliableModel:
         self.retry_base_seconds = retry_base_seconds
         self.breaker = breaker
         self.limiter = limiter
+        self.metrics = metrics
 
     async def stream(
         self,
@@ -165,6 +168,7 @@ class ReliableModel:
             emitted = False
             for attempt in range(self.max_retries + 1):
                 admission = self.breaker.before_call()
+                outcome = "failure"
                 try:
                     async with asyncio.timeout(self.timeout_seconds):
                         source = self.provider.stream(prompt)
@@ -187,6 +191,7 @@ class ReliableModel:
                                     if primary_error is None:
                                         raise
                     self.breaker.success(admission)
+                    outcome = "success"
                     return
                 except TimeoutError as exc:
                     self.breaker.failure(admission)
@@ -203,4 +208,9 @@ class ReliableModel:
                     raise
                 finally:
                     self.breaker.release(admission)
+                    if self.metrics is not None:
+                        capability = self.provider.capabilities
+                        self.metrics.provider_requests.labels(
+                            capability.provider_name, capability.model_name, outcome
+                        ).inc()
                 await asyncio.sleep(self.retry_base_seconds * (2**attempt))

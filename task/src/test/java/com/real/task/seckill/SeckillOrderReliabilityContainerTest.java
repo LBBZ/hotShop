@@ -1,7 +1,10 @@
 package com.real.task.seckill;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import com.real.infrastructure.redis.SeckillRedisKeys;
+import com.real.task.security.SecurityTokenMarkerCleanup;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.tracing.Tracer;
@@ -25,13 +28,12 @@ import org.springframework.data.redis.connection.stream.StreamReadOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 import org.testcontainers.DockerClientFactory;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.mysql.MySQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
 import javax.sql.DataSource;
@@ -56,14 +58,14 @@ import static org.mockito.Mockito.when;
 
 @SpringJUnitConfig(SeckillOrderReliabilityContainerTest.TestConfiguration.class)
 class SeckillOrderReliabilityContainerTest {
-    private static final MySQLContainer<?> MYSQL =
-            new MySQLContainer<>(DockerImageName.parse("mysql:8.0.46"))
+    private static final MySQLContainer MYSQL =
+            new MySQLContainer(DockerImageName.parse("mysql:8.4.11"))
                     .withDatabaseName("hotshop")
                     .withUsername("hotshop")
                     .withPassword("hotshop")
                     .withCommand("--log-bin-trust-function-creators=1");
     private static final GenericContainer<?> REDIS =
-            new GenericContainer<>(DockerImageName.parse("redis:8.8.1-alpine"))
+            new GenericContainer<>(DockerImageName.parse("redis:8.8.3-alpine"))
                     .withExposedPorts(6379);
 
     static {
@@ -103,11 +105,16 @@ class SeckillOrderReliabilityContainerTest {
     @jakarta.annotation.Resource
     private SeckillOrderMetrics metrics;
 
+    @jakarta.annotation.Resource
+    private MeterRegistry meterRegistry;
+
     @BeforeEach
     void resetPersistentState() {
         failpoint.clear();
         properties.setReconciliationDryRun(true);
         properties.setReconciliationBatch(200);
+        properties.setReconciliationActivities(1);
+        properties.setReconciliationTimeBudget(Duration.ofSeconds(2));
         properties.setAutoRepair(false);
         redis.getConnectionFactory().getConnection().serverCommands().flushDb();
         await().atMost(Duration.ofSeconds(30)).ignoreExceptions().untilAsserted(() -> {
@@ -125,12 +132,29 @@ class SeckillOrderReliabilityContainerTest {
                     "catalog_product",
                     "payment_order",
                     "refresh_token",
+                    "security_token_marker",
                     "audit_log",
                     "app_user"
             )) {
                 jdbc.execute("TRUNCATE TABLE " + table);
             }
         });
+    }
+
+    @Test
+    void markerCleanupDeletesExpiredEntriesAndPreservesLiveAuthenticationState() {
+        jdbc.update("""
+                INSERT INTO security_token_marker(marker_type, token_hash, expires_at) VALUES
+                    ('REVOKED_ACCESS', REPEAT('a', 64), UTC_TIMESTAMP(6) - INTERVAL 1 SECOND),
+                    ('CLIENT_ASSERTION', REPEAT('b', 64), UTC_TIMESTAMP(6) - INTERVAL 1 SECOND),
+                    ('REVOKED_ACCESS', REPEAT('c', 64), UTC_TIMESTAMP(6) + INTERVAL 1 HOUR),
+                    ('CLIENT_ASSERTION', REPEAT('d', 64), UTC_TIMESTAMP(6) + INTERVAL 1 HOUR)
+                """);
+
+        new SecurityTokenMarkerCleanup(jdbc).removeExpiredMarkers();
+
+        assertThat(jdbc.queryForList("SELECT token_hash FROM security_token_marker", String.class))
+                .containsExactlyInAnyOrder("c".repeat(64), "d".repeat(64));
     }
 
     @Test
@@ -148,7 +172,12 @@ class SeckillOrderReliabilityContainerTest {
                 SeckillRedisKeys.reservationStream(12)
         );
 
+        consumer.refreshLag();
+        assertThat(meterRegistry.get("hotshop.seckill.stream.lag").gauge().value()).isEqualTo(2);
+        assertThat(meterRegistry.get("hotshop.seckill.stream.lag.known").gauge().value()).isEqualTo(1);
         pollUntilOrders(2);
+        consumer.refreshLag();
+        assertThat(meterRegistry.get("hotshop.seckill.stream.lag").gauge().value()).isZero();
 
         assertThat(count("sales_order")).isEqualTo(2);
         assertThat(redis.opsForHash().get(first.reservationKey(), "status"))
@@ -805,6 +834,89 @@ class SeckillOrderReliabilityContainerTest {
     }
 
     @Test
+    void multipleActivitiesShareEventBudgetAndResumeWithoutStarvation() throws Exception {
+        loadActivityWithoutConsumer(301, 401);
+        loadActivityWithoutConsumer(302, 402);
+        for (int i = 0; i < 3; i++) {
+            appendAccepted(accepted(31000 + i, 301, 401, 41000 + i, 1, "1.00"));
+            appendAccepted(accepted(32000 + i, 302, 402, 42000 + i, 1, "1.00"));
+        }
+        properties.setReconciliationActivities(2);
+        properties.setReconciliationBatch(4);
+        properties.setReconciliationTimeBudget(Duration.ofSeconds(30));
+        try {
+            var first = reconciliationService.runBatch();
+            assertThat(first.checkedEvents()).isEqualTo(4);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM seckill_reconciliation_checkpoint "
+                    + "WHERE checkpoint_name IN ('reservation-stream-301','reservation-stream-302') "
+                    + "AND cursor_value <> '0-0'", Integer.class)).isEqualTo(2);
+            var next = reconciliationService.runBatch();
+            assertThat(next.checkedEvents()).isEqualTo(2);
+        } finally {
+            properties.setReconciliationActivities(1);
+            properties.setReconciliationTimeBudget(Duration.ofSeconds(2));
+        }
+    }
+
+    @Test
+    void emptyActivityCannotInflateConservationOrPendingBudgetForLaterActivities() throws Exception {
+        loadActivityWithoutConsumer(303, 403);
+        loadActivityWithoutConsumer(304, 404);
+        String secondStream = SeckillRedisKeys.reservationStream(304);
+        for (int i = 0; i < 3; i++) {
+            appendAccepted(accepted(34000 + i, 304, 404, 44000 + i, 1, "1.00"));
+        }
+        consumer.refreshStreams();
+        redis.opsForStream().read(Consumer.from(properties.getGroupName(), "budget-test"),
+                StreamReadOptions.empty().count(3),
+                StreamOffset.create(secondStream, ReadOffset.lastConsumed()));
+        properties.setReconciliationActivities(2);
+        properties.setReconciliationBatch(4);
+        properties.setReconciliationTimeBudget(Duration.ofSeconds(30));
+
+        try (var connection = redis.getConnectionFactory().getConnection()) {
+            connection.serverCommands().setConfig("slowlog-log-slower-than", "0");
+            var commands = (io.lettuce.core.api.async.RedisAsyncCommands<byte[], byte[]>)
+                    connection.getNativeConnection();
+            commands.slowlogReset().toCompletableFuture().join();
+            try {
+                assertThat(reconciliationService.runBatch().checkedEvents()).isEqualTo(2);
+                var log = commands.slowlogGet(128).toCompletableFuture().join();
+                assertThat(commands.slowlogLen().toCompletableFuture().join()).isLessThan(128L);
+                int rangeBudget = 0;
+                int pendingBudget = 0;
+                int pendingPages = 0;
+                for (Object item : log) {
+                    var entry = (List<?>) item;
+                    var command = (List<?>) entry.get(3);
+                    List<String> args = command.stream()
+                            .map(value -> new String((byte[]) value, StandardCharsets.UTF_8)).toList();
+                    if (args.getFirst().equalsIgnoreCase("XRANGE")) {
+                        int count = -1;
+                        for (int i = 0; i < args.size(); i++) {
+                            if (args.get(i).equalsIgnoreCase("COUNT")) count = i;
+                        }
+                        assertThat(count).as("Every event and Lua conservation page is bounded").isPositive();
+                        rangeBudget += Integer.parseInt(args.get(count + 1));
+                    } else if (args.getFirst().equalsIgnoreCase("XPENDING") && args.size() >= 6) {
+                        pendingBudget += Integer.parseInt(args.get(5));
+                        pendingPages++;
+                    }
+                }
+                assertThat(rangeBudget).as("Event and conservation scans each share batch=4").isEqualTo(8);
+                assertThat(pendingPages).isEqualTo(2);
+                assertThat(pendingBudget).as("Both PEL pages share batch=4, even after an empty activity")
+                        .isEqualTo(4);
+            } finally {
+                connection.serverCommands().setConfig("slowlog-log-slower-than", "10000");
+            }
+        } finally {
+            properties.setReconciliationActivities(1);
+            properties.setReconciliationTimeBudget(Duration.ofSeconds(2));
+        }
+    }
+
+    @Test
     void review04PendingWrongTypeStillPropagatesRedisFailure() {
         String stream = SeckillRedisKeys.reservationStream(129);
         redis.opsForValue().set(stream, "not-a-stream");
@@ -1145,17 +1257,22 @@ class SeckillOrderReliabilityContainerTest {
     @Configuration(proxyBeanMethods = false)
     @EnableTransactionManagement
     static class TestConfiguration {
-        @Bean
-        DataSource dataSource() {
-            DriverManagerDataSource dataSource = new DriverManagerDataSource();
-            dataSource.setDriverClassName("com.mysql.cj.jdbc.Driver");
+        @Bean(destroyMethod = "close")
+        HikariDataSource dataSource() {
+            // Reuse a bounded number of connections as production does. A fresh TCP
+            // connection for every reconciliation statement adds unnecessary desktop NAT churn.
+            HikariConfig dataSource = new HikariConfig();
             String jdbcUrl = MYSQL.getJdbcUrl();
-            dataSource.setUrl(jdbcUrl
+            dataSource.setJdbcUrl(jdbcUrl
                     + (jdbcUrl.contains("?") ? "&" : "?")
                     + "connectTimeout=5000&socketTimeout=5000");
             dataSource.setUsername(MYSQL.getUsername());
             dataSource.setPassword(MYSQL.getPassword());
-            return dataSource;
+            dataSource.setMaximumPoolSize(4);
+            dataSource.setMinimumIdle(1);
+            dataSource.setConnectionTimeout(5000);
+            dataSource.setValidationTimeout(2000);
+            return new HikariDataSource(dataSource);
         }
 
         @Bean

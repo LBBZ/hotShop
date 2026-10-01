@@ -121,6 +121,7 @@ async def test_real_qdrant_rebuild_filter_atomic_update_and_delete(tmp_path: Pat
 
         class FailingEmbedding:
             name = "failing"
+            fingerprint = "0" * 64
             dimension = 128
             max_batch_size = 10
 
@@ -210,6 +211,7 @@ async def test_indexer_uses_provider_batch_capability_for_more_than_100_chunks(
 
     class RecordingEmbedding:
         name = "recording"
+        fingerprint = DeterministicEmbedding(32).fingerprint
         dimension = 32
         max_batch_size = 10
 
@@ -248,3 +250,64 @@ async def test_indexer_uses_provider_batch_capability_for_more_than_100_chunks(
                 chunk_size=800,
                 chunk_overlap=80,
             ).rebuild(Path("knowledge"))
+
+
+@pytest.mark.asyncio
+async def test_model_fingerprint_and_dimension_force_rebuild_with_unchanged_documents() -> None:
+    async with httpx.AsyncClient() as client:
+        store = qdrant_store(client)
+        original = DeterministicEmbedding(128)
+
+        def indexer(embedding: DeterministicEmbedding) -> KnowledgeIndexer:
+            return KnowledgeIndexer(
+                store,
+                embedding,
+                AgentMetrics(),
+                tenant_id="hotshop",
+                chunk_size=800,
+                chunk_overlap=80,
+            )
+
+        baseline = indexer(original)
+        try:
+            first = await baseline.rebuild(Path("knowledge"))
+            changed_model = DeterministicEmbedding(128)
+            changed_model.fingerprint = "f" * 64
+            second = await indexer(changed_model).rebuild(Path("knowledge"))
+            assert first.version != second.version
+            assert first.collection != second.collection
+            protected_store = QdrantStore(
+                client,
+                base_url=os.environ.get("AGENT_QDRANT_URL", "http://qdrant:6333"),
+                alias="hotshop_knowledge",
+                collection_prefix="hotshop_knowledge_v",
+                timeout_seconds=2,
+                max_retries=0,
+                embedding_fingerprint=original.fingerprint,
+            )
+            # Equal vector dimensions must not conceal a model/space mismatch.
+            assert not await protected_store.search(
+                await original.embed_query("如何保护账户"),
+                tenant_id="hotshop",
+                visibilities=allowed_visibilities(IdentityKind.USER),
+                document_types=(DocumentType.FAQ,),
+                now=datetime.now(UTC),
+                limit=3,
+            )
+            changed_dimension = DeterministicEmbedding(64)
+            third = await indexer(changed_dimension).rebuild(Path("knowledge"))
+            assert third.version not in {first.version, second.version}
+            hits = await store.search(
+                await changed_dimension.embed_query("如何保护账户"),
+                tenant_id="hotshop",
+                visibilities=allowed_visibilities(IdentityKind.USER),
+                document_types=(DocumentType.FAQ,),
+                now=datetime.now(UTC),
+                limit=3,
+            )
+            assert hits
+            assert all(
+                hit.chunk.embeddingFingerprint == changed_dimension.fingerprint for hit in hits
+            )
+        finally:
+            await baseline.rebuild(Path("knowledge"))

@@ -20,7 +20,9 @@ public class SeckillOrderProperties {
     private int deterministicFailureAttempts = 3;
     private Duration orderTimeout = Duration.ofMinutes(15);
     private Duration paymentTimeout = Duration.ofMinutes(15);
-    private Duration reconciliationInterval = Duration.ofMinutes(5);
+    private Duration reconciliationInterval = Duration.ofSeconds(30);
+    private int reconciliationActivities = 10;
+    private Duration reconciliationTimeBudget = Duration.ofSeconds(2);
     private int reconciliationBatch = 100;
     private boolean reconciliationDryRun = true;
     private boolean autoRepair = false;
@@ -149,6 +151,22 @@ public class SeckillOrderProperties {
 
     public void setReconciliationInterval(Duration reconciliationInterval) {
         this.reconciliationInterval = positive(reconciliationInterval, "reconciliationInterval");
+    }
+
+    public int getReconciliationActivities() {
+        return reconciliationActivities;
+    }
+
+    public void setReconciliationActivities(int activities) {
+        this.reconciliationActivities = positive(activities, "reconciliationActivities");
+    }
+
+    public Duration getReconciliationTimeBudget() {
+        return reconciliationTimeBudget;
+    }
+
+    public void setReconciliationTimeBudget(Duration budget) {
+        this.reconciliationTimeBudget = positive(budget, "reconciliationTimeBudget");
     }
 
     public int getReconciliationBatch() {

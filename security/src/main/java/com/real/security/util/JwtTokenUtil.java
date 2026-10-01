@@ -1,7 +1,8 @@
 package com.real.security.util;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 import com.real.security.config.SecurityProperties;
 import com.real.security.entity.CustomUserDetails;
 import com.real.security.identity.IdentityType;
@@ -12,13 +13,11 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.MalformedJwtException;
-import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.UnsupportedJwtException;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -194,6 +193,7 @@ public class JwtTokenUtil {
         return ADMIN_AUTHORITIES;
     }
 
+    @SuppressWarnings("deprecation") // Keep the established single-string aud wire contract.
     private IssuedAccessToken issue(
             IdentityType identityType,
             long userId,
@@ -210,15 +210,14 @@ public class JwtTokenUtil {
         Instant expiresAt = issuedAt.plusSeconds(domain.getTtlSeconds());
         String jti = UUID.randomUUID().toString();
         var builder = Jwts.builder()
-                .setHeaderParam("typ", domain.getType())
-                .setHeaderParam("kid", domain.getActiveKid())
-                .setIssuer(domain.getIssuer())
-                .setAudience(domain.getAudience())
-                .setSubject(Long.toString(userId))
-                .setIssuedAt(Date.from(issuedAt))
-                .setNotBefore(Date.from(issuedAt))
-                .setExpiration(Date.from(expiresAt))
-                .setId(jti)
+                .header().type(domain.getType()).keyId(domain.getActiveKid()).and()
+                .issuer(domain.getIssuer())
+                .audience().single(domain.getAudience())
+                .subject(Long.toString(userId))
+                .issuedAt(Date.from(issuedAt))
+                .notBefore(Date.from(issuedAt))
+                .expiration(Date.from(expiresAt))
+                .id(jti)
                 .claim("token_use", domain.getTokenUse())
                 .claim("preferred_username", username);
 
@@ -230,7 +229,7 @@ public class JwtTokenUtil {
         }
 
         String token = builder
-                .signWith(loadPrivateKey(domain.getPrivateKeyPath()), SignatureAlgorithm.RS256)
+                .signWith(loadPrivateKey(domain.getPrivateKeyPath()), Jwts.SIG.RS256)
                 .compact();
         return new IssuedAccessToken(token, jti, expiresAt);
     }
@@ -254,14 +253,19 @@ public class JwtTokenUtil {
         if (!StringUtils.hasText(keyPath)) {
             throw new UnsupportedJwtException("JWT key id is not recognized");
         }
-        Claims claims = Jwts.parserBuilder()
-                .setAllowedClockSkewSeconds(properties.getClockSkewSeconds())
+        Claims claims = Jwts.parser()
+                .clock(() -> Date.from(clock.instant()))
+                .clockSkewSeconds(properties.getClockSkewSeconds())
                 .requireIssuer(issuer)
                 .requireAudience(audience)
-                .setSigningKey(loadPublicKey(keyPath))
+                .verifyWith(loadPublicKey(keyPath))
+                .sig().clear().add(Jwts.SIG.RS256).and()
                 .build()
-                .parseClaimsJws(token)
-                .getBody();
+                .parseSignedClaims(token)
+                .getPayload();
+        if (!Set.of(audience).equals(claims.getAudience())) {
+            throw new MalformedJwtException("Unexpected JWT audiences");
+        }
         validateRequiredTimesAndIdentifiers(claims, maxTtlSeconds);
         return new ParsedJwt(claims);
     }
@@ -278,6 +282,9 @@ public class JwtTokenUtil {
             byte[] decoded = Base64.getUrlDecoder().decode(segments[0]);
             Map<String, Object> values = objectMapper.readValue(decoded, new TypeReference<>() {
             });
+            if (values == null) {
+                throw new MalformedJwtException("JWT protected header is incomplete");
+            }
             Object algorithm = values.get("alg");
             Object type = values.get("typ");
             Object keyId = values.get("kid");
@@ -291,7 +298,7 @@ public class JwtTokenUtil {
                 throw new UnsupportedJwtException("Critical JWT headers are not supported");
             }
             return new Header((String) algorithm, (String) type, (String) keyId);
-        } catch (IllegalArgumentException | IOException exception) {
+        } catch (IllegalArgumentException | JacksonException exception) {
             throw new MalformedJwtException("JWT protected header is invalid", exception);
         }
     }

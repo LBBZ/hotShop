@@ -1,42 +1,57 @@
 package com.real.security.service;
 
-import org.springframework.data.redis.core.StringRedisTemplate;
+import com.real.security.config.SecurityProperties;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.time.Duration;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.HexFormat;
 
 @Service
 public class TokenBlacklistService {
-    private static final String KEY_PREFIX = "hotshop:auth:deny:jti:";
+    private final JdbcTemplate jdbcTemplate;
+    private final long retentionSkewSeconds;
 
-    private final StringRedisTemplate redisTemplate;
-
-    public TokenBlacklistService(StringRedisTemplate redisTemplate) {
-        this.redisTemplate = redisTemplate;
+    public TokenBlacklistService(JdbcTemplate jdbcTemplate, SecurityProperties properties) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.retentionSkewSeconds = Math.max(0, properties.getClockSkewSeconds()) + 1;
     }
 
+    // Revocation survives cache eviction and commits even if the caller later rolls back.
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void revoke(String jti, Instant expiresAt) {
-        Duration ttl = Duration.between(Instant.now(), expiresAt);
-        if (!ttl.isPositive()) {
+        String tokenHash = tokenHash(jti);
+        Instant retainUntil = expiresAt.plusSeconds(retentionSkewSeconds);
+        if (!retainUntil.isAfter(Instant.now())) {
             return;
         }
-        redisTemplate.opsForValue().set(key(jti), "1", ttl);
+        Timestamp expiry = Timestamp.from(retainUntil);
+        jdbcTemplate.update("""
+                INSERT INTO security_token_marker (marker_type, token_hash, expires_at)
+                VALUES ('REVOKED_ACCESS', ?, ?)
+                ON DUPLICATE KEY UPDATE expires_at = GREATEST(expires_at, ?)
+                """, tokenHash, expiry, expiry);
     }
 
     public boolean isBlacklisted(String jti) {
-        return Boolean.TRUE.equals(redisTemplate.hasKey(key(jti)));
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                SELECT EXISTS(SELECT 1 FROM security_token_marker
+                    WHERE marker_type = 'REVOKED_ACCESS' AND token_hash = ?
+                      AND expires_at > UTC_TIMESTAMP(6))
+                """, Boolean.class, tokenHash(jti)));
     }
 
-    private String key(String jti) {
+    static String tokenHash(String jti) {
         if (jti == null || jti.isBlank()) {
             throw new IllegalArgumentException("JWT ID is required");
         }
-        return KEY_PREFIX + sha256(jti);
+        return sha256(jti);
     }
 
     static String sha256(String value) {

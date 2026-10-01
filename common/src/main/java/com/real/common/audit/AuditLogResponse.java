@@ -1,11 +1,13 @@
 package com.real.common.audit;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
-import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
+import tools.jackson.databind.annotation.JsonSerialize;
+import tools.jackson.databind.ser.std.ToStringSerializer;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -45,6 +47,8 @@ public record AuditLogResponse(
         Map<String, Object> stateSummary
 ) {
     public AuditLogResponse {
-        stateSummary = stateSummary == null ? Map.of() : Map.copyOf(stateSummary);
+        // Historical JSON summaries can contain explicit nulls for optional fields.
+        stateSummary = stateSummary == null ? Map.of()
+                : Collections.unmodifiableMap(new LinkedHashMap<>(stateSummary));
     }
 }

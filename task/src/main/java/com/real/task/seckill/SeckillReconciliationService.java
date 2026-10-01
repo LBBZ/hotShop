@@ -57,8 +57,9 @@ public class SeckillReconciliationService {
     }
 
     @Scheduled(
+            scheduler = "reconciliationScheduler",
             fixedDelayString =
-                    "${hotshop.seckill.order-consumer.reconciliation-interval:5m}",
+                    "${hotshop.seckill.order-consumer.reconciliation-interval:30s}",
             initialDelayString =
                     "${hotshop.seckill.order-consumer.reconciliation-initial-delay:30s}"
     )
@@ -73,8 +74,11 @@ public class SeckillReconciliationService {
     }
 
     public ReconciliationReport runBatch() {
-        // One activity per invocation: even an empty/invalid stream consumes its
-        // turn. Lexicographic keyset discovery is independent of registry size.
+        // Bound activity discovery and total event checks separately. Advance the durable
+        // cursor after each completed page, including empty/invalid activities.
+        long started = System.nanoTime();
+        int activityLimit = Math.min(properties.getReconciliationActivities(),
+                properties.getReconciliationBatch());
         String index = SeckillRedisKeys.reconciliationStreamIndex();
         long indexed = java.util.Objects.requireNonNullElse(redis.opsForZSet().zCard(index), 0L);
         long registered = java.util.Objects.requireNonNullElse(
@@ -91,17 +95,29 @@ public class SeckillReconciliationService {
         String after = namedCheckpoint(REGISTRY_CHECKPOINT);
         Range<String> range = after.isBlank() ? Range.unbounded()
                 : Range.from(Range.Bound.exclusive(after)).to(Range.Bound.unbounded());
-        Set<String> selected = redis.opsForZSet().rangeByLex(index, range, Limit.limit().count(1));
+        Set<String> selected = redis.opsForZSet().rangeByLex(index, range, Limit.limit().count(activityLimit));
         if ((selected == null || selected.isEmpty()) && !after.isBlank()) {
-            selected = redis.opsForZSet().rangeByLex(index, Range.unbounded(), Limit.limit().count(1));
+            selected = redis.opsForZSet().rangeByLex(index, Range.unbounded(), Limit.limit().count(activityLimit));
         }
         if (selected != null && !selected.isEmpty()) {
-            String stream = selected.iterator().next();
-            StreamResult result = reconcileStream(stream, properties.getReconciliationBatch());
-            checked = result.checked();
-            findings += result.findings();
-            repairs += result.repairs();
-            updateNamedCheckpoint(REGISTRY_CHECKPOINT, stream);
+            int remainingActivities = selected.size();
+            int remainingBudget = properties.getReconciliationBatch();
+            int visited = 0;
+            for (String stream : selected) {
+                // A soft time budget between pages; each dependency operation still has its own timeout.
+                if (visited > 0 && System.nanoTime() - started
+                        >= properties.getReconciliationTimeBudget().toNanos()) break;
+                int pageBudget = Math.max(1,
+                        remainingBudget / remainingActivities);
+                StreamResult result = reconcileStream(stream, pageBudget);
+                checked += result.checked();
+                findings += result.findings();
+                repairs += result.repairs();
+                updateNamedCheckpoint(REGISTRY_CHECKPOINT, stream);
+                remainingBudget -= pageBudget;
+                remainingActivities--;
+                visited++;
+            }
         }
         MysqlReverseResult mysqlReverse =
                 reconcileMysqlFacts(properties.getReconciliationBatch());
@@ -361,10 +377,10 @@ public class SeckillReconciliationService {
             checkedCheckpoint(stream, record.getId().getValue());
         }
 
-        ConservationResult conservation = conservation(activityId, stream);
+        ConservationResult conservation = conservation(activityId, stream, remainingBatch);
         findings += conservation.findings();
         repairs += conservation.repairs();
-        PendingResult pending = terminalPending(stream);
+        PendingResult pending = terminalPending(stream, remainingBatch);
         findings += pending.findings();
         repairs += pending.repairs();
         return new StreamResult(batch.size(), findings, repairs);
@@ -564,14 +580,14 @@ public class SeckillReconciliationService {
         return new EventResult(findings, repairs);
     }
 
-    private ConservationResult conservation(long activityId, String stream) {
+    private ConservationResult conservation(long activityId, String stream, int budget) {
         int findings = 0;
         List<?> page = redis.execute(CONSERVATION_PAGE,
                 List.of(SeckillRedisKeys.activityMetadata(activityId),
                         SeckillRedisKeys.availableStock(activityId), stream,
                         SeckillRedisKeys.conservationCheckpoint(activityId),
                         SeckillRedisKeys.conservationSeen(activityId)),
-                Integer.toString(properties.getReconciliationBatch()),
+                Integer.toString(budget),
                 SeckillRedisKeys.reservation(activityId, ""));
         if (page == null || page.size() != 8) throw new IllegalStateException("Invalid conservation page");
         updateNamedCheckpoint("conservation-" + activityId,
@@ -631,10 +647,10 @@ public class SeckillReconciliationService {
         return new ConservationResult(findings, 0);
     }
 
-    private PendingResult terminalPending(String stream) {
+    private PendingResult terminalPending(String stream, int budget) {
         String pendingName = "pending-" + SeckillRedisKeys.activityIdFromReservationStream(stream);
         String pendingCursor = namedCheckpoint(pendingName);
-        List<PendingEntry> pending = pendingEntries(stream, properties.getReconciliationBatch(), pendingCursor);
+        List<PendingEntry> pending = pendingEntries(stream, budget, pendingCursor);
         if (pending.isEmpty()) updateNamedCheckpoint(pendingName, "");
         int findings = 0;
         int repairs = 0;

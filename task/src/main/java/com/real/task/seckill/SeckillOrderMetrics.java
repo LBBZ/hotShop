@@ -26,6 +26,7 @@ public class SeckillOrderMetrics {
     private final AtomicLong pending = new AtomicLong();
     private final AtomicLong oldestPendingIdleMs = new AtomicLong();
     private final AtomicLong streamLag = new AtomicLong();
+    private final AtomicLong streamLagKnown = new AtomicLong();
 
     public SeckillOrderMetrics(MeterRegistry registry) {
         this.registry = registry;
@@ -44,6 +45,7 @@ public class SeckillOrderMetrics {
         registry.gauge("hotshop.seckill.order.pending", pending);
         registry.gauge("hotshop.seckill.order.pending_oldest_idle_ms", oldestPendingIdleMs);
         registry.gauge("hotshop.seckill.stream.lag", streamLag);
+        registry.gauge("hotshop.seckill.stream.lag.known", streamLagKnown);
     }
 
     public Counter consumed() {
@@ -102,7 +104,12 @@ public class SeckillOrderMetrics {
     }
 
     public void streamLag(long lag) {
-        streamLag.set(Math.max(0, lag));
+        if (lag < 0) {
+            streamLagKnown.set(0);
+            return;
+        }
+        streamLag.set(lag);
+        streamLagKnown.set(1);
     }
 
     public void inventory(String operation, String outcome) {

@@ -2808,3 +2808,36 @@ a {
     grid-column: 1 / -1;
   }
 }
+
+.agent-history {
+  margin-block: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+}
+
+.agent-history summary {
+  cursor: pointer;
+}
+
+.agent-history li {
+  margin-block: 1rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.workspace-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.workspace-mobile-logout {
+  display: none;
+}
+
+@media (max-width: 960px) {
+  .workspace-mobile-logout {
+    display: inline-flex;
+  }
+}

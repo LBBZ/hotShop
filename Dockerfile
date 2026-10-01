@@ -5,11 +5,12 @@ FROM eclipse-temurin:21-jdk-alpine@sha256:6ea5548706b60ac0a602eaf48af74792cbab01
 WORKDIR /workspace
 COPY . .
 ARG MODULE
+ARG BUILD_JAVA_TOOL_OPTIONS=""
 RUN --mount=type=cache,id=hotshop-maven-repository,target=/root/.m2,sharing=locked \
     chmod +x ./mvnw && \
     find /root/.m2 -name '*.lastUpdated' -delete && \
     test -n "${MODULE}" && \
-    ./mvnw -B -pl "${MODULE}" -am clean package -DskipTests && \
+    JAVA_TOOL_OPTIONS="${BUILD_JAVA_TOOL_OPTIONS}" ./mvnw -B -pl "${MODULE}" -am clean package -DskipTests && \
     EXECUTABLE_JAR="$(find "${MODULE}/target" -maxdepth 1 -name "${MODULE}-*-exec.jar" -print -quit)" && \
     if [ -z "${EXECUTABLE_JAR}" ]; then \
       EXECUTABLE_JAR="$(find "${MODULE}/target" -maxdepth 1 -name "${MODULE}-*.jar" -print -quit)"; \
@@ -30,7 +31,6 @@ RUN apk add --no-cache --upgrade \
     && addgroup -S -g 10001 hotshop \
     && adduser -S -D -H -u 10001 -G hotshop hotshop
 COPY --from=builder --chown=10001:10001 /workspace/app.jar /app.jar
-# The Alpine Temurin C2 compiler crashes reproducibly under the local Docker Desktop VM.
-# C1 keeps the reproducible local stack stable; production images should benchmark their own JVM.
+# JVM tuning is supplied at runtime through JAVA_TOOL_OPTIONS.
 USER 10001:10001
-ENTRYPOINT ["java", "-XX:TieredStopAtLevel=1", "-jar", "/app.jar"]
+ENTRYPOINT ["java", "-jar", "/app.jar"]

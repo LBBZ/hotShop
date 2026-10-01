@@ -1,7 +1,7 @@
 package com.real.portal.agenttools;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.real.domain.entity.Order;
 import com.real.domain.service.advance.OrderStateService;
 import com.real.security.entity.CustomUserDetails;
@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.http.HttpHeaders;
@@ -28,7 +28,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.mysql.MySQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
 import java.nio.charset.StandardCharsets;
@@ -86,7 +86,7 @@ class AgentToolsAndPurchaseConfirmationIntegrationTest {
             "purchase-drafts:create"
     );
 
-    private static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0.46")
+    private static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.4.11")
             .withDatabaseName("hotshop_agent_tools")
             .withUsername("hotshop")
             .withPassword("hotshop-test")
@@ -94,7 +94,7 @@ class AgentToolsAndPurchaseConfirmationIntegrationTest {
             .withCommand("--log-bin-trust-function-creators=1");
 
     private static final GenericContainer<?> REDIS =
-            new GenericContainer<>(DockerImageName.parse("redis:8.8.1-alpine"))
+            new GenericContainer<>(DockerImageName.parse("redis:8.8.3-alpine"))
                     .withExposedPorts(6379);
 
     private static final TestKeys KEYS = TestKeys.create();
@@ -150,8 +150,8 @@ class AgentToolsAndPurchaseConfirmationIntegrationTest {
                 .validateMigrationNaming(true)
                 .cleanDisabled(true)
                 .load();
-        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(11);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1.10");
+        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(12);
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1.11");
         assertThat(flyway.migrate().migrationsExecuted).isZero();
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
 

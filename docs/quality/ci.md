@@ -122,17 +122,17 @@ Windows PowerShell 用 `${PWD}` 替换 `$PWD`，Docker Desktop 的嵌套 Testcon
   来自完整选定测试集；coverage 来自稳定的核心 RAG/embedding（full workflow 另含 Qdrant）采样，
   不能把该覆盖率 artifact 解释为全套 Python 测试的覆盖率。
 - Java 门禁显式要求 `portal`、`admin` 和 `task` 生成非空 `jacoco.xml`；`portal` 的测试 JVM 参数通过
-  Surefire late property evaluation 与 JaCoCo agent 合并。`infrastructure` 当前没有测试源码，因此不会
-  生成可解释的独立 JaCoCo 报告；这是已记录的覆盖基础设施缺口，不代表该模块已获得测试覆盖，也不以
-  空报告或虚构阈值制造绿色。
+  Surefire late property evaluation 与 JaCoCo agent 合并。`infrastructure` 在 TASK-19 当时没有测试源码；2026-10-01 增加 RabbitMQ JSON 兼容回归后，已有独立测试与 JaCoCo 报告，范围见本轮升级记录。
 - Dependabot 对 GitHub Actions、Maven、Web npm/pnpm 和 Agent pip 做分组更新并限制并发 PR；更新仍须通过
   相同门禁。
 - workflow 的实际托管环境结论以 GitHub Actions 运行记录为准；`dc779d5` 对应 TASK-18 的全部 Job 和
   `Required CI gate` 均通过，TASK-19 当前工作树尚未产生托管运行。
 
-## TASK-19 当前增量
+## TASK-19 历史增量
 
-TASK-19 为消除扫描出的 High/Critical，当前使用 Spring Boot 3.5.16、Tomcat 10.1.59、Netty
+后续 Java 基线已迁移至 Spring Boot 4.1.1，版本、验证范围与保留限制见 [2026-10-01 升级记录](boot4-upgrade-2026-10-01.md)。以下保留 TASK-19 当时的验证事实。
+
+TASK-19 为消除扫描出的 High/Critical，当时使用 Spring Boot 3.5.16、Tomcat 10.1.59、Netty
 4.1.138.Final、RabbitMQ Java Client 5.33.1、Python 3.12.14 Alpine 和 Playwright 1.57.0。Web 最终
 runtime 是固定 digest 的 `nginx-unprivileged`，镜像配置用户为 `101:101`；Agent root 入口只复制
 service key，随后以 UID/GID 10001、清空附加组和 `NoNewPrivs=1` 执行业务进程。完整 E2E 同时启动最终

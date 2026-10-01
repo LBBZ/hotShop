@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   consumeAgentSse,
@@ -151,5 +151,121 @@ describe("Agent SSE contract", () => {
         new AbortController().signal,
       ),
     ).rejects.toThrow("unexpected content type");
+  });
+});
+
+describe("Agent stream completion and transport boundaries", () => {
+  afterEach(() => vi.useRealTimers());
+  const frame = (
+    type: AgentStreamEvent["type"],
+    sequence: number,
+    data: Record<string, unknown>,
+  ) =>
+    `event: ${type}\ndata: ${JSON.stringify(event(type, sequence, data))}\n\n`;
+  it("rejects EOF without a terminal event instead of reporting success", async () => {
+    const received: AgentStreamEvent[] = [];
+    await expect(
+      consumeAgentSse(
+        responseFromChunks([frame("message.delta", 1, { delta: "partial" })]),
+        { sessionId, runId },
+        (item) => received.push(item),
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("回答尚未完成");
+    expect(received.map((item) => item.type)).toEqual(["message.delta"]);
+  });
+  it("accepts many individually bounded frames in one network chunk larger than 64k", async () => {
+    const frames = Array.from({ length: 5 }, (_, index) =>
+      frame("message.delta", index + 1, { delta: "a".repeat(13_000) }),
+    );
+    frames.push(frame("done", 6, { state: "COMPLETED" }));
+    const received: AgentStreamEvent[] = [];
+    await expect(
+      consumeAgentSse(
+        responseFromChunks([frames.join("")]),
+        { sessionId, runId },
+        (item) => received.push(item),
+        new AbortController().signal,
+      ),
+    ).resolves.toBe("COMPLETED");
+    expect(received).toHaveLength(6);
+  });
+  it("rejects an oversized incomplete frame and releases the stream", async () => {
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode("data: " + "a".repeat(64_000)),
+        );
+      },
+      cancel,
+    });
+    await expect(
+      consumeAgentSse(
+        new Response(body, {
+          headers: { "content-type": "text/event-stream" },
+        }),
+        { sessionId, runId },
+        vi.fn(),
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("safe size");
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+  it("fails an idle stream and clears its watchdog", async () => {
+    vi.useFakeTimers();
+    const cancel = vi.fn();
+    const response = new Response(new ReadableStream({ cancel }), {
+      headers: { "content-type": "text/event-stream" },
+    });
+    const reading = consumeAgentSse(
+      response,
+      { sessionId, runId },
+      vi.fn(),
+      new AbortController().signal,
+      1_000,
+    );
+    const rejected = expect(reading).rejects.toThrow("长时间没有响应");
+    await vi.advanceTimersByTimeAsync(1_000);
+    await rejected;
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it("completes immediately on a terminal event even if the server leaves HTTP open", async () => {
+    const cancel = vi.fn();
+    const response = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode(frame("done", 1, { state: "FAILED" })),
+          );
+        },
+        cancel,
+      }),
+      { headers: { "content-type": "text/event-stream" } },
+    );
+    await expect(
+      consumeAgentSse(
+        response,
+        { sessionId, runId },
+        vi.fn(),
+        new AbortController().signal,
+      ),
+    ).resolves.toBe("FAILED");
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+  it("rejects a pre-aborted reader and never emits buffered events", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const emit = vi.fn();
+    await expect(
+      consumeAgentSse(
+        responseFromChunks([frame("done", 1, { state: "COMPLETED" })]),
+        { sessionId, runId },
+        emit,
+        controller.signal,
+      ),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(emit).not.toHaveBeenCalled();
   });
 });

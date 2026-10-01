@@ -2,7 +2,7 @@ name: ${COMPOSE_PROJECT_NAME:-hotshop}
 
 services:
   mysql:
-    image: ${MYSQL_IMAGE:-mysql:8.0.46}
+    image: ${MYSQL_IMAGE:-mysql:8.4.11}
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_0900_ai_ci
@@ -18,7 +18,7 @@ services:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-hotShop}
       TZ: ${TZ:-UTC}
     ports:
-      - "${MYSQL_PORT:-4306}:3306"
+      - "${HOTSHOP_BIND_ADDRESS:-127.0.0.1}:${MYSQL_PORT:-4306}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ${HOTSHOP_SOURCE_ROOT:-.}/database/data:/opt/hotshop/data:ro
@@ -62,7 +62,7 @@ services:
     restart: "no"
 
   redis-cache:
-    image: ${REDIS_IMAGE:-redis:8.8.1-alpine}
+    image: ${REDIS_IMAGE:-redis:8.8.3-alpine}
     command:
       - redis-server
       - /usr/local/etc/redis/redis.conf
@@ -72,7 +72,7 @@ services:
       REDISCLI_AUTH: ${REDIS_CACHE_PASSWORD:-change-me-local-redis-cache}
       TZ: ${TZ:-UTC}
     ports:
-      - "${REDIS_CACHE_PORT:-7379}:6379"
+      - "${HOTSHOP_BIND_ADDRESS:-127.0.0.1}:${REDIS_CACHE_PORT:-7379}:6379"
     volumes:
       - ${HOTSHOP_SOURCE_ROOT:-.}/docker/redis/cache.conf:/usr/local/etc/redis/redis.conf:ro
       - redis_cache_data:/data
@@ -90,7 +90,7 @@ services:
     restart: unless-stopped
 
   redis-seckill:
-    image: ${REDIS_IMAGE:-redis:8.8.1-alpine}
+    image: ${REDIS_IMAGE:-redis:8.8.3-alpine}
     command:
       - redis-server
       - /usr/local/etc/redis/redis.conf
@@ -100,7 +100,7 @@ services:
       REDISCLI_AUTH: ${REDIS_SECKILL_PASSWORD:-change-me-local-redis-seckill}
       TZ: ${TZ:-UTC}
     ports:
-      - "${REDIS_SECKILL_PORT:-7380}:6379"
+      - "${HOTSHOP_BIND_ADDRESS:-127.0.0.1}:${REDIS_SECKILL_PORT:-7380}:6379"
     volumes:
       - ${HOTSHOP_SOURCE_ROOT:-.}/docker/redis/seckill.conf:/usr/local/etc/redis/redis.conf:ro
       - redis_seckill_data:/data
@@ -120,9 +120,9 @@ services:
 
   qdrant:
     profiles: [agent, rag]
-    image: ${QDRANT_IMAGE:-qdrant/qdrant:v1.15.4}
+    image: ${QDRANT_IMAGE:-qdrant/qdrant:v1.19.1}
     ports:
-      - "${QDRANT_PORT:-6333}:6333"
+      - "${HOTSHOP_BIND_ADDRESS:-127.0.0.1}:${QDRANT_PORT:-6333}:6333"
     volumes:
       - qdrant_data:/qdrant/storage
     networks:
@@ -142,16 +142,16 @@ services:
       context: .
       dockerfile: docker/rabbitmq/Dockerfile
       args:
-        RABBITMQ_IMAGE: ${RABBITMQ_IMAGE:-rabbitmq:4.2.9-management-alpine@sha256:009a0e55d269a643930f797016d48aebe100986bc5ea836fea195199b26633ac}
-    image: ${RABBITMQ_PROJECT_IMAGE:-hotshop-rabbitmq:4.2.9}
+        RABBITMQ_IMAGE: ${RABBITMQ_IMAGE:-rabbitmq:4.3.6-management-alpine@sha256:95312f53d5b1115d410f1a56fba03a6325e3e03b4c60a845237bd345f341a097}
+    image: ${RABBITMQ_PROJECT_IMAGE:-hotshop-rabbitmq:4.3.6}
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-hotshop}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-change-me-local-rabbitmq}
       RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_DEFAULT_VHOST:-/}
       TZ: ${TZ:-UTC}
     ports:
-      - "${RABBITMQ_AMQP_PORT:-6672}:5672"
-      - "${RABBITMQ_MANAGEMENT_PORT:-15673}:15672"
+      - "${HOTSHOP_BIND_ADDRESS:-127.0.0.1}:${RABBITMQ_AMQP_PORT:-6672}:5672"
+      - "${HOTSHOP_BIND_ADDRESS:-127.0.0.1}:${RABBITMQ_MANAGEMENT_PORT:-15673}:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     networks:
@@ -196,6 +196,7 @@ services:
 
   admin-service:
     profiles: [app]
+    restart: unless-stopped
     build:
       context: .
       args:
@@ -203,6 +204,8 @@ services:
         PROFILE: ${SPRING_PROFILES_ACTIVE:-}
     image: ${ADMIN_IMAGE:-hotshop-admin:local}
     environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-}
+      JAVA_TOOL_OPTIONS: ${HOTSHOP_JAVA_TOOL_OPTIONS:-}
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-hotShop}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me-local-mysql}
@@ -232,7 +235,7 @@ services:
     volumes:
       - admin_key_material:/run/secrets/hotshop:ro
     ports:
-      - "${ADMIN_PORT:-8088}:8088"
+      - "${HOTSHOP_BIND_ADDRESS:-127.0.0.1}:${ADMIN_PORT:-8088}:8088"
     depends_on:
       java-key-material-init:
         condition: service_completed_successfully
@@ -247,6 +250,7 @@ services:
 
   portal-service:
     profiles: [app]
+    restart: unless-stopped
     build:
       context: .
       args:
@@ -254,6 +258,8 @@ services:
         PROFILE: ${SPRING_PROFILES_ACTIVE:-}
     image: ${PORTAL_IMAGE:-hotshop-portal:local}
     environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-}
+      JAVA_TOOL_OPTIONS: ${HOTSHOP_JAVA_TOOL_OPTIONS:-}
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-hotShop}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me-local-mysql}
@@ -304,7 +310,7 @@ services:
     volumes:
       - portal_key_material:/run/secrets/hotshop:ro
     ports:
-      - "${PORTAL_PORT:-8080}:8080"
+      - "${HOTSHOP_BIND_ADDRESS:-127.0.0.1}:${PORTAL_PORT:-8080}:8080"
     depends_on:
       java-key-material-init:
         condition: service_completed_successfully
@@ -319,6 +325,7 @@ services:
 
   task-service:
     profiles: [app]
+    restart: unless-stopped
     build:
       context: .
       args:
@@ -326,6 +333,8 @@ services:
         PROFILE: ${SPRING_PROFILES_ACTIVE:-}
     image: ${TASK_IMAGE:-hotshop-task:local}
     environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-}
+      JAVA_TOOL_OPTIONS: ${HOTSHOP_JAVA_TOOL_OPTIONS:-}
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-hotShop}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me-local-mysql}
@@ -390,7 +399,7 @@ services:
       OTEL_RESOURCE_ATTRIBUTES: service.name=task,deployment.environment=${HOTSHOP_DEPLOYMENT_ENVIRONMENT:-local}
       TZ: ${TZ:-UTC}
     ports:
-      - "${TASK_PORT:-8888}:8888"
+      - "${HOTSHOP_BIND_ADDRESS:-127.0.0.1}:${TASK_PORT:-8888}:8888"
     depends_on:
       database-migrator:
         condition: service_completed_successfully
@@ -473,7 +482,7 @@ services:
     tmpfs:
       - /run/hotshop-agent:rw,noexec,nosuid,nodev,mode=0700
     ports:
-      - "${AGENT_PORT:-8090}:8090"
+      - "${HOTSHOP_BIND_ADDRESS:-127.0.0.1}:${AGENT_PORT:-8090}:8090"
     depends_on:
       redis-cache:
         condition: service_healthy
@@ -499,7 +508,7 @@ services:
       - ${HOTSHOP_SOURCE_ROOT:-.}/docker/observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus_data:/prometheus
     ports:
-      - "${PROMETHEUS_PORT:-9090}:9090"
+      - "${HOTSHOP_BIND_ADDRESS:-127.0.0.1}:${PROMETHEUS_PORT:-9090}:9090"
     networks:
       - hotShop-network
     healthcheck:
@@ -520,7 +529,7 @@ services:
       - ${HOTSHOP_SOURCE_ROOT:-.}/docker/observability/loki/loki.yml:/etc/loki/loki.yml:ro
       - loki_data:/loki
     ports:
-      - "${LOKI_PORT:-3100}:3100"
+      - "${HOTSHOP_BIND_ADDRESS:-127.0.0.1}:${LOKI_PORT:-3100}:3100"
     networks:
       - hotShop-network
     healthcheck:
@@ -541,7 +550,7 @@ services:
       - ${HOTSHOP_SOURCE_ROOT:-.}/docker/observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
       - tempo_data:/var/tempo
     ports:
-      - "${TEMPO_PORT:-3200}:3200"
+      - "${HOTSHOP_BIND_ADDRESS:-127.0.0.1}:${TEMPO_PORT:-3200}:3200"
     networks:
       - hotShop-network
     healthcheck:
@@ -567,9 +576,9 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - alloy_data:/var/lib/alloy/data
     ports:
-      - "${ALLOY_PORT:-12345}:12345"
-      - "${OTLP_GRPC_PORT:-4317}:4317"
-      - "${OTLP_HTTP_PORT:-4318}:4318"
+      - "${HOTSHOP_BIND_ADDRESS:-127.0.0.1}:${ALLOY_PORT:-12345}:12345"
+      - "${HOTSHOP_BIND_ADDRESS:-127.0.0.1}:${OTLP_GRPC_PORT:-4317}:4317"
+      - "${HOTSHOP_BIND_ADDRESS:-127.0.0.1}:${OTLP_HTTP_PORT:-4318}:4318"
     depends_on:
       loki:
         condition: service_healthy
@@ -601,7 +610,7 @@ services:
       - ${HOTSHOP_SOURCE_ROOT:-.}/docker/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
     ports:
-      - "${GRAFANA_PORT:-3000}:3000"
+      - "${HOTSHOP_BIND_ADDRESS:-127.0.0.1}:${GRAFANA_PORT:-3000}:3000"
     depends_on:
       prometheus:
         condition: service_healthy

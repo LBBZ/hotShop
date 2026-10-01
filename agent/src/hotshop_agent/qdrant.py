@@ -48,6 +48,7 @@ class QdrantStore:
         collection_prefix: str,
         timeout_seconds: float,
         max_retries: int,
+        embedding_fingerprint: str | None = None,
     ) -> None:
         if not _SAFE_NAME.fullmatch(alias) or not _SAFE_NAME.fullmatch(collection_prefix):
             raise ValueError("Qdrant alias and prefix must be code-owned safe names")
@@ -57,6 +58,7 @@ class QdrantStore:
         self.collection_prefix = collection_prefix
         self._timeout = timeout_seconds
         self._max_retries = max_retries
+        self._embedding_fingerprint = embedding_fingerprint
 
     async def ready(self) -> bool:
         try:
@@ -76,7 +78,7 @@ class QdrantStore:
         limit: int,
     ) -> list[SearchHit]:
         epoch = int(now.timestamp())
-        body = {
+        body: dict[str, Any] = {
             "vector": vector,
             "limit": limit,
             "with_payload": True,
@@ -97,6 +99,10 @@ class QdrantStore:
                 ]
             },
         }
+        if self._embedding_fingerprint is not None:
+            body["filter"]["must"].append(
+                {"key": "embeddingFingerprint", "match": {"value": self._embedding_fingerprint}}
+            )
         response = await self._request(
             "POST", f"/collections/{self.alias}/points/search", json=body
         )
@@ -173,6 +179,7 @@ class QdrantStore:
             raise QdrantUnavailable("Qdrant collection creation failed")
         for field, schema in (
             ("tenantId", "keyword"),
+            ("embeddingFingerprint", "keyword"),
             ("visibility", "keyword"),
             ("documentType", "keyword"),
             ("effectiveFromEpoch", "integer"),
@@ -286,6 +293,10 @@ class KnowledgeIndexer:
             chunk_size=self.chunk_size,
             overlap=self.chunk_overlap,
         )
+        chunks = [
+            chunk.model_copy(update={"embeddingFingerprint": self.embedding.fingerprint})
+            for chunk in chunks
+        ]
         return documents, chunks, knowledge_version(chunks)
 
     async def rebuild(self, directory: Any) -> IndexStatus:

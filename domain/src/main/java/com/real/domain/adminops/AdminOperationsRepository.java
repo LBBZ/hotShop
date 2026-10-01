@@ -1,8 +1,8 @@
 package com.real.domain.adminops;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 import com.real.common.api.dto.AdminFlashSaleActivityResponse;
 import com.real.common.api.dto.AdminManualReviewResponse;
 import com.real.common.api.dto.AdminOperationsOverviewResponse;
@@ -306,7 +306,7 @@ public class AdminOperationsRepository {
     private Map<String, Object> json(String value) throws SQLException {
         try {
             return objectMapper.readValue(value, new TypeReference<>() { });
-        } catch (JsonProcessingException exception) {
+        } catch (JacksonException exception) {
             throw new SQLException("Stored reconciliation evidence is invalid JSON", exception);
         }
     }

@@ -79,6 +79,7 @@ class KnowledgeChunk(BaseModel):
     source: str
     locale: str
     contentHash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    embeddingFingerprint: str = Field(default="", pattern=r"^(?:[0-9a-f]{64})?$")
     effectiveFrom: datetime | None
     effectiveUntil: datetime | None
     effectiveFromEpoch: int

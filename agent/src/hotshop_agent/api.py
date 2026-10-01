@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -34,6 +35,8 @@ from hotshop_agent.service import (
     InvalidStateError,
     ResourceNotFoundError,
 )
+
+SSE_HEARTBEAT_SECONDS = 10.0
 
 
 class StrictModel(BaseModel):
@@ -231,10 +234,11 @@ def add_conversation_routes(router: APIRouter, kind: IdentityKind) -> None:
         authorization: Annotated[str | None, Header()] = None,
     ) -> StreamingResponse:
         credential = bearer_credential(authorization, container.verifier, kind)
-        handle = await container.service.handle(str(run_id), credential.principal)
+        handle = await container.service.handle(str(run_id), credential.principal, subscribe=True)
 
         async def event_source() -> AsyncIterator[str]:
             disconnected = False
+            heartbeat_at = time.monotonic()
             try:
                 while True:
                     if await request.is_disconnected():
@@ -245,8 +249,13 @@ def add_conversation_routes(router: APIRouter, kind: IdentityKind) -> None:
                     except TimeoutError:
                         if handle.done.is_set() and handle.queue.empty():
                             break
+                        if time.monotonic() - heartbeat_at >= SSE_HEARTBEAT_SECONDS:
+                            heartbeat_at = time.monotonic()
+                            yield ": heartbeat\n\n"
                         continue
                     handle.queue.task_done()
+                    if event.type == "done":
+                        await handle.done.wait()
                     yield event.encode()
                     if event.type == "done":
                         break

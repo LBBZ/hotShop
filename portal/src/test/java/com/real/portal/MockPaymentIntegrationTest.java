@@ -1,6 +1,7 @@
 package com.real.portal;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.real.common.api.dto.MockPaymentActionRequest;
 import com.real.common.api.dto.PaymentResponse;
 import com.real.common.audit.AuditEvent;
@@ -20,7 +21,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.mysql.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
@@ -42,7 +43,7 @@ import static org.awaitility.Awaitility.await;
 @Testcontainers
 class MockPaymentIntegrationTest {
     @Container
-    static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0.46")
+    static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.4.11")
             .withDatabaseName("hotshop_payment").withUsername("hotshop").withPassword("hotshop-test")
             .withCommand("--log-bin-trust-function-creators=1");
     static JdbcTemplate jdbc;
@@ -62,7 +63,7 @@ class MockPaymentIntegrationTest {
                 MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword());
         jdbc = new JdbcTemplate(dataSource);
         tx = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
-        json = new ObjectMapper().findAndRegisterModules();
+        json = JsonMapper.builder().findAndAddModules().build();
         properties = new MockPaymentProperties();
         properties.setEnabled(true);
         properties.setSecret(UUID.randomUUID().toString());

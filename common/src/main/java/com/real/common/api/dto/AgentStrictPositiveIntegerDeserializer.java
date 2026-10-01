@@ -1,21 +1,20 @@
 package com.real.common.api.dto;
 
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonToken;
-import com.fasterxml.jackson.databind.DeserializationContext;
-import com.fasterxml.jackson.databind.JsonDeserializer;
-import com.fasterxml.jackson.databind.exc.InvalidFormatException;
+import tools.jackson.core.JsonParser;
+import tools.jackson.core.JsonToken;
+import tools.jackson.databind.DeserializationContext;
+import tools.jackson.databind.ValueDeserializer;
+import tools.jackson.databind.exc.InvalidFormatException;
 
-import java.io.IOException;
 
-public final class AgentStrictPositiveIntegerDeserializer extends JsonDeserializer<Integer> {
+public final class AgentStrictPositiveIntegerDeserializer extends ValueDeserializer<Integer> {
     @Override
-    public Integer deserialize(JsonParser parser, DeserializationContext context) throws IOException {
+    public Integer deserialize(JsonParser parser, DeserializationContext context) {
         if (parser.currentToken() != JsonToken.VALUE_NUMBER_INT) {
             throw InvalidFormatException.from(
                     parser,
                     "Quantity must be a positive JSON integer",
-                    parser.getText(),
+                    parser.getString(),
                     Integer.class
             );
         }

@@ -9,6 +9,20 @@ type RagObservation = {
 };
 
 test.beforeEach(async ({ page }) => {
+  if (process.env.HOTSHOP_E2E_NETWORK_LOG === "1") {
+    page.on("response", (response) => {
+      if (response.status() >= 400)
+        console.info(
+          `[HTTP ${response.status()}] ${response.request().method()} ${new URL(response.url()).pathname}`,
+        );
+    });
+    page.on("requestfailed", (request) => {
+      if (request.failure()?.errorText !== "net::ERR_ABORTED")
+        console.info(
+          `[network failure] ${request.method()} ${new URL(request.url()).pathname}: ${request.failure()?.errorText}`,
+        );
+    });
+  }
   await page.addInitScript({
     path: fileURLToPath(
       new URL("../../script/reconcile-browser-observer.js", import.meta.url),

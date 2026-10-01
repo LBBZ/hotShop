@@ -2,8 +2,8 @@ package com.real.domain.agenttools;
 
 import com.real.common.audit.AuditResourceType;
 import com.real.common.audit.AuditAction;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import com.real.common.api.ApiException;
 import com.real.common.api.dto.PurchaseConfirmationConsumeRequest;
 import com.real.common.api.dto.PurchaseConfirmationIssueResponse;
@@ -304,7 +304,7 @@ public class PurchaseConfirmationService {
         }).toList();
         try {
             return json.writeValueAsString(Map.of("items", parameters));
-        } catch (JsonProcessingException exception) {
+        } catch (JacksonException exception) {
             throw new IllegalStateException("Could not serialize Purchase parameters", exception);
         }
     }

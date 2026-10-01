@@ -2,6 +2,12 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Fingerprint } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
+import { useUserQueryKey } from "@/auth/query-scope";
+import {
+  transactionPollingInterval,
+  useTransactionRefresh,
+} from "@/features/transactions/transaction-refresh";
+
 import { apiClients } from "@/api/clients";
 import { ErrorState, LoadingState } from "@/components/async-states";
 import { Badge } from "@/components/ui/badge";
@@ -11,16 +17,31 @@ import { useTransactionStream } from "@/features/transactions/use-transaction-st
 
 export function ReservationDetailPage() {
   const { activityId = "", reservationNo = "" } = useParams();
-  const query = useQuery({
-    queryKey: ["reservation", activityId, reservationNo],
-    queryFn: () =>
-      apiClients.user.flashSales.status({ activityId, reservationNo }),
-    refetchInterval: 3000,
-  });
   const stream = useTransactionStream(
-    query.data && activityId && reservationNo
-      ? `/api/v1/flash-sales/${activityId}/reservations/${reservationNo}/events`
+    activityId && reservationNo
+      ? `/api/v1/flash-sales/${encodeURIComponent(activityId)}/reservations/${encodeURIComponent(reservationNo)}/events`
       : null,
+  );
+  const query = useQuery({
+    queryKey: useUserQueryKey("reservation", activityId, reservationNo),
+    queryFn: ({ signal }) =>
+      apiClients.user.flashSales.status(
+        { activityId, reservationNo },
+        { signal },
+      ),
+    refetchInterval: (snapshot) =>
+      transactionPollingInterval(
+        "reservation",
+        snapshot.state.data?.status,
+        stream.connection,
+        snapshot.state.error,
+      ),
+    enabled: Boolean(activityId && reservationNo),
+  });
+  useTransactionRefresh(
+    stream.state.latest?.eventId,
+    query.isFetching,
+    query.refetch,
   );
   const orderId =
     [...stream.state.events].reverse().find((event) => event.orderId)

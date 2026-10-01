@@ -6,7 +6,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.mysql.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
@@ -35,7 +35,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class SchemaConstraintTest {
 
     @Container
-    private static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0.46")
+    private static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.4.11")
             .withDatabaseName("hotshop_constraints")
             .withUsername("hotshop")
             .withPassword("hotshop-test")
@@ -58,10 +58,10 @@ class SchemaConstraintTest {
 
     @Test
     void emptyDatabaseMigratesToLatestAndValidates() {
-        assertThat(initialMigrationCount).isEqualTo(11);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1.10");
+        assertThat(initialMigrationCount).isEqualTo(12);
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1.11");
         assertThat(flyway.info().applied()).extracting(info -> info.getVersion().getVersion())
-                .containsExactly("1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10");
+                .containsExactly("1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11");
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
     }
 

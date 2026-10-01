@@ -3,7 +3,7 @@ package com.real.database;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.MigrationVersion;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.mysql.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Testcontainers
 class V15ToV16MigrationTest {
     @Container
-    static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0.46")
+    static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.4.11")
             .withDatabaseName("hotshop_v15_upgrade")
             .withUsername("hotshop").withPassword("hotshop-test")
             .withCommand("--log-bin-trust-function-creators=1");
@@ -38,8 +38,8 @@ class V15ToV16MigrationTest {
         }
         Flyway latest = Flyway.configure().dataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword())
                 .locations("classpath:db/migration").load();
-        assertThat(latest.migrate().migrationsExecuted).isEqualTo(5);
-        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("1.10");
+        assertThat(latest.migrate().migrationsExecuted).isEqualTo(6);
+        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("1.11");
         assertThat(latest.validateWithResult().validationSuccessful).isTrue();
         try (var connection = DriverManager.getConnection(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword());
              var statement = connection.createStatement();

@@ -1,0 +1,33 @@
+rule_files: [alerts.yml]
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'hotshop_seckill_stream_lag{job="task",instance="task:8888"}'
+        values: '100 100 100'
+      - series: 'hotshop_seckill_stream_lag_known{job="task",instance="task:8888"}'
+        values: '0 0 0'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: HotShopStreamPendingLocalDemo
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: HotShopStreamLagUnknownLocalDemo
+        exp_alerts:
+          - exp_labels: {job: task, instance: "task:8888", severity: warning, scope: local-demo}
+            exp_annotations: {summary: "Local demo Redis Stream lag sampling is unavailable"}
+  - interval: 1m
+    input_series:
+      - series: 'hotshop_seckill_stream_lag{job="task",instance="task:8888"}'
+        values: '100 100 100'
+      - series: 'hotshop_seckill_stream_lag_known{job="task",instance="task:8888"}'
+        values: '1 1 1'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: HotShopStreamPendingLocalDemo
+        exp_alerts:
+          - exp_labels: {job: task, instance: "task:8888", severity: warning, scope: local-demo}
+            exp_annotations: {summary: "Local demo Redis Stream pending or lag threshold exceeded"}
+      - eval_time: 2m
+        alertname: HotShopStreamLagUnknownLocalDemo
+        exp_alerts: []

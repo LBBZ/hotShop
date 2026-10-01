@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { useStore } from "zustand";
 
 import { apiClients } from "@/api/clients";
 import { apiEnvironment } from "@/api/core/environment";
@@ -114,6 +115,17 @@ function parsePurchaseDraft(answer: string): PurchaseDraft | null {
 }
 
 export function AgentWorkspace({ boundary }: { boundary: Boundary }) {
+  const auth = boundary === "user" ? userAuth : adminAuth;
+  const userId = useStore(auth.store, (state) => state.session?.userId);
+  return (
+    <AgentConversation
+      key={`${boundary}:${userId ?? "anonymous"}`}
+      boundary={boundary}
+    />
+  );
+}
+
+function AgentConversation({ boundary }: { boundary: Boundary }) {
   const [question, setQuestion] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [answer, setAnswer] = useState("");
@@ -124,7 +136,17 @@ export function AgentWorkspace({ boundary }: { boundary: Boundary }) {
   const [problem, setProblem] = useState<string>();
   const [confirming, setConfirming] = useState(false);
   const generation = useRef(0);
+  const submitting = useRef(false);
+  const sessionId = useRef<string | null>(null);
+  const completedTurn = useRef<{ question: string; answer: string } | null>(
+    null,
+  );
+  const [history, setHistory] = useState<
+    Array<{ question: string; answer: string }>
+  >([]);
   const controller = useRef<AbortController | null>(null);
+  const pendingRunCreation = useRef<Promise<{ id: string }> | null>(null);
+  const pendingCancellation = useRef<Promise<void>>(Promise.resolve());
   const activeRun = useRef<string | null>(null);
   const confirmationLock = useRef(false);
   const answerRef = useRef("");
@@ -135,12 +157,8 @@ export function AgentWorkspace({ boundary }: { boundary: Boundary }) {
     orderId ? `/api/v1/orders/${orderId}/events` : null,
   );
 
-  const cancel = async (announce = true) => {
-    generation.current += 1;
-    controller.current?.abort();
-    const runId = activeRun.current;
-    activeRun.current = null;
-    if (runId) {
+  const cancelRun = (runId: string) => {
+    const pending = pendingCancellation.current.then(async () => {
       try {
         if (boundary === "user") {
           await apiClients.agent.user.cancelRunApiV1AgentRunsRunIdDelete({
@@ -152,10 +170,52 @@ export function AgentWorkspace({ boundary }: { boundary: Boundary }) {
           });
         }
       } catch {
-        // Best-effort cancellation: the abort already prevents late UI events.
+        // A disconnected run may still hold its session lock. Start a fresh conversation if cancellation could not be confirmed.
+        sessionId.current = null;
+      }
+    });
+    pendingCancellation.current = pending;
+    return pending;
+  };
+
+  const cancel = async (announce = true) => {
+    generation.current += 1;
+    controller.current?.abort();
+    const runId = activeRun.current;
+    const creating = pendingRunCreation.current;
+    activeRun.current = null;
+    if (announce) {
+      submitting.current = false;
+      setDraft(null);
+      setPhase("cancelled");
+    }
+    if (runId) await cancelRun(runId);
+    else if (creating) {
+      try {
+        const run = await creating;
+        await cancelRun(run.id);
+      } catch {
+        // A failed run creation has no server run to cancel.
       }
     }
-    if (announce) setPhase("cancelled");
+    await pendingCancellation.current;
+  };
+
+  const resetConversation = () => {
+    void cancel();
+    sessionId.current = null;
+    completedTurn.current = null;
+    setHistory([]);
+    setQuestion("");
+    setAnswer("");
+    answerRef.current = "";
+    setStages([]);
+    setCitations([]);
+    setDraft(null);
+    draftRef.current = null;
+    setOrderId(undefined);
+    setProblem(undefined);
+    setPhase("idle");
   };
 
   useEffect(() => {
@@ -173,12 +233,19 @@ export function AgentWorkspace({ boundary }: { boundary: Boundary }) {
 
   const submit = async () => {
     const content = question.trim();
-    if (!content || phase === "creating" || phase === "streaming") return;
-    await cancel(false);
+    if (!content || submitting.current || confirming) return;
+    submitting.current = true;
+    const cancellation = cancel(false);
     const currentGeneration = generation.current;
+    setPhase("creating");
+    await cancellation;
+    if (generation.current !== currentGeneration) return;
     const abortController = new AbortController();
     controller.current = abortController;
-    setPhase("creating");
+    const previous = completedTurn.current;
+    if (previous) setHistory((current) => [...current, previous].slice(-12));
+    completedTurn.current = null;
+    setQuestion("");
     setProblem(undefined);
     setAnswer("");
     answerRef.current = "";
@@ -188,53 +255,69 @@ export function AgentWorkspace({ boundary }: { boundary: Boundary }) {
     draftRef.current = null;
     setOrderId(undefined);
     try {
-      const session =
-        boundary === "user"
-          ? await apiClients.agent.user.createSessionApiV1AgentSessionsPost({
-              userSessionRequest: {
-                scopes: new Set([
-                  "catalog:read",
-                  "orders:self:read",
-                  "reservations:self:read",
-                  "purchase-drafts:create",
-                ]),
-              },
-            })
-          : await apiClients.agent.admin.createSessionAdminApiV1AgentSessionsPost(
-              {
-                body: {},
-              },
-            );
-      if (generation.current !== currentGeneration) return;
+      if (!sessionId.current) {
+        const session =
+          boundary === "user"
+            ? await apiClients.agent.user.createSessionApiV1AgentSessionsPost(
+                {
+                  userSessionRequest: {
+                    scopes: new Set([
+                      "catalog:read",
+                      "orders:self:read",
+                      "reservations:self:read",
+                      "purchase-drafts:create",
+                    ]),
+                  },
+                },
+                { signal: abortController.signal },
+              )
+            : await apiClients.agent.admin.createSessionAdminApiV1AgentSessionsPost(
+                { body: {} },
+                { signal: abortController.signal },
+              );
+        if (generation.current !== currentGeneration) return;
+        sessionId.current = session.id;
+      }
+      const conversationId = sessionId.current;
       const message =
         boundary === "user"
           ? await apiClients.agent.user.addMessageApiV1AgentSessionsSessionIdMessagesPost(
               {
-                sessionId: session.id,
+                sessionId: conversationId,
                 messageRequest: { content },
               },
+              { signal: abortController.signal },
             )
           : await apiClients.agent.admin.addMessageAdminApiV1AgentSessionsSessionIdMessagesPost(
               {
-                sessionId: session.id,
+                sessionId: conversationId,
                 messageRequest: { content },
               },
-            );
-      const run =
-        boundary === "user"
-          ? await apiClients.agent.user.startRunApiV1AgentSessionsSessionIdRunsPost(
-              {
-                sessionId: session.id,
-                runRequest: { messageId: message.id },
-              },
-            )
-          : await apiClients.agent.admin.startRunAdminApiV1AgentSessionsSessionIdRunsPost(
-              {
-                sessionId: session.id,
-                runRequest: { messageId: message.id },
-              },
+              { signal: abortController.signal },
             );
       if (generation.current !== currentGeneration) return;
+      // Keep the run response available so a cancellation during creation can delete the late run.
+      const creating =
+        boundary === "user"
+          ? apiClients.agent.user.startRunApiV1AgentSessionsSessionIdRunsPost({
+              sessionId: conversationId,
+              runRequest: { messageId: message.id },
+            })
+          : apiClients.agent.admin.startRunAdminApiV1AgentSessionsSessionIdRunsPost(
+              {
+                sessionId: conversationId,
+                runRequest: { messageId: message.id },
+              },
+            );
+      pendingRunCreation.current = creating;
+      const run = await creating.finally(() => {
+        if (pendingRunCreation.current === creating)
+          pendingRunCreation.current = null;
+      });
+      if (generation.current !== currentGeneration) {
+        await cancelRun(run.id);
+        return;
+      }
       activeRun.current = run.id;
       setPhase("streaming");
       const route =
@@ -248,16 +331,17 @@ export function AgentWorkspace({ boundary }: { boundary: Boundary }) {
           signal: abortController.signal,
         },
       );
-      await consumeAgentSse(
+      const outcome = await consumeAgentSse(
         response,
-        { sessionId: session.id, runId: run.id },
+        { sessionId: conversationId, runId: run.id },
         (event) => {
           if (
             generation.current !== currentGeneration ||
             abortController.signal.aborted
           )
             return;
-          setStages((current) => [...current, event]);
+          if (event.type !== "message.delta")
+            setStages((current) => [...current, event].slice(-100));
           if (event.type === "message.delta") {
             answerRef.current += String(event.data.delta);
             setAnswer(answerRef.current);
@@ -283,6 +367,24 @@ export function AgentWorkspace({ boundary }: { boundary: Boundary }) {
       )
         return;
       activeRun.current = null;
+      if (outcome !== "COMPLETED") {
+        setDraft(null);
+        setProblem(
+          (current) =>
+            current ??
+            (outcome === "CANCELLED"
+              ? "请求已取消。"
+              : "Agent 没有完成本次请求，请重试。"),
+        );
+        setPhase(outcome === "CANCELLED" ? "cancelled" : "error");
+        return;
+      }
+      completedTurn.current = {
+        question: content,
+        answer: draftRef.current
+          ? "购买草稿已生成，请核对后确认。"
+          : answerRef.current,
+      };
       setDraft(
         boundary === "user"
           ? (draftRef.current ?? parsePurchaseDraft(answerRef.current))
@@ -295,13 +397,18 @@ export function AgentWorkspace({ boundary }: { boundary: Boundary }) {
         generation.current !== currentGeneration
       )
         return;
+      const failedRun = activeRun.current;
       activeRun.current = null;
+      if (failedRun) void cancelRun(failedRun);
+      setDraft(null);
       setProblem(
         error instanceof Error
           ? error.message
           : "Agent 服务暂时不可用；商品和交易核心仍可继续使用。",
       );
       setPhase("error");
+    } finally {
+      if (generation.current === currentGeneration) submitting.current = false;
     }
   };
 
@@ -393,12 +500,23 @@ export function AgentWorkspace({ boundary }: { boundary: Boundary }) {
               disabled={
                 !question.trim() ||
                 phase === "creating" ||
-                phase === "streaming"
+                phase === "streaming" ||
+                confirming
               }
               onClick={() => void submit()}
             >
               <Send aria-hidden="true" /> 发送请求
             </Button>
+            {sessionId.current ? (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={confirming}
+                onClick={resetConversation}
+              >
+                开始新对话
+              </Button>
+            ) : null}
             {phase === "creating" || phase === "streaming" ? (
               <Button
                 type="button"
@@ -435,6 +553,19 @@ export function AgentWorkspace({ boundary }: { boundary: Boundary }) {
         </aside>
       </section>
 
+      {history.length ? (
+        <details className="agent-history">
+          <summary>之前的对话（{history.length}）</summary>
+          <ol>
+            {history.map((turn, index) => (
+              <li key={index}>
+                <strong>{turn.question}</strong>
+                <p>{turn.answer}</p>
+              </li>
+            ))}
+          </ol>
+        </details>
+      ) : null}
       <section className="agent-answer" aria-live="polite" aria-atomic="false">
         <h3 ref={answerHeading} tabIndex={-1}>
           {problem ? "请求需要处理" : "Agent 回答"}
@@ -447,7 +578,11 @@ export function AgentWorkspace({ boundary }: { boundary: Boundary }) {
         ) : visibleAnswer ? (
           <p className="agent-answer-copy">{visibleAnswer}</p>
         ) : (
-          <p>尚无回答。</p>
+          <p>
+            {phase === "cancelled"
+              ? "请求已取消，可以继续提问。"
+              : "尚无回答。"}
+          </p>
         )}
         {citations.length ? (
           <ul className="agent-citations" aria-label="引用资料">

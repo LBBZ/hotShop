@@ -25,7 +25,7 @@ import org.junit.jupiter.api.TestMethodOrder;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
@@ -39,7 +39,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.AopTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.mysql.MySQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
 import java.math.BigDecimal;
@@ -81,17 +81,17 @@ class FlashSaleReservationIntegrationTest {
     private static final long SECOND_ACTIVITY_ID = 7002L;
     private static final long PRODUCT_ID = 8001L;
 
-    static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0.46")
+    static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.4.11")
             .withDatabaseName("hotShop")
             .withUsername("hotshop")
             .withPassword("hotshop-test")
             .withUrlParam("connectTimeout", "5000")
             .withCommand("--log-bin-trust-function-creators=1");
     static final GenericContainer<?> CACHE =
-            new GenericContainer<>(DockerImageName.parse("redis:8.8.1-alpine"))
+            new GenericContainer<>(DockerImageName.parse("redis:8.8.3-alpine"))
                     .withExposedPorts(6379);
     static final GenericContainer<?> SECKILL =
-            new GenericContainer<>(DockerImageName.parse("redis:8.8.1-alpine"))
+            new GenericContainer<>(DockerImageName.parse("redis:8.8.3-alpine"))
                     .withCommand(
                             "redis-server",
                             "--databases", "1",
@@ -726,7 +726,7 @@ class FlashSaleReservationIntegrationTest {
                 .andExpect(jsonPath("$.requestId").value("ordinary-original-request"))
                 .andExpect(jsonPath("$.idempotencyReplayed").value(false))
                 .andReturn().getResponse().getContentAsString();
-        String orderId = new com.fasterxml.jackson.databind.ObjectMapper()
+        String orderId = tools.jackson.databind.json.JsonMapper.builder().build()
                 .readTree(first).path("orderId").asText();
         assertThat(orderId).isNotBlank();
 

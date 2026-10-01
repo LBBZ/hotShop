@@ -270,6 +270,7 @@ async def _runtime(suite: str, knowledge: Path) -> tuple[Runtime, httpx.AsyncCli
             collection_prefix=settings.qdrant_collection_prefix,
             timeout_seconds=settings.qdrant_timeout_seconds,
             max_retries=settings.qdrant_max_retries,
+            embedding_fingerprint=embedding.fingerprint,
         )
         indexer = KnowledgeIndexer(
             store,

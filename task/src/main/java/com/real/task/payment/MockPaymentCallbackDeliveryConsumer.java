@@ -1,7 +1,7 @@
 package com.real.task.payment;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
 import com.real.domain.payment.MockPaymentProperties;
 import com.real.domain.payment.PaymentProvider;
@@ -166,12 +166,12 @@ public class MockPaymentCallbackDeliveryConsumer {
 
     private void exact(JsonNode node, Set<String> expected) {
         if (node == null || !node.isObject() || node.size() != expected.size()) throw new IllegalArgumentException();
-        Set<String> actual = new HashSet<>(); node.fieldNames().forEachRemaining(actual::add);
+        Set<String> actual = new HashSet<>(); node.propertyNames().forEach(actual::add);
         if (!actual.equals(expected)) throw new IllegalArgumentException();
     }
     private void exactWithOptional(JsonNode node, Set<String> required, Set<String> optional) {
         if (node == null || !node.isObject()) throw new IllegalArgumentException();
-        Set<String> actual = new HashSet<>(); node.fieldNames().forEachRemaining(actual::add);
+        Set<String> actual = new HashSet<>(); node.propertyNames().forEach(actual::add);
         Set<String> allowed = new HashSet<>(required); allowed.addAll(optional);
         if (!actual.containsAll(required) || !allowed.containsAll(actual)) {
             throw new IllegalArgumentException();

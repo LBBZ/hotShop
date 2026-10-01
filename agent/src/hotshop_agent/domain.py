@@ -84,3 +84,11 @@ class AgentRun(BaseModel):
     input_tokens: int = 0
     output_tokens: int = 0
     estimated_cost_usd: float = 0.0
+
+
+class ConversationTurn(BaseModel):
+    """A completed, sanitized exchange; failed or cancelled answers are never history."""
+
+    message_id: str
+    user: str = Field(repr=False, max_length=16000)
+    assistant: str = Field(repr=False, max_length=16000)

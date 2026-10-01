@@ -53,6 +53,7 @@ async def _run(command: str, directory: Path | None) -> dict[str, Any]:
             collection_prefix=settings.qdrant_collection_prefix,
             timeout_seconds=settings.qdrant_timeout_seconds,
             max_retries=settings.qdrant_max_retries,
+            embedding_fingerprint=embedding.fingerprint,
         )
         indexer = KnowledgeIndexer(
             store,

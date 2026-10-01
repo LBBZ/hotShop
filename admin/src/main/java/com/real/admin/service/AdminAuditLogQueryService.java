@@ -1,8 +1,8 @@
 package com.real.admin.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.core.type.TypeReference;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.core.type.TypeReference;
 import com.real.common.api.CursorSlice;
 import com.real.common.audit.AuditActorType;
 import com.real.common.audit.AuditLogResponse;
@@ -129,7 +129,7 @@ public class AdminAuditLogQueryService {
         try {
             return objectMapper.readValue(json, new TypeReference<>() {
             });
-        } catch (JsonProcessingException exception) {
+        } catch (JacksonException exception) {
             throw new SQLException("Stored audit summary is not valid JSON", exception);
         }
     }

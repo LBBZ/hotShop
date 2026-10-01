@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $name = 'hotshop-review-index-test-' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
-$id = docker run -d --rm --name $name --network none --tmpfs /data redis:8.8.1-alpine
+$id = docker run -d --rm --name $name --network none --tmpfs /data redis:8.8.3-alpine
 if ($LASTEXITCODE -ne 0 -or -not $id) { throw 'Cannot start isolated Redis' }
 try {
     $registry = 'hotshop:seckill:v1:{hotshop-seckill-v1}:registry:reservation-streams'

@@ -28,7 +28,7 @@
 
 - 单仓库，不改造成微服务项目，不引入服务注册中心、配置中心或分布式事务框架。
 - 保留清晰的 Maven 模块和可独立运行进程，但简历中称为“模块化、多进程架构”，不称为微服务。
-- Java 21、Spring Boot 最新稳定的 3.5.x、MyBatis 3.0.x、Maven Wrapper。
+- Java 21、Spring Boot 4.1.1、MyBatis Spring Boot Starter 4.1.0、Maven Wrapper；版本升级记录见 [2026-10-01 验证报告](../quality/boot4-upgrade-2026-10-01.md)。
 - React + TypeScript + Vite；使用 React Router、Tailwind CSS、shadcn/ui、TanStack Query、
   Zustand、Recharts、Vitest、Testing Library、Playwright、pnpm。
 - Agent 使用 Python FastAPI + LangGraph；模型通过只读 Provider Registry 选择单个活动 Provider，

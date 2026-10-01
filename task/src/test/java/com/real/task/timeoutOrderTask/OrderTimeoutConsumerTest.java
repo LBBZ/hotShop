@@ -1,6 +1,6 @@
 package com.real.task.timeoutOrderTask;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Message;
@@ -53,6 +53,18 @@ class OrderTimeoutConsumerTest {
         consumer.consume(message(poison, 43L), channel);
 
         verify(channel).basicReject(43L, false);
+        verify(channel, never()).basicAck(anyLong(), anyBoolean());
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void malformedJsonIsRejectedWithoutRequeueAfterJacksonMigration() throws Exception {
+        OrderTimeoutConsumer consumer = new OrderTimeoutConsumer(
+                json, service, new OrderTimeoutConsumerFailpoint() { });
+
+        consumer.consume(message("{invalid", 45L), channel);
+
+        verify(channel).basicReject(45L, false);
         verify(channel, never()).basicAck(anyLong(), anyBoolean());
         verifyNoInteractions(service);
     }

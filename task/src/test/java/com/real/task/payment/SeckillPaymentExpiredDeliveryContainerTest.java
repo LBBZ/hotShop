@@ -1,6 +1,6 @@
 package com.real.task.payment;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.GetResponse;
 import com.real.infrastructure.RabbitMQ.RabbitMQConfig;
 import com.real.infrastructure.redis.SeckillRedisKeys;
@@ -21,7 +21,7 @@ import org.springframework.data.redis.connection.lettuce.LettuceClientConfigurat
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.RabbitMQContainer;
+import org.testcontainers.rabbitmq.RabbitMQContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
@@ -41,10 +41,10 @@ import static org.awaitility.Awaitility.await;
 class SeckillPaymentExpiredDeliveryContainerTest {
     @Container
     static final RabbitMQContainer RABBIT = new RabbitMQContainer(DockerImageName.parse(
-            "rabbitmq:4.2.9-management-alpine@sha256:009a0e55d269a643930f797016d48aebe100986bc5ea836fea195199b26633ac"
+            "rabbitmq:4.3.6-management-alpine@sha256:95312f53d5b1115d410f1a56fba03a6325e3e03b4c60a845237bd345f341a097"
     ).asCompatibleSubstituteFor("rabbitmq"));
     @Container
-    static final GenericContainer<?> REDIS = new GenericContainer<>("redis:8.8.1-alpine")
+    static final GenericContainer<?> REDIS = new GenericContainer<>("redis:8.8.3-alpine")
             .withExposedPorts(6379);
 
     static CachingConnectionFactory rabbitConnection;
@@ -77,7 +77,7 @@ class SeckillPaymentExpiredDeliveryContainerTest {
         redisConnection.afterPropertiesSet();
         redis = new StringRedisTemplate(redisConnection);
         redis.afterPropertiesSet();
-        json = new ObjectMapper().findAndRegisterModules();
+        json = tools.jackson.databind.json.JsonMapper.builder().findAndAddModules().build();
     }
 
     @AfterAll

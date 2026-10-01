@@ -63,8 +63,10 @@ def build_container(
     signer = ClientAssertionSigner(settings)
     exchange = TokenExchangeClient(settings, client, signer, verifier)
     selected_provider = provider or build_model_provider(settings, client)
+    metrics = AgentMetrics()
     reliable = ReliableModel(
         selected_provider,
+        metrics=metrics,
         timeout_seconds=settings.model_timeout_seconds,
         max_retries=settings.model_max_retries,
         retry_base_seconds=settings.model_retry_base_seconds,
@@ -77,7 +79,6 @@ def build_container(
             settings.user_concurrency_limit,
         ),
     )
-    metrics = AgentMetrics()
     telemetry = Telemetry(settings)
     embedding = _build_embedding(settings, client)
     qdrant = QdrantStore(
@@ -87,6 +88,7 @@ def build_container(
         collection_prefix=settings.qdrant_collection_prefix,
         timeout_seconds=settings.qdrant_timeout_seconds,
         max_retries=settings.qdrant_max_retries,
+        embedding_fingerprint=embedding.fingerprint,
     )
     retriever = RagRetriever(
         qdrant,

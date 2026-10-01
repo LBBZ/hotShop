@@ -20,8 +20,9 @@ spring:
       port: ${SPRING_REDIS_PORT:6379}
   jackson:
     default-property-inclusion: non_null
-    serialization:
-      write-dates-as-timestamps: false
+    datatype:
+      datetime:
+        write-dates-as-timestamps: false
 
 rabbitmq:
   enabled : false
@@ -43,6 +44,15 @@ logging:
     com.real.domain.mapper: WARN
 
 management:
+  # Metrics use Prometheus; JSON stdout logs are collected by Alloy.
+  otlp:
+    metrics:
+      export:
+        enabled: false
+  logging:
+    export:
+      otlp:
+        enabled: false
   health:
     rabbit:
       enabled: false
@@ -58,9 +68,11 @@ management:
   tracing:
     sampling:
       probability: ${HOTSHOP_TRACE_SAMPLING_PROBABILITY:1.0}
-  otlp:
+  opentelemetry:
     tracing:
-      endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
+      export:
+        otlp:
+          endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
   metrics:
     tags:
       application: ${spring.application.name}

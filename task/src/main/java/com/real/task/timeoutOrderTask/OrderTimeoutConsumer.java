@@ -1,7 +1,8 @@
 package com.real.task.timeoutOrderTask;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
 import com.real.infrastructure.RabbitMQ.RabbitMQConfig;
 import com.real.task.observability.TaskObservabilityMetrics;
@@ -107,7 +108,7 @@ public class OrderTimeoutConsumer {
                     new BigDecimal(amountText), "CNY", payload.path("expiresAtMs").longValue(),
                     timeoutAttempt, occurredAt, optionalText(payload, "requestId"),
                     optionalText(payload, "traceparent"), optionalText(payload, "tracestate"));
-        } catch (IOException | DateTimeParseException | ArithmeticException exception) {
+        } catch (JacksonException | DateTimeParseException | ArithmeticException exception) {
             throw new PoisonMessageException();
         }
     }
@@ -115,7 +116,7 @@ public class OrderTimeoutConsumer {
     private static void requireObject(JsonNode node, Set<String> allowed) {
         require(node != null && node.isObject());
         Set<String> actual = new HashSet<>();
-        node.fieldNames().forEachRemaining(actual::add);
+        node.propertyNames().forEach(actual::add);
         require(allowed.containsAll(actual));
     }
     private static String requiredText(JsonNode node, String field) {

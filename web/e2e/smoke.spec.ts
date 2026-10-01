@@ -58,3 +58,85 @@ test("unknown routes show a keyboard-reachable recovery action", async ({
   await page.keyboard.press("Tab");
   await expect(page.getByRole("link", { name: "返回首页" })).toBeFocused();
 });
+
+test("switching accounts in the same SPA never shows the previous user's cached orders", async ({
+  page,
+}) => {
+  let currentUser: string | null = null;
+  await page.route("**/api/v1/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/auth/login")) {
+      const body = route.request().postDataJSON() as { username: string };
+      currentUser = body.username;
+      await route.fulfill({
+        json: {
+          ...accessPayload("ROLE_USER"),
+          userId: currentUser,
+          username: currentUser,
+        },
+      });
+    } else if (url.pathname.endsWith("/auth/logout")) {
+      currentUser = null;
+      await route.fulfill({ json: { message: "Logged out" } });
+    } else if (url.pathname.endsWith("/auth/refresh")) {
+      await route.fulfill(
+        currentUser
+          ? {
+              json: {
+                ...accessPayload("ROLE_USER"),
+                userId: currentUser,
+                username: currentUser,
+              },
+            }
+          : { status: 401, json: {} },
+      );
+    } else if (url.pathname.endsWith("/orders")) {
+      await route.fulfill({
+        json: {
+          hasMore: false,
+          items: [
+            {
+              orderId: `order-${currentUser}`,
+              userId: currentUser,
+              createdAt: "2026-09-30T00:00:00Z",
+              status: "PAID",
+              totalAmount: "12.00",
+              currency: "CNY",
+              items: [],
+            },
+          ],
+        },
+      });
+    } else {
+      await route.fulfill({
+        json: url.pathname.endsWith("/flash-sale-activities")
+          ? []
+          : { items: [], hasMore: false },
+      });
+    }
+  });
+  await page.goto("/auth");
+  await page.evaluate(() => {
+    document.documentElement.dataset.identityTest = "same-spa";
+  });
+  const login = async (username: string) => {
+    await page.getByLabel("用户名", { exact: true }).fill(username);
+    await page.getByLabel("密码", { exact: true }).fill("Password!2026");
+    await page.getByRole("button", { name: "登录并继续" }).click();
+    await expect(page).toHaveURL(/\/user$/u);
+    await page.getByRole("link", { name: "我的订单", exact: true }).click();
+    await expect(
+      page.getByText(`order-${username}`, { exact: true }),
+    ).toBeVisible();
+  };
+  await login("account-a");
+  await page.getByRole("button", { name: "退出登录" }).click();
+  await page.getByRole("link", { name: "登录 / 注册" }).click();
+  await login("account-b");
+  await expect(page.getByText("order-account-a", { exact: true })).toHaveCount(
+    0,
+  );
+  expect(
+    await page.evaluate(() => document.documentElement.dataset.identityTest),
+  ).toBe("same-spa");
+});

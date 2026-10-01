@@ -20,7 +20,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.domain.Range;
 import org.springframework.data.redis.connection.RedisConnection;
-import org.springframework.data.redis.connection.Limit;
 import org.springframework.data.redis.connection.stream.Consumer;
 import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.data.redis.connection.stream.PendingMessage;
@@ -120,7 +119,8 @@ public class ReservationStreamConsumer {
                 failpoints.getIfAvailable(NoOpSeckillProcessingFailpoint::new), metrics, tracer);
     }
 
-    @Scheduled(fixedDelayString = "${hotshop.seckill.order-consumer.poll-delay:250ms}")
+    @Scheduled(scheduler = "reservationScheduler",
+            fixedDelayString = "${hotshop.seckill.order-consumer.poll-delay:250ms}")
     public void poll() {
         try {
             refreshStreamsIfDue();
@@ -133,20 +133,17 @@ public class ReservationStreamConsumer {
             boolean consumedAny = false;
             long pendingCount = 0;
             long oldestIdle = 0;
-            long lag = 0;
             for (int offset = 0; offset < snapshot.size(); offset++) {
                 String stream = snapshot.get((start + offset) % snapshot.size());
                 PendingSummary pending = pendingSummary(stream);
                 pendingCount += pending.count();
                 oldestIdle = Math.max(oldestIdle, pending.oldestIdleMs());
-                lag += groupLag(stream);
                 if (pending.count() > 0) {
                     consumedAny |= claimOnePage(stream);
                 }
                 consumedAny |= readNew(stream, false);
             }
             metrics.pending(pendingCount, oldestIdle);
-            metrics.streamLag(lag);
             if (!consumedAny) {
                 readNew(snapshot.get(start), true);
             }
@@ -468,17 +465,36 @@ public class ReservationStreamConsumer {
         log.warn("Seckill consumer observation failure isolated stage={}", stage);
     }
 
+    @Scheduled(scheduler = "maintenanceScheduler",
+            fixedDelayString = "${hotshop.seckill.order-consumer.lag-refresh-interval:10s}")
+    public void refreshLag() {
+        try {
+            long lag = 0;
+            for (String stream : streams) {
+                long current = groupLag(stream);
+                if (current < 0) {
+                    metrics.streamLag(-1);
+                    return;
+                }
+                lag = Math.addExact(lag, current);
+            }
+            metrics.streamLag(lag);
+        } catch (RuntimeException unavailable) {
+            metrics.streamLag(-1);
+            log.warn("Seckill Stream lag sample unavailable; category={}",
+                    unavailable.getClass().getSimpleName());
+        }
+    }
+
     private long groupLag(String stream) {
+        // XINFO GROUPS exposes Redis's logical lag without reading or deserializing event bodies.
+        // Redis can return null after deletion/arbitrary group offsets; do not invent a zero.
         return redis.opsForStream().groups(stream).stream()
                 .filter(group -> properties.getGroupName().equals(group.groupName()))
                 .findFirst()
-                .map(group -> redis.opsForStream().range(
-                        stream,
-                        Range.rightUnbounded(Range.Bound.exclusive(group.lastDeliveredId())),
-                        Limit.limit().count(10_001)
-                ))
-                .map(List::size)
-                .orElse(0);
+                .map(group -> group.getRaw().get("lag"))
+                .map(value -> Long.parseLong(text(value)))
+                .orElse(-1L);
     }
 
     private static void restoreMdc(String key, String value) {

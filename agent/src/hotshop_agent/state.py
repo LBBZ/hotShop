@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable
 from datetime import timedelta
-from typing import Protocol, TypeVar
+from typing import Protocol, TypeVar, cast
 
 from redis.asyncio import Redis
 
-from hotshop_agent.domain import AgentMessage, AgentRun, AgentSession, utc_now
+from hotshop_agent.domain import AgentMessage, AgentRun, AgentSession, ConversationTurn, utc_now
 
 T = TypeVar("T", AgentSession, AgentMessage, AgentRun)
 
@@ -28,6 +29,14 @@ class StateStore(Protocol):
 
     async def get_run(self, run_id: str) -> AgentRun | None: ...
 
+    async def claim_run(self, run: AgentRun) -> str: ...
+
+    async def release_run(self, run: AgentRun) -> None: ...
+
+    async def get_history(self, session_id: str) -> list[ConversationTurn]: ...
+
+    async def append_turn(self, session_id: str, turn: ConversationTurn) -> None: ...
+
 
 class InMemoryStateStore:
     def __init__(self) -> None:
@@ -35,6 +44,9 @@ class InMemoryStateStore:
         self.messages: dict[str, AgentMessage] = {}
         self.runs: dict[str, AgentRun] = {}
         self._lock = asyncio.Lock()
+        self._message_runs: dict[str, str] = {}
+        self._session_runs: dict[str, str] = {}
+        self._history: dict[str, list[ConversationTurn]] = {}
 
     async def ready(self) -> bool:
         return True
@@ -68,6 +80,37 @@ class InMemoryStateStore:
     async def get_run(self, run_id: str) -> AgentRun | None:
         async with self._lock:
             return self.runs.get(run_id)
+
+    async def claim_run(self, run: AgentRun) -> str:
+        async with self._lock:
+            existing = self._message_runs.get(run.message_id)
+            if existing is not None:
+                return existing
+            if run.session_id in self._session_runs:
+                return ""
+            self._message_runs[run.message_id] = run.id
+            self._session_runs[run.session_id] = run.id
+            self.runs[run.id] = run
+            return run.id
+
+    async def release_run(self, run: AgentRun) -> None:
+        async with self._lock:
+            if self._session_runs.get(run.session_id) == run.id:
+                del self._session_runs[run.session_id]
+
+    async def get_history(self, session_id: str) -> list[ConversationTurn]:
+        async with self._lock:
+            return list(self._history.get(session_id, []))
+
+    async def append_turn(self, session_id: str, turn: ConversationTurn) -> None:
+        async with self._lock:
+            history = self._history.setdefault(session_id, [])
+            history.append(turn)
+            del history[:-HISTORY_MAX_TURNS]
+
+
+# Bound both storage and the amount of prior conversation admitted to a prompt.
+HISTORY_MAX_TURNS = 12
 
 
 class RedisStateStore:
@@ -110,6 +153,63 @@ class RedisStateStore:
 
     async def get_run(self, run_id: str) -> AgentRun | None:
         return await self._get("run", run_id, AgentRun)
+
+    async def claim_run(self, run: AgentRun) -> str:
+        # One message is executed at most once throughout the session TTL, and
+        # concurrent turns cannot read or append history out of order.
+        result = await cast(
+            Awaitable[str],
+            self._redis.eval(
+                """
+            local existing = redis.call('GET', KEYS[1])
+            if existing then return existing end
+            if redis.call('EXISTS', KEYS[2]) == 1 then return '' end
+            redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[3])
+            redis.call('SET', KEYS[2], ARGV[1], 'EX', ARGV[3])
+            redis.call('SET', KEYS[3], ARGV[2], 'EX', ARGV[4])
+            return ARGV[1]
+            """,
+                3,
+                f"{self._prefix}message-run:{run.message_id}",
+                f"{self._prefix}session-run:{run.session_id}",
+                f"{self._prefix}run:{run.id}",
+                run.id,
+                run.model_dump_json(),
+                str(self._session_ttl),
+                str(self._run_ttl),
+            ),
+        )
+        return result
+
+    async def release_run(self, run: AgentRun) -> None:
+        await cast(
+            Awaitable[str],
+            self._redis.eval(
+                """
+            if redis.call('GET', KEYS[1]) == ARGV[1] then
+                return redis.call('DEL', KEYS[1])
+            end
+            return 0
+            """,
+                1,
+                f"{self._prefix}session-run:{run.session_id}",
+                run.id,
+            ),
+        )
+
+    async def get_history(self, session_id: str) -> list[ConversationTurn]:
+        values = await cast(
+            Awaitable[list[str]], self._redis.lrange(f"{self._prefix}history:{session_id}", 0, -1)
+        )
+        return [ConversationTurn.model_validate_json(value) for value in values]
+
+    async def append_turn(self, session_id: str, turn: ConversationTurn) -> None:
+        key = f"{self._prefix}history:{session_id}"
+        async with self._redis.pipeline(transaction=True) as pipeline:
+            pipeline.rpush(key, turn.model_dump_json())
+            pipeline.ltrim(key, -HISTORY_MAX_TURNS, -1)
+            pipeline.expire(key, self._session_ttl)
+            await pipeline.execute()
 
     async def _put(self, kind: str, item_id: str, item: T, ttl: int) -> None:
         await self._redis.set(

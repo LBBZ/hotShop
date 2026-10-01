@@ -30,10 +30,15 @@ groups:
         labels: {severity: warning, scope: local-demo}
         annotations: {summary: "Local demo Redis Lua call failed"}
       - alert: HotShopStreamPendingLocalDemo
-        expr: hotshop_seckill_order_pending > 20 or hotshop_seckill_stream_lag > 50
+        expr: hotshop_seckill_order_pending > 20 or (hotshop_seckill_stream_lag > 50 and on(job, instance) hotshop_seckill_stream_lag_known == 1)
         for: 1m
         labels: {severity: warning, scope: local-demo}
         annotations: {summary: "Local demo Redis Stream pending or lag threshold exceeded"}
+      - alert: HotShopStreamLagUnknownLocalDemo
+        expr: hotshop_seckill_stream_lag_known == 0
+        for: 1m
+        labels: {severity: warning, scope: local-demo}
+        annotations: {summary: "Local demo Redis Stream lag sampling is unavailable"}
       - alert: HotShopOutboxBacklogLocalDemo
         expr: hotshop_outbox_backlog > 20 or hotshop_outbox_oldest_age_seconds > 60
         for: 1m

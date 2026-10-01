@@ -30,6 +30,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.dao.DataAccessException;
+import org.springframework.transaction.TransactionException;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -214,7 +215,7 @@ public class AdminAuthController {
         try {
             var validated = jwtTokenUtil.validate(token, IdentityType.ADMINISTRATOR_ACCESS);
             tokenBlacklistService.revoke(validated.jti(), validated.expiresAt());
-        } catch (DataAccessException ex) {
+        } catch (DataAccessException | TransactionException ex) {
             throw ApiException.serviceUnavailable(
                     "AUTHENTICATION_SERVICE_UNAVAILABLE",
                     "Authentication dependency unavailable"

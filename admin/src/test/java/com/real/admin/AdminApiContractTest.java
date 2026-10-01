@@ -13,7 +13,7 @@ import com.real.domain.service.seckill.FlashSaleLoadCode;
 import com.real.domain.service.seckill.FlashSaleLoadResult;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -180,6 +180,17 @@ class AdminApiContractTest {
                         .doesNotExist())
                 .andExpect(jsonPath("$.components.schemas.OutboxReplayRequest.required")
                         .value(org.hamcrest.Matchers.hasItem("reason")));
+    }
+
+    @Test
+    void runtimeAdminSchemaKeepsArbitraryJsonAndExistingStockValidation() throws Exception {
+        mockMvc.perform(get("/v3/api-docs/admin"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.components.schemas.JsonNode").value(org.hamcrest.Matchers.anEmptyMap()))
+                .andExpect(jsonPath("$.components.schemas.AgentConfigurationDraftResponse.properties.proposedValue['$ref']")
+                        .value("#/components/schemas/JsonNode"))
+                .andExpect(jsonPath("$.components.schemas.AdminProductMutationRequest.properties.stock.minimum")
+                        .value(0));
     }
 
     @Test

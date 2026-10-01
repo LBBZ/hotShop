@@ -6,7 +6,6 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
-  statSync,
   writeFileSync,
 } from "node:fs";
 import { createHash } from "node:crypto";
@@ -40,7 +39,9 @@ function removeNonTypeScriptFiles(directory) {
 }
 
 export function normalizeGeneratedTypeScript(content) {
-  const withoutTrailingWhitespace = content.replace(/[ \t]+(?=\r?$)/gm, "");
+  const withoutTrailingWhitespace = content
+    .replaceAll("\r\n", "\n")
+    .replace(/[ \t]+$/gm, "");
   return `${withoutTrailingWhitespace.replace(/(?:\r?\n)*$/, "")}\n`;
 }
 
@@ -158,7 +159,10 @@ function filesBelow(root) {
 }
 
 function digest(path) {
-  return createHash("sha256").update(readFileSync(path)).digest("hex");
+  const content = path.endsWith(".ts")
+    ? readFileSync(path, "utf8").replaceAll("\r\n", "\n")
+    : readFileSync(path);
+  return createHash("sha256").update(content).digest("hex");
 }
 
 export function compareTrees(expectedRoot, actualRoot) {
@@ -174,10 +178,7 @@ export function compareTrees(expectedRoot, actualRoot) {
       differences.push(`unexpected generated file: ${name}`);
     } else if (!existsSync(actualPath)) {
       differences.push(`missing generated file: ${name}`);
-    } else if (
-      statSync(expectedPath).size !== statSync(actualPath).size ||
-      digest(expectedPath) !== digest(actualPath)
-    ) {
+    } else if (digest(expectedPath) !== digest(actualPath)) {
       differences.push(`generated file differs: ${name}`);
     }
   }

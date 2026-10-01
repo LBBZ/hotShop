@@ -2,8 +2,8 @@ package com.real.task.timeoutOrderTask;
 
 import com.real.common.audit.AuditAction;
 import com.real.common.audit.AuditResourceType;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import com.real.common.audit.InventoryCompensationAuditState;
 import com.real.domain.userjourney.TransactionTimelineWriter;
 import org.springframework.dao.DuplicateKeyException;
@@ -190,7 +190,7 @@ public class OrderTimeoutService {
                 """, AuditAction.INVENTORY_COMPENSATED.name(), resourceType.name(), resourceId,
                     json.writeValueAsString(state));
             if (inserted != 1) throw new IllegalStateException("Inventory compensation audit was not inserted");
-        } catch (JsonProcessingException exception) {
+        } catch (JacksonException exception) {
             throw new IllegalStateException("Cannot serialize inventory compensation audit", exception);
         }
     }
@@ -233,7 +233,7 @@ public class OrderTimeoutService {
             if (!tolerateIdenticalReplay && changed != 1) {
                 throw new IllegalStateException("Cancellation Outbox was not inserted");
             }
-        } catch (JsonProcessingException exception) {
+        } catch (JacksonException exception) {
             throw new IllegalStateException("Cannot serialize timeout event", exception);
         }
     }

@@ -2,7 +2,7 @@ package com.real.database;
 
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.mysql.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class LegacyTakeoverTest {
 
     @Container
-    private static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0.46")
+    private static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.4.11")
             .withDatabaseName("hotshop_legacy")
             .withUsername("hotshop")
             .withPassword("hotshop-test")
@@ -64,8 +64,8 @@ class LegacyTakeoverTest {
                 .validateMigrationNaming(true)
                 .cleanDisabled(true)
                 .load();
-        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(6);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1.10");
+        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(7);
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1.11");
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
 
         try (Connection connection = DriverManager.getConnection(

@@ -1,8 +1,8 @@
 package com.real.task.outbox;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.real.domain.messaging.OutboxEvent;
 import com.real.domain.messaging.OutboxMapper;
 import com.real.infrastructure.RabbitMQ.RabbitMQConfig;
@@ -94,15 +94,33 @@ public class OutboxPublisher {
 
     private static final class NoOpFailpoint implements OutboxPublishFailpoint { }
 
-    @Scheduled(fixedDelayString = "${hotshop.outbox.publisher.poll-delay:250ms}")
+    private record ClaimOutcome(boolean candidateFound, List<OutboxEvent> claimed) { }
+
+    @Scheduled(scheduler = "outboxScheduler",
+            fixedDelayString = "${hotshop.outbox.publisher.poll-delay:250ms}")
     public void poll() {
-        if (properties.enabled()) claimBatch().forEach(this::publish);
+        if (!properties.enabled()) return;
+        // Keep eligibility fixed so a failed event cannot become its own retry in this poll.
+        LocalDateTime claimableAt = now();
+        // batchSize bounds work per poll, not the number of leases held while waiting for confirms.
+        for (int i = 0; i < properties.batchSize(); i++) {
+            ClaimOutcome outcome = claimNext(claimableAt);
+            if (!outcome.candidateFound()) return;
+            // Finalizing an exhausted lease consumes one batch slot but must not hide later work.
+            if (!outcome.claimed().isEmpty()) publish(outcome.claimed().getFirst());
+        }
     }
 
+    /** Claims at most one immediately publishable message; poll() supplies the batch budget. */
     public List<OutboxEvent> claimBatch() {
+        return claimNext(now()).claimed();
+    }
+
+    private ClaimOutcome claimNext(LocalDateTime claimableAt) {
         return Objects.requireNonNull(tx.execute(ignored -> {
             LocalDateTime now = now();
-            List<OutboxEvent> candidates = mapper.lockClaimable(properties.batchSize(), now);
+            // Claim only the event that this sequential publisher can send immediately.
+            List<OutboxEvent> candidates = mapper.lockClaimable(1, claimableAt);
             List<OutboxEvent> claimed = new ArrayList<>();
             for (OutboxEvent event : candidates) {
                 if ("PUBLISHING".equals(event.status())
@@ -118,7 +136,7 @@ public class OutboxPublisher {
                 if (changed == 1) claimed.add(mapper.find(event.outboxId()));
                 else throw new OutboxLeaseLostException(event.eventId());
             }
-            return claimed;
+            return new ClaimOutcome(!candidates.isEmpty(), claimed);
         }));
     }
 
@@ -226,6 +244,11 @@ public class OutboxPublisher {
     private void publishInternal(OutboxEvent event, Span publisherSpan,
             boolean publisherScopeOpened) {
         failpoint.afterClaim(event);
+        if (event.leaseExpiresAt() == null
+                || !event.leaseExpiresAt().isAfter(now().plus(properties.confirmTimeout()))) {
+            // Leave recovery to the normal expired-lease path; never send with a stale lease.
+            throw new OutboxLeaseLostException(event.eventId());
+        }
         Route route;
         try {
             route = route(event);
@@ -354,7 +377,7 @@ public class OutboxPublisher {
         JsonNode payload;
         try {
             payload = json.readTree(event.payload());
-        } catch (JsonProcessingException exception) {
+        } catch (JacksonException exception) {
             throw new InvalidPayload();
         }
         if (payload == null || !payload.isObject()) throw new InvalidPayload();

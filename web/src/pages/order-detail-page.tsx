@@ -3,6 +3,12 @@ import { AlertTriangle, Banknote, FlaskConical } from "lucide-react";
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 
+import { useUserQueryKey } from "@/auth/query-scope";
+import {
+  transactionPollingInterval,
+  useTransactionRefresh,
+} from "@/features/transactions/transaction-refresh";
+
 import { apiClients } from "@/api/clients";
 import { ApiProblemError } from "@/api/core/problem";
 import { ErrorState, LoadingState } from "@/components/async-states";
@@ -52,14 +58,25 @@ const scenarios = [
 
 export function OrderDetailPage() {
   const { orderId = "" } = useParams();
+  const stream = useTransactionStream(
+    orderId ? `/api/v1/orders/${encodeURIComponent(orderId)}/events` : null,
+  );
   const order = useQuery({
-    queryKey: ["order", orderId],
-    queryFn: () => getOrder(orderId),
-    refetchInterval: 3000,
+    queryKey: useUserQueryKey("order", orderId),
+    queryFn: ({ signal }) => getOrder(orderId, signal),
+    refetchInterval: (query) =>
+      transactionPollingInterval(
+        "order",
+        query.state.data?.status,
+        stream.connection,
+        query.state.error,
+      ),
     enabled: Boolean(orderId),
   });
-  const stream = useTransactionStream(
-    orderId ? `/api/v1/orders/${orderId}/events` : null,
+  useTransactionRefresh(
+    stream.state.latest?.eventId,
+    order.isFetching,
+    order.refetch,
   );
   const [scenario, setScenario] =
     useState<(typeof scenarios)[number]["id"]>("success");

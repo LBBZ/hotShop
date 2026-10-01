@@ -57,6 +57,19 @@ export function WorkspaceShell({
 }: WorkspaceShellProps) {
   const session = useStore(domain.store, (state) => state.session);
   const navigate = useNavigate();
+  const logout = () => {
+    const request =
+      tone === "user"
+        ? logoutUser()
+        : apiClients.admin.authentication
+            .logout({ xCSRFToken: readCookie("hotshop_admin_csrf") })
+            .finally(() => adminAuthCleanup(domain));
+    void request
+      .catch(() => undefined)
+      .finally(() => {
+        void navigate(tone === "admin" ? "/admin/login" : "/");
+      });
+  };
 
   return (
     <div className={cn("workspace", `workspace-${tone}`)}>
@@ -107,24 +120,7 @@ export function WorkspaceShell({
             <span>{session?.role}</span>
           </div>
           <Badge tone="healthy">内存会话</Badge>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              const logout =
-                tone === "user"
-                  ? logoutUser()
-                  : apiClients.admin.authentication
-                      .logout({
-                        xCSRFToken: readCookie("hotshop_admin_csrf"),
-                      })
-                      .finally(() => adminAuthCleanup(domain));
-              void logout.finally(() => {
-                void navigate(tone === "admin" ? "/admin/login" : "/");
-              });
-            }}
-          >
+          <Button type="button" variant="ghost" size="sm" onClick={logout}>
             <LogOut aria-hidden="true" />
             退出登录
           </Button>
@@ -136,9 +132,21 @@ export function WorkspaceShell({
             <span className="font-utility">LIVE DOMAIN</span>
             <strong>{tone === "admin" ? "ADMIN" : "USER"}</strong>
           </div>
-          <div className="live-indicator">
-            <Activity aria-hidden="true" />
-            <span>会话已隔离</span>
+          <div className="workspace-topbar-actions">
+            <div className="live-indicator">
+              <Activity aria-hidden="true" />
+              <span>会话已隔离</span>
+            </div>
+            <Button
+              className="workspace-mobile-logout"
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={logout}
+            >
+              <LogOut aria-hidden="true" />
+              退出登录
+            </Button>
           </div>
         </header>
         <main id="workspace-main" tabIndex={-1} className="workspace-main">

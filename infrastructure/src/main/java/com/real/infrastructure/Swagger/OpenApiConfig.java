@@ -1,8 +1,13 @@
 package com.real.infrastructure.Swagger;
 
+import io.swagger.v3.core.converter.AnnotatedType;
+import io.swagger.v3.core.converter.ModelConverter;
+import io.swagger.v3.core.converter.ModelConverterContext;
+import io.swagger.v3.core.util.Json;
 import io.swagger.v3.oas.annotations.OpenAPIDefinition;
 import io.swagger.v3.oas.annotations.info.Info;
 import io.swagger.v3.oas.models.Components;
+import io.swagger.v3.oas.models.SpecVersion;
 import io.swagger.v3.oas.models.headers.Header;
 import io.swagger.v3.oas.models.media.ArraySchema;
 import io.swagger.v3.oas.models.media.BooleanSchema;
@@ -19,7 +24,11 @@ import org.springdoc.core.models.GroupedOpenApi;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import tools.jackson.databind.JsonNode;
 
+import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -34,6 +43,47 @@ import java.util.Map;
 public class OpenApiConfig {
     private static final String POSITIVE_LONG_ID_PATTERN = "^[1-9][0-9]{0,18}$";
     private static final String ORDER_ID_PATTERN = "^[A-Za-z0-9_-]{1,64}$";
+
+    @Bean
+    public ModelConverter runtimeJsonModelConverter() {
+        return new RuntimeJsonModelConverter();
+    }
+
+    /** Maps library types to their JSON contract, independently of their Java bean accessors. */
+    private static final class RuntimeJsonModelConverter implements ModelConverter {
+        @Override
+        @SuppressWarnings("rawtypes")
+        public Schema resolve(AnnotatedType type, ModelConverterContext context,
+                              Iterator<ModelConverter> chain) {
+            // Swagger's own mapper resolves both reflection Types and its internal Jackson JavaTypes.
+            Class<?> rawType = type.getType() == null ? null
+                    : Json.mapper().constructType(type.getType()).getRawClass();
+            if (rawType != null && JsonNode.class.isAssignableFrom(rawType)) {
+                // A JSON tree can contain scalars, arrays, objects or null; an object schema is too narrow.
+                Schema<?> jsonValue = new Schema<>(SpecVersion.V31);
+                context.defineModel("JsonNode", jsonValue, type, null);
+                return new Schema<>(SpecVersion.V31).$ref("#/components/schemas/JsonNode");
+            }
+
+            Schema<?> resolved = chain.hasNext() ? chain.next().resolve(type, context, chain) : null;
+            if (rawType != null && SseEmitter.class.isAssignableFrom(rawType) && resolved != null) {
+                Schema<?> emitter = resolved.get$ref() == null ? resolved
+                        : context.getDefinedModels().get(resolved.get$ref().substring(
+                                resolved.get$ref().lastIndexOf('/') + 1));
+                if (emitter != null && emitter.getProperties() != null) {
+                    Schema<?> timeout = emitter.getProperties().get("timeout");
+                    if (timeout != null) {
+                        // Spring 7 moved this nullable Long to JSpecify, which Swagger does not infer.
+                        timeout.setSpecVersion(SpecVersion.V31);
+                        timeout.setType(null);
+                        timeout.setTypes(new LinkedHashSet<>(List.of("integer", "null")));
+                        timeout.setNullable(null);
+                    }
+                }
+            }
+            return resolved;
+        }
+    }
 
     @Bean
     public OpenApiCustomizer contractCustomizer() {

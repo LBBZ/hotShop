@@ -20,7 +20,8 @@ public class TaskBacklogMetrics {
         meters.gauge("hotshop.outbox.oldest.age.seconds", oldestAgeSeconds);
     }
 
-    @Scheduled(fixedDelayString = "${hotshop.observability.gauge-refresh:10s}")
+    @Scheduled(scheduler = "maintenanceScheduler",
+            fixedDelayString = "${hotshop.observability.gauge-refresh:10s}")
     public void refresh() {
         try {
             Long count = jdbc.queryForObject(

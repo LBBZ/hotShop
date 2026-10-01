@@ -8,7 +8,7 @@ import com.real.domain.entity.Product;
 import com.real.domain.mapper.OrderMapper;
 import com.real.domain.mapper.ProductMapper;
 import com.real.domain.messaging.OutboxMapper;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.real.domain.service.OrderService;
 import com.real.domain.service.advance.OrderStateService;
 import org.junit.jupiter.api.BeforeEach;

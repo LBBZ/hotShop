@@ -29,9 +29,13 @@ function isOrderFact(value: unknown): value is OrderFact {
   );
 }
 
-export async function getOrder(orderId: string): Promise<OrderFact> {
+export async function getOrder(
+  orderId: string,
+  signal?: AbortSignal,
+): Promise<OrderFact> {
   const response = await userAuth.fetch(
     `/api/v1/orders/${encodeURIComponent(orderId)}`,
+    { signal },
   );
   const value: unknown = await response.json();
   if (!isOrderFact(value)) throw new Error("订单详情响应不符合约定契约。");

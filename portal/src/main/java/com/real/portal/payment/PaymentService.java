@@ -1,7 +1,7 @@
 package com.real.portal.payment;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import com.real.common.api.ApiException;
 import com.real.common.api.dto.MockPaymentActionRequest;
 import com.real.common.api.dto.MockPaymentActionResponse;
@@ -110,7 +110,7 @@ public class PaymentService {
                 VALUES(?,'PAYMENT',?,'MOCK_PAYMENT_CALLBACK_REQUESTED',CAST(? AS JSON),?)
                 """, UUID.randomUUID().toString(), payment.paymentNo(),
                     json.writeValueAsString(payload), LocalDateTime.ofInstant(availableAt, ZoneOffset.UTC));
-        } catch (JsonProcessingException exception) {
+        } catch (JacksonException exception) {
             throw new IllegalStateException("Could not create persistent Mock callback", exception);
         }
         return new MockPaymentActionResponse(callbackId, "MOCK", payment.paymentNo(), request.outcome(),

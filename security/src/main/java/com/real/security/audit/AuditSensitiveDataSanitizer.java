@@ -1,10 +1,10 @@
 package com.real.security.audit;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.fasterxml.jackson.databind.node.TextNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.node.StringNode;
 import com.real.common.audit.AuditStateSummary;
 import org.springframework.stereotype.Component;
 
@@ -51,7 +51,7 @@ public class AuditSensitiveDataSanitizer {
                 if (field.getValue() == null || field.getValue().isNull()) {
                     object.remove(field.getKey());
                 } else if (SENSITIVE_KEY.matcher(field.getKey()).matches()) {
-                    object.set(field.getKey(), TextNode.valueOf(REDACTED));
+                    object.set(field.getKey(), StringNode.valueOf(REDACTED));
                 } else {
                     object.set(field.getKey(), sanitizeNode(field.getValue()));
                 }
@@ -64,7 +64,7 @@ public class AuditSensitiveDataSanitizer {
             return array;
         }
         if (node.isTextual() && SENSITIVE_VALUE.matcher(node.textValue()).matches()) {
-            return TextNode.valueOf(REDACTED);
+            return StringNode.valueOf(REDACTED);
         }
         return node.deepCopy();
     }

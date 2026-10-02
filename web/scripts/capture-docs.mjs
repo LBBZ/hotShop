@@ -11,10 +11,10 @@ if (!["127.0.0.1", "localhost", "[::1]"].includes(new URL(baseURL).hostname)) {
 const output = fileURLToPath(new URL("../../docs/assets/", import.meta.url));
 await mkdir(output, { recursive: true });
 const products = [
-  ["101", "轻盈无线耳机", "数码", "喜欢的声音，随身同行。", "299.00", 28],
-  ["102", "日常机械键盘", "数码", "为工作与灵感，留一点舒适。", "499.00", 16],
-  ["103", "午后便携音箱", "音频", "把日常的好旋律，带在身边。", "189.00", 8],
-].map(([productId, name, category, description, price, stock]) => ({
+  ["101", "云雾头戴耳机", "音频", "柔软耳垫，为通勤留一段安静。", "329.00", 18],
+  ["102", "留白机械键盘", "数码", "为工作与灵感，留一点舒适。", "499.00", 12],
+  ["103", "森野便携音箱", "音频", "把日常的好旋律，带在身边。", "189.00", 24],
+].map(([productId, name, category, description, price, stock], index) => ({
   productId,
   name,
   category,
@@ -23,6 +23,33 @@ const products = [
   stock,
   createdAt: "2026-10-01T00:00:00Z",
   version: "1",
+  presentation: {
+    images: [
+      {
+        url: `/media/products/${["headphones", "keyboard", "speaker"][index]}.webp`,
+        alt: `${name}的正面展示`,
+      },
+      ...(index === 0
+        ? [
+            {
+              url: "/media/products/headphones-detail.webp",
+              alt: "云雾头戴耳机的材质与结构细节",
+            },
+          ]
+        : []),
+    ],
+    specifications:
+      index === 0
+        ? [
+            { name: "颜色", value: "雾紫" },
+            { name: "佩戴", value: "头戴式" },
+            { name: "连接", value: "蓝牙 5.3 / AUX" },
+            { name: "续航", value: "约 40 小时" },
+            { name: "重量", value: "230 g" },
+          ]
+        : [],
+    imageNote: "AI 生成的演示图 · 商品及规格均为虚构，仅用于体验购物流程",
+  },
 }));
 const sessionId = "11111111-1111-4111-8111-111111111111";
 const messageId = "22222222-2222-4222-8222-222222222222";
@@ -33,13 +60,13 @@ const draft = {
   items: [
     {
       productId: "101",
-      productName: "轻盈无线耳机",
+      productName: "云雾头戴耳机",
       quantity: 1,
-      unitPriceSnapshot: "299.00",
-      lineAmountSnapshot: "299.00",
+      unitPriceSnapshot: "329.00",
+      lineAmountSnapshot: "329.00",
     },
   ],
-  totalPriceSnapshot: "299.00",
+  totalPriceSnapshot: "329.00",
   currency: "CNY",
   confirmationRequired: true,
   validUntil: "2030-01-01T00:00:00Z",
@@ -75,6 +102,7 @@ const browser = await chromium.launch();
 try {
   for (const [name, routePath] of [
     ["catalog", "/"],
+    ["product", "/products/101"],
     ["assistant", "/user/agent"],
     ["operations", "/admin"],
   ]) {
@@ -101,7 +129,7 @@ try {
       let json;
       if (url.pathname.endsWith("/auth/refresh")) {
         const admin = url.pathname.startsWith("/admin/");
-        if (name === "catalog")
+        if (name === "catalog" || name === "product")
           return route.fulfill({ status: 401, json: { status: 401 } });
         json = {
           accessToken: "documentation-preview",
@@ -112,6 +140,8 @@ try {
         };
       } else if (url.pathname.endsWith("/products")) {
         json = { items: products, hasMore: false };
+      } else if (url.pathname === "/api/v1/products/101") {
+        json = products[0];
       } else if (url.pathname.endsWith("/flash-sale-activities")) {
         json = [];
       } else if (url.pathname.endsWith("/operations/overview")) {
@@ -153,6 +183,14 @@ try {
     });
     if (name === "catalog") {
       await page.locator(".product-card").first().waitFor();
+      await page.locator("img").evaluateAll((images) =>
+        Promise.all(
+          images.map((image) => {
+            image.loading = "eager";
+            return image.decode();
+          }),
+        ),
+      );
       await page.evaluate(() => globalThis.document.fonts.ready);
       const section = await page.locator("#catalog").boundingBox();
       if (!section) throw new Error("Catalog section is not visible.");
@@ -171,10 +209,17 @@ try {
           .click();
         await page.locator(".purchase-draft").waitFor();
         await page.getByRole("button", { name: "确认并创建订单" }).waitFor();
+      } else if (name === "product") {
+        await page.locator(".product-gallery").waitFor();
       } else {
         await page.locator(".admin-metric-card").first().waitFor();
       }
       await page.evaluate(() => globalThis.document.fonts.ready);
+      await page
+        .locator("img")
+        .evaluateAll((images) =>
+          Promise.all(images.map((image) => image.decode())),
+        );
       await page.screenshot({ path: `${output}${name}.png`, fullPage: true });
     }
     if (errors.length) throw new Error(errors.join("\n"));

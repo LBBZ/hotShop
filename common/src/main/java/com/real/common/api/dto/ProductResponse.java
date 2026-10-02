@@ -30,6 +30,11 @@ public record ProductResponse(
         Instant createdAt,
         @JsonSerialize(using = ToStringSerializer.class)
         @Schema(type = "string", pattern = "^[0-9]+$", requiredMode = Schema.RequiredMode.REQUIRED)
-        Long version
+        Long version,
+        ProductPresentation presentation
 ) {
+    public ProductResponse(Long productId, String name, BigDecimal price, Integer stock,
+                           String category, String description, Instant createdAt, Long version) {
+        this(productId, name, price, stock, category, description, createdAt, version, null);
+    }
 }

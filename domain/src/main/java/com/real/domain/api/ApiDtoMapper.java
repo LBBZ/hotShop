@@ -5,6 +5,8 @@ import com.real.common.api.dto.OrderItemResponse;
 import com.real.common.api.dto.OrderResponse;
 import com.real.common.api.dto.ProductResponse;
 import com.real.common.api.dto.ProductWriteRequest;
+import com.real.common.api.dto.ProductPresentation;
+import tools.jackson.databind.json.JsonMapper;
 import com.real.common.api.dto.UserResponse;
 import com.real.domain.entity.Order;
 import com.real.domain.entity.OrderItem;
@@ -19,6 +21,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 
 public final class ApiDtoMapper {
+    private static final JsonMapper PRESENTATION_JSON = JsonMapper.builder().build();
     private ApiDtoMapper() {
     }
 
@@ -30,7 +33,8 @@ public final class ApiDtoMapper {
                 product.getStock(),
                 product.getCategory(),
                 product.getDescription(),
-                toInstant(product.getCreatedAt()), product.getVersion()
+                toInstant(product.getCreatedAt()), product.getVersion(),
+                toPresentation(product.getPresentationJson())
         );
     }
 
@@ -41,7 +45,13 @@ public final class ApiDtoMapper {
         product.setStock(request.stock());
         product.setCategory(request.category());
         product.setDescription(request.description());
+        product.setPresentationJson(request.presentation() == null
+                ? null : PRESENTATION_JSON.writeValueAsString(request.presentation()));
         return product;
+    }
+
+    public static ProductPresentation toPresentation(String json) {
+        return json == null ? null : PRESENTATION_JSON.readValue(json, ProductPresentation.class);
     }
 
     public static UserResponse toUserResponse(User user) {

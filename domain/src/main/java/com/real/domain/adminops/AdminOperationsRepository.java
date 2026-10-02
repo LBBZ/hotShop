@@ -13,6 +13,7 @@ import com.real.common.api.dto.OrderItemResponse;
 import com.real.common.api.dto.OrderResponse;
 import com.real.common.api.dto.ProductResponse;
 import com.real.common.enums.OrderStatus;
+import com.real.domain.api.ApiDtoMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -82,7 +83,7 @@ public class AdminOperationsRepository {
             java.math.BigDecimal maxPrice, Long afterId, int limit
     ) {
         StringBuilder sql = new StringBuilder("""
-                SELECT product_id,name,price,stock,category,description,created_at,version
+                SELECT product_id,name,price,stock,category,description,created_at,version,presentation_json
                   FROM catalog_product
                  WHERE deleted_at IS NULL
                 """);
@@ -101,7 +102,8 @@ public class AdminOperationsRepository {
                 rs.getLong("product_id"), rs.getString("name"),
                 rs.getBigDecimal("price").setScale(2, RoundingMode.UNNECESSARY),
                 rs.getInt("stock"), rs.getString("category"), rs.getString("description"),
-                instant(rs.getTimestamp("created_at")), rs.getLong("version")
+                instant(rs.getTimestamp("created_at")), rs.getLong("version"),
+                ApiDtoMapper.toPresentation(rs.getString("presentation_json"))
         ), args.toArray());
     }
 

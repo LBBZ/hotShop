@@ -9,6 +9,7 @@ export type AgentEventType =
   | "tool.completed"
   | "tool.failed"
   | "purchase_draft.created"
+  | "catalog.results"
   | "rag.completed"
   | "usage"
   | "error"
@@ -40,6 +41,7 @@ const eventTypes = new Set<AgentEventType>([
   "tool.completed",
   "tool.failed",
   "purchase_draft.created",
+  "catalog.results",
   "rag.completed",
   "usage",
   "error",
@@ -47,6 +49,7 @@ const eventTypes = new Set<AgentEventType>([
 ]);
 
 const dataKeys: Record<AgentEventType, ReadonlySet<string>> = {
+  "catalog.results": new Set(["mode", "productIds"]),
   "session.created": new Set(["state", "scopes"]),
   "message.started": new Set(["state"]),
   "message.delta": new Set(["delta"]),
@@ -128,6 +131,17 @@ function citationsAreSafe(value: unknown): value is AgentCitation[] {
 function dataShapeIsSafe(type: AgentEventType, data: Record<string, unknown>) {
   if (!exactKeys(data, dataKeys[type])) return false;
   switch (type) {
+    case "catalog.results":
+      return (
+        typeof data.mode === "string" &&
+        ["search", "compare", "detail"].includes(data.mode) &&
+        Array.isArray(data.productIds) &&
+        data.productIds.length <= 20 &&
+        data.productIds.every(
+          (id) => typeof id === "string" && /^[1-9][0-9]{0,18}$/u.test(id),
+        ) &&
+        new Set(data.productIds).size === data.productIds.length
+      );
     case "session.created":
       return (
         safeString(data.state, 50) &&

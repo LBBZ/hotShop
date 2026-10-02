@@ -67,14 +67,15 @@ public class AgentToolService {
                 SELECT product_id, name, price, category, description, stock
                   FROM catalog_product
                  WHERE status = 'ACTIVE' AND deleted_at IS NULL
-                   AND (? IS NULL OR name LIKE CONCAT('%', ?, '%'))
+                   AND (? IS NULL OR name LIKE CONCAT('%', ?, '%')
+                        OR category LIKE CONCAT('%', ?, '%') OR description LIKE CONCAT('%', ?, '%'))
                    AND (? IS NULL OR product_id > ?)
                  ORDER BY product_id ASC
                  LIMIT ?
                 """, (rs, row) -> product(
                 rs.getLong("product_id"), rs.getString("name"), rs.getBigDecimal("price"),
                 rs.getString("category"), rs.getString("description"), rs.getInt("stock")
-        ), keyword, keyword, after, after, limit + 1);
+        ), keyword, keyword, keyword, keyword, after, after, limit + 1);
         boolean hasMore = fetched.size() > limit;
         List<AgentProductSummaryResponse> items = hasMore
                 ? List.copyOf(fetched.subList(0, limit)) : List.copyOf(fetched);

@@ -29,6 +29,8 @@ public class Product {
     @Schema(description = "商品描述", example = "最新款智能手机")
     private String description;
 
+    private String presentationJson;
+
     @Schema(description = "创建时间", example = "2023-10-01T12:00:00")
     private LocalDateTime createdAt;
     private Long version = 0L;

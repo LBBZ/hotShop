@@ -5,8 +5,8 @@
 <mapper namespace="com.real.domain.mapper.ProductMapper">
     <insert id="insert" parameterType="Product"
             useGeneratedKeys="true" keyProperty="productId">
-        INSERT INTO catalog_product (sku, name, price, stock, category, description)
-        VALUES (CONCAT('APP-', REPLACE(UUID(), '-', '')), #{name}, #{price}, #{stock}, #{category}, #{description})
+        INSERT INTO catalog_product (sku, name, price, stock, category, description, presentation_json)
+        VALUES (CONCAT('APP-', REPLACE(UUID(), '-', '')), #{name}, #{price}, #{stock}, #{category}, #{description}, #{presentationJson})
     </insert>
     <update id="delete">
         UPDATE catalog_product
@@ -15,7 +15,8 @@
     </update>
     <update id="update" parameterType="Product">
         UPDATE catalog_product
-        SET name = #{name}, price = #{price}, category = #{category}, description = #{description}
+        SET name = #{name}, price = #{price}, category = #{category}, description = #{description},
+            presentation_json = COALESCE(#{presentationJson}, presentation_json)
         WHERE product_id = #{productId} AND deleted_at IS NULL
     </update>
     <update id="reduceStock" parameterType="Product">
@@ -34,17 +35,17 @@
     </update>
 
     <select id="selectById" resultType="Product">
-        SELECT product_id, name, price, stock, version, category, description, created_at
+        SELECT product_id, name, price, stock, version, category, description, created_at, presentation_json
         FROM catalog_product
         WHERE product_id = #{productId} AND deleted_at IS NULL
     </select>
     <select id="selectAll" resultType="Product">
-        SELECT product_id, name, price, stock, version, category, description, created_at
+        SELECT product_id, name, price, stock, version, category, description, created_at, presentation_json
         FROM catalog_product
         WHERE deleted_at IS NULL
     </select>
     <select id="selectByCategory" resultType="Product">
-        SELECT product_id, name, price, stock, version, category, description, created_at
+        SELECT product_id, name, price, stock, version, category, description, created_at, presentation_json
         FROM catalog_product
         WHERE category = #{category} AND deleted_at IS NULL
     </select>
@@ -57,6 +58,7 @@
             version,
             category,
             description,
+            presentation_json,
             created_at
         FROM catalog_product
         <where>
@@ -84,6 +86,7 @@
             version,
             category,
             description,
+            presentation_json,
             created_at
         FROM catalog_product
         <where>

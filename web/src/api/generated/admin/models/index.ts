@@ -34,5 +34,8 @@ export * from './OrderResponse';
 export * from './OutboxFailedEventResponse';
 export * from './OutboxFailedPageResponse';
 export * from './OutboxReplayRequest';
+export * from './ProductImage';
+export * from './ProductPresentation';
 export * from './ProductResponse';
+export * from './ProductSpecification';
 export * from './UserResponse';

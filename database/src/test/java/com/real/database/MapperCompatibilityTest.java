@@ -3,6 +3,10 @@ package com.real.database;
 import com.real.common.enums.OrderStatus;
 import com.real.common.enums.Role;
 import com.real.domain.api.ApiDtoMapper;
+import com.real.domain.adminops.AdminOperationsRepository;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.SingleConnectionDataSource;
+import tools.jackson.databind.json.JsonMapper;
 import com.real.domain.entity.Order;
 import com.real.domain.entity.OrderItem;
 import com.real.domain.entity.Product;
@@ -137,6 +141,38 @@ class MapperCompatibilityTest {
             assertThat(products.delete(product.getProductId())).isEqualTo(1);
             assertThat(products.selectById(product.getProductId())).isNull();
             session.commit();
+        }
+    }
+
+    @Test
+    void presentationRoundTripsThroughPublicAndAdminReadersAndLegacyEditsPreserveIt() {
+        try (SqlSession session = sessionFactory.openSession(false)) {
+            ProductMapper products = session.getMapper(ProductMapper.class);
+            Product product = new Product(null, "Media contract", new BigDecimal("25.00"), 5,
+                    "Audio", "Metadata", null);
+            product.setPresentationJson("""
+                    {"images":[{"url":"/media/products/radio.webp","alt":"Radio"}],
+                     "specifications":[{"name":"Color","value":"Amber"}],"imageNote":"Demo"}
+                    """);
+            assertThat(products.insert(product)).isEqualTo(1);
+            assertThat(products.reduceStock(product.getProductId(), 1)).isEqualTo(1);
+            var presentation = ApiDtoMapper.toProductResponse(products.selectById(product.getProductId())).presentation();
+            assertThat(presentation.images().getFirst().alt()).isEqualTo("Radio");
+            product.setPresentationJson(null);
+            product.setDescription("Legacy metadata edit");
+            assertThat(products.update(product)).isEqualTo(1);
+            var loaded = ApiDtoMapper.toProductResponse(products.selectById(product.getProductId()));
+            assertThat(loaded.presentation()).isEqualTo(presentation);
+            assertThat(loaded.stock()).isEqualTo(4);
+            var admin = new AdminOperationsRepository(new JdbcTemplate(
+                    new SingleConnectionDataSource(session.getConnection(), true)), JsonMapper.builder().build());
+            assertThat(admin.products("Media contract", null, null, null, null, 10).getFirst().presentation())
+                    .isEqualTo(presentation);
+            product.setPresentationJson("{\"images\":[],\"specifications\":[]}");
+            products.update(product);
+            assertThat(ApiDtoMapper.toProductResponse(products.selectById(product.getProductId())).presentation().images())
+                    .isEmpty();
+            session.rollback();
         }
     }
 

@@ -1,0 +1,37 @@
+.presentation-editor {
+  display: grid;
+  gap: 1.5rem;
+  min-width: 0;
+}
+.presentation-editor fieldset {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1rem;
+}
+.presentation-editor legend {
+  padding-inline: 0.5rem;
+  font-weight: 650;
+}
+.presentation-editor fieldset > p {
+  color: var(--ink-muted);
+  font-size: 0.8rem;
+  margin: 0 0 1rem;
+}
+.presentation-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 0.8rem;
+  align-items: end;
+  margin-bottom: 0.9rem;
+}
+.presentation-note {
+  margin-top: 1rem;
+}
+@media (max-width: 600px) {
+  .presentation-row {
+    grid-template-columns: minmax(0, 1fr);
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 0.8rem;
+  }
+}

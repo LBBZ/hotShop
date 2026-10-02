@@ -5,6 +5,7 @@ import { findApiProblemError } from "@/api/core/problem";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { StockAdjustmentEditor } from "@/features/admin/stock-adjustment-editor";
+import { ProductPresentationEditor } from "@/features/admin/product-presentation-editor";
 import {
   adminApi,
   type AdminProduct,
@@ -44,6 +45,7 @@ function ProductEditor({
           stock: product.stock,
           category: product.category,
           description: product.description ?? "",
+          presentation: product.presentation,
           reason: "",
         }
       : emptyDraft,
@@ -63,6 +65,7 @@ function ProductEditor({
           price: draft.price,
           category: draft.category,
           description: draft.description,
+          presentation: draft.presentation,
           reason: draft.reason,
         });
       } else await adminApi.createProduct(draft);
@@ -158,6 +161,12 @@ function ProductEditor({
             onChange={(event) => update("description", event.target.value)}
           />
         </label>
+        <ProductPresentationEditor
+          value={draft.presentation}
+          onChange={(presentation) =>
+            setDraft((current) => ({ ...current, presentation }))
+          }
+        />
         <label className="field admin-field-wide">
           <span>变更原因</span>
           <input

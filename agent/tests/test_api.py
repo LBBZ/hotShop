@@ -622,6 +622,8 @@ async def test_fake_model_executes_real_http_tool_graph_without_sse_data_leak(
         events = parse_sse(body)
         assert any(event["type"] == "tool.completed" for event in events)
         tool_event = next(event for event in events if event["type"] == "tool.completed")
+        catalog_event = next(event for event in events if event["type"] == "catalog.results")
+        assert catalog_event["data"] == {"mode": "search", "productIds": ["1"]}
         assert tool_event["data"] == {
             "tool": "search_products",
             "resourceType": "product",

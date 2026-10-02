@@ -11,7 +11,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useStore } from "zustand";
 
 import { apiClients } from "@/api/clients";
@@ -26,6 +26,8 @@ import {
 } from "@/features/agent/agent-stream";
 import { TransactionTimeline } from "@/features/transactions/transaction-timeline";
 import { useTransactionStream } from "@/features/transactions/use-transaction-stream";
+import { CatalogResults } from "./catalog-results";
+import { catalogAnswer, type CatalogResult } from "./catalog-answer";
 
 type Boundary = "user" | "admin";
 type Phase = "idle" | "creating" | "streaming" | "done" | "error" | "cancelled";
@@ -39,6 +41,7 @@ const shoppingStageLabels: Record<AgentStreamEvent["type"], string> = {
   "tool.completed": "处理结果已返回",
   "tool.failed": "处理未完成",
   "purchase_draft.created": "购买草稿已准备好",
+  "catalog.results": "商品信息已返回",
   "rag.completed": "资料检索已完成",
   usage: "处理进度已更新",
   error: "本次请求未完成",
@@ -141,7 +144,12 @@ export function AgentWorkspace({ boundary }: { boundary: Boundary }) {
 }
 
 function AgentConversation({ boundary }: { boundary: Boundary }) {
-  const [question, setQuestion] = useState("");
+  const [searchParams] = useSearchParams();
+  const [question, setQuestion] = useState(() =>
+    boundary === "user" ? (searchParams.get("prompt") ?? "").slice(0, 200) : "",
+  );
+  const [catalog, setCatalog] = useState<CatalogResult | null>(null);
+  const catalogRef = useRef<CatalogResult | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
   const [answer, setAnswer] = useState("");
   const [stages, setStages] = useState<AgentStreamEvent[]>([]);
@@ -226,6 +234,8 @@ function AgentConversation({ boundary }: { boundary: Boundary }) {
     answerRef.current = "";
     setStages([]);
     setCitations([]);
+    setCatalog(null);
+    catalogRef.current = null;
     setDraft(null);
     draftRef.current = null;
     setOrderId(undefined);
@@ -246,8 +256,8 @@ function AgentConversation({ boundary }: { boundary: Boundary }) {
     if (phase === "done" || phase === "error") answerHeading.current?.focus();
   }, [phase]);
 
-  const submit = async () => {
-    const content = question.trim();
+  const submit = async (request = question) => {
+    const content = request.trim();
     if (!content || submitting.current || confirming) return;
     submitting.current = true;
     const cancellation = cancel(false);
@@ -266,6 +276,8 @@ function AgentConversation({ boundary }: { boundary: Boundary }) {
     answerRef.current = "";
     setStages([]);
     setCitations([]);
+    setCatalog(null);
+    catalogRef.current = null;
     setDraft(null);
     draftRef.current = null;
     setOrderId(undefined);
@@ -362,6 +374,10 @@ function AgentConversation({ boundary }: { boundary: Boundary }) {
             setAnswer(answerRef.current);
           } else if (event.type === "rag.completed") {
             setCitations(event.data.citations as AgentCitation[]);
+          } else if (event.type === "catalog.results" && boundary === "user") {
+            const result = event.data as unknown as CatalogResult;
+            catalogRef.current = result;
+            setCatalog(result);
           } else if (event.type === "purchase_draft.created") {
             const structuredDraft = parsePurchaseDraft(
               JSON.stringify({ purchaseDraft: event.data }),
@@ -398,7 +414,7 @@ function AgentConversation({ boundary }: { boundary: Boundary }) {
         question: content,
         answer: draftRef.current
           ? "购买草稿已生成，请核对后确认。"
-          : answerRef.current,
+          : catalogAnswer(answerRef.current, catalogRef.current),
       };
       setDraft(
         boundary === "user"
@@ -465,9 +481,11 @@ function AgentConversation({ boundary }: { boundary: Boundary }) {
     }
   };
 
-  const visibleAnswer = draft
-    ? "购买草稿已生成。请核对商品和数量后主动确认。"
-    : answer;
+  const visibleAnswer = orderId
+    ? "订单已创建，可以继续查看详情并完成支付。"
+    : draft
+      ? "购买草稿已生成。请核对商品和数量后主动确认。"
+      : catalogAnswer(answer, catalog);
 
   return (
     <div className="agent-workspace">
@@ -510,13 +528,29 @@ function AgentConversation({ boundary }: { boundary: Boundary }) {
               onChange={(event) => setQuestion(event.target.value)}
               placeholder={
                 boundary === "user"
-                  ? "例如：帮我看看有哪些音频商品，或者查看我的订单"
+                  ? "例如：推荐通勤耳机，或者查看我的订单"
                   : "例如：查看异常摘要"
               }
               maxLength={16_000}
               rows={5}
             />
           </label>
+          {boundary === "user" ? (
+            <div className="agent-prompt-examples" aria-label="试试这些问题">
+              {["推荐通勤耳机", "搜索居家", "查看我的订单"].map((example) => (
+                <button
+                  type="button"
+                  key={example}
+                  disabled={
+                    phase === "creating" || phase === "streaming" || confirming
+                  }
+                  onClick={() => setQuestion(example)}
+                >
+                  {example}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <div className="agent-actions">
             <Button
               type="button"
@@ -622,6 +656,14 @@ function AgentConversation({ boundary }: { boundary: Boundary }) {
               : "尚无回答。"}
           </p>
         )}
+        {catalog && boundary === "user" ? (
+          <CatalogResults
+            key={`${stages.find((event) => event.type === "catalog.results")?.runId}-${catalog.productIds.join(",")}`}
+            result={catalog}
+            busy={phase !== "done" || confirming}
+            onRequest={(content) => void submit(content)}
+          />
+        ) : null}
         {citations.length ? (
           <ul className="agent-citations" aria-label="引用资料">
             {citations.map((citation) => (

@@ -13,6 +13,14 @@
  */
 
 import { mapValues } from '../runtime';
+import type { ProductPresentation } from './ProductPresentation';
+import {
+    ProductPresentationFromJSON,
+    ProductPresentationFromJSONTyped,
+    ProductPresentationToJSON,
+    ProductPresentationToJSONTyped,
+} from './ProductPresentation';
+
 /**
  *
  * @export
@@ -37,6 +45,12 @@ export interface AdminProductEditRequest {
      * @memberof AdminProductEditRequest
      */
     name: string;
+    /**
+     *
+     * @type {ProductPresentation}
+     * @memberof AdminProductEditRequest
+     */
+    presentation?: ProductPresentation;
     /**
      *
      * @type {string}
@@ -75,6 +89,7 @@ export function AdminProductEditRequestFromJSONTyped(json: any, ignoreDiscrimina
         'category': json['category'],
         'description': json['description'] == null ? undefined : json['description'],
         'name': json['name'],
+        'presentation': json['presentation'] == null ? undefined : ProductPresentationFromJSON(json['presentation']),
         'price': json['price'],
         'reason': json['reason'],
     };
@@ -94,6 +109,7 @@ export function AdminProductEditRequestToJSONTyped(value?: AdminProductEditReque
         'category': value['category'],
         'description': value['description'],
         'name': value['name'],
+        'presentation': ProductPresentationToJSON(value['presentation']),
         'price': value['price'],
         'reason': value['reason'],
     };

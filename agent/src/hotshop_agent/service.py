@@ -23,7 +23,12 @@ from hotshop_agent.domain import (
     SessionState,
     utc_now,
 )
-from hotshop_agent.events import StreamEvent, StreamingSanitizer, sanitize_text
+from hotshop_agent.events import (
+    StreamEvent,
+    StreamingSanitizer,
+    sanitize_text,
+    valid_catalog_results,
+)
 from hotshop_agent.graph import ADMIN_POLICY, USER_POLICY
 from hotshop_agent.metrics import AgentMetrics
 from hotshop_agent.observability import REQUEST_ID, TRACE_ID, Telemetry
@@ -69,6 +74,21 @@ class RunHandle:
 
 
 EVENT_QUEUE_MAXSIZE = 128
+
+
+def _catalog_results_event(tool: str, data: Any) -> dict[str, Any] | None:
+    modes = {"search_products": "search", "compare_products": "compare", "get_product": "detail"}
+    if tool not in modes or not isinstance(data, dict):
+        return None
+    products = (
+        [data]
+        if tool == "get_product"
+        else data.get("items" if tool == "search_products" else "products")
+    )
+    if not isinstance(products, list) or not all(isinstance(item, dict) for item in products):
+        return None
+    event = {"mode": modes[tool], "productIds": [item.get("productId") for item in products]}
+    return event if valid_catalog_results(event) else None
 
 
 def _purchase_draft_event(data: Any) -> dict[str, Any] | None:
@@ -548,6 +568,9 @@ class AgentService:
                             purchase_draft = _purchase_draft_event(tool_result.data)
                             if purchase_draft is not None:
                                 await emit("purchase_draft.created", purchase_draft)
+                        catalog_results = _catalog_results_event(tool_result.tool, tool_result.data)
+                        if catalog_results is not None:
+                            await emit("catalog.results", catalog_results)
                     else:
                         assert tool_result.error is not None
                         await emit(

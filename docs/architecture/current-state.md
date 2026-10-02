@@ -57,7 +57,7 @@ flowchart TD
     T["task"] --> D
     D --> C["common"]
     D --> I["infrastructure"]
-    MIG["database-migrator"] --> SQL["Flyway V1.0 至 V1.11"]
+    MIG["database-migrator"] --> SQL["Flyway V1.0 至 V1.12"]
 ```
 
 ## 3. 身份与委托权限

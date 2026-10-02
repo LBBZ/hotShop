@@ -1,6 +1,6 @@
 # HotShop 数据库迁移与约束设计
 
-> 当前结构由 Flyway V1.0–V1.11 管理，默认运行在 MySQL 8.4.11。本文说明结构与运维约束；历史验证数字不代表当前测试结果。
+> 当前结构由 Flyway V1.0–V1.12 管理，默认运行在 MySQL 8.4.11。本文说明结构与运维约束；历史验证数字不代表当前测试结果。
 
 秒杀预约业务热路径只写 `redis-seckill`；身份校验仍查询 MySQL 撤销标记。`task` 消费 Redis Stream 后才在 MySQL 事务中创建
 `sale_reservation`、Order、处理账本和 Outbox。MySQL 是最终 Order 事实来源，Redis Reservation 是
@@ -43,6 +43,9 @@ Compose 中只有一次性 `database-migrator` 可以执行迁移；portal、adm
 | `1.9` | `V1_9__inventory_accounting_and_adjustments.sql` | 实际库存/expected 库存同步基线与调整 |
 | `1.10` | `V1_10__bounded_reconciliation_evidence_index.sql` | 对账证据的有界查询索引 |
 | `1.11` | `V1_11__durable_authentication_markers.sql` | Access 撤销与 client assertion 防重放持久标记 |
+| `1.12` | `V1_12__catalog_product_presentation.sql` | 商品图片、替代文本、来源说明与规格的可空 JSON 字段 |
+
+`catalog_product.presentation_json` 保存可选展示资料。元数据更新省略或传入 `null` 时保留原值；显式传入空 `images` / `specifications` 数组可清空相应资料。该字段不参与库存与金额核算。演示内容位于 `database/data/demo-catalog.sql`，只由全新演示项目初始化调用，不进入 Flyway。
 
 ## 2. 表、业务键与状态
 

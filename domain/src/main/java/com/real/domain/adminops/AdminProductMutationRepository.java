@@ -16,7 +16,7 @@ public class AdminProductMutationRepository {
     /** Read alongside JDBC writes, without a stale MyBatis transaction-local cache. */
     public Product currentActiveProduct(long productId) {
         return jdbc.queryForObject("""
-                SELECT product_id, name, price, stock, version, category, description, created_at
+                SELECT product_id, name, price, stock, version, category, description, created_at, presentation_json
                   FROM catalog_product WHERE product_id=? AND deleted_at IS NULL FOR UPDATE
                 """, BeanPropertyRowMapper.newInstance(Product.class), productId);
     }

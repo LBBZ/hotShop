@@ -95,7 +95,7 @@ async function adminLogin(page: Page) {
 
 async function buy(page: Page) {
   await page.goto("/products/913001");
-  await page.locator(".product-detail-copy button").click();
+  await page.locator("[data-purchase-button]").click();
   await expect(page).toHaveURL(/\/user\/orders\/[A-Za-z0-9_-]+$/u);
   await expect(page.locator('[data-event-type="ORDER_CREATED"]')).toHaveCount(
     1,
@@ -207,6 +207,12 @@ test("built admin: metadata preserves a purchase and stale stock adjustment conf
     .getByRole("textbox", { name: "描述", exact: true })
     .fill("TASK-21 元数据编辑验证");
   await page.getByLabel("变更原因").fill("TASK-21 保留并发购买库存");
+  await expect(page.getByLabel("图片 1 地址", { exact: true })).toHaveValue(
+    "/media/products/radio.webp",
+  );
+  await page
+    .getByLabel("图片 1 说明", { exact: true })
+    .fill("日光便携收音机的正面展示（已校对）");
 
   const buyer = await browser.newContext({
     baseURL: new URL(page.url()).origin,
@@ -216,6 +222,14 @@ test("built admin: metadata preserves a purchase and stale stock adjustment conf
   await buy(buyerPage);
   await page.getByRole("button", { name: "提交并记录审计" }).click();
   await expect(productRow.locator("td").nth(3)).toHaveText(String(before - 1));
+  const saved = await page.request.get("/api/v1/products/913001");
+  const savedProduct = (await saved.json()) as {
+    presentation: { images: Array<{ alt: string }>; specifications: unknown[] };
+  };
+  expect(savedProduct.presentation.images[0].alt).toBe(
+    "日光便携收音机的正面展示（已校对）",
+  );
+  expect(savedProduct.presentation.specifications.length).toBe(4);
 
   await productRow
     .getByRole("button", { name: "调整库存", exact: true })
@@ -302,4 +316,100 @@ test("built Agent: English static question returns a citation", async ({
   await register(page, "ragen");
   await page.goto("/user/agent");
   await expectCitation(page, "How does the after-sales return policy work?");
+});
+
+test("built catalog: filters, gallery, image fallback and sold-out state", async ({
+  page,
+}) => {
+  await page.goto("/#catalog");
+  await expect(page.locator(".product-card")).toHaveCount(8);
+  await page.getByRole("button", { name: "筛选条件" }).click();
+  await page.getByLabel("分类", { exact: true }).fill("音频");
+  await page.getByLabel("最高价").fill("200");
+  await page.getByRole("button", { name: "应用筛选" }).click();
+  await expect(page.locator(".product-card")).toHaveCount(2);
+  await expect(page.locator(".product-grid")).toContainText("桃气无线耳机");
+  await expect(page.locator(".product-grid")).toContainText("森野便携音箱");
+  await page.getByRole("button", { name: "清除筛选", exact: true }).click();
+  await expect(page.locator(".product-card")).toHaveCount(8);
+  await page.goto("/products/913003");
+  await expect(
+    page.getByRole("heading", { name: "云雾头戴耳机" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: /^查看图片 2/u }).click();
+  await expect(page.locator(".gallery-main img")).toHaveAttribute(
+    "src",
+    "/media/products/headphones-detail.webp",
+  );
+  await page.getByRole("button", { name: "放大查看", exact: true }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.getByRole("button", { name: "放大图片", exact: true }).click();
+  await expect(page.locator(".gallery-zoom")).toHaveClass(/is-zoomed/u);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "放大查看", exact: true }),
+  ).toBeFocused();
+  await page.getByLabel("购买数量").fill("1.5");
+  await expect(page.locator("[data-purchase-button]")).toBeDisabled();
+  await page.getByLabel("购买数量").fill("1");
+  await expect(page.locator("[data-purchase-button]")).toBeEnabled();
+  await page.route("**/media/products/headphones.webp", (route) =>
+    route.abort(),
+  );
+  await page.reload();
+  await expect(page.locator(".gallery-main .product-art")).toBeVisible();
+  await expect(page.locator(".product-specifications")).toContainText(
+    "约 40 小时",
+  );
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await page.goto("/products/913007");
+  await expect(page.getByRole("button", { name: "暂时售罄" })).toBeDisabled();
+});
+
+test("built shopping journey: recommendation, comparison, draft and confirmed order", async ({
+  page,
+}) => {
+  await register(page, "discovery");
+  await page.goto("/products/913003");
+  await page.getByRole("link", { name: "问问购物助手" }).click();
+  await expect(page.getByLabel("请求")).toHaveValue("查看商品 913003");
+  await expect(page.locator(".agent-product")).toHaveCount(0);
+  await ask(page, "推荐通勤耳机");
+  await expect(page.locator(".agent-product")).toHaveCount(2);
+  await expect(page.locator(".agent-answer-copy")).not.toContainText('"tool"');
+  await page.getByRole("checkbox", { name: "加入对比：云雾头戴耳机" }).check();
+  await page.getByRole("checkbox", { name: "加入对比：桃气无线耳机" }).check();
+  await page.getByRole("button", { name: "对比这两件" }).click();
+  await expect(page.locator(".agent-comparison")).toBeVisible();
+  await expect(page.locator(".agent-comparison")).toContainText("329.00");
+  await expect(page.locator(".agent-comparison")).toContainText("199.00");
+  await expect(page.locator(".agent-comparison")).toContainText("约 40 小时");
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  const headphones = page
+    .locator(".agent-product")
+    .filter({ hasText: "云雾头戴耳机" });
+  await headphones.getByRole("button", { name: "准备购买草稿" }).click();
+  await expect(page.getByText("尚未创建订单")).toBeVisible();
+  await expect(page.locator(".purchase-draft")).toContainText("云雾头戴耳机");
+  await expect(
+    page.getByRole("heading", { name: "订单已创建", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "确认并创建订单" }).click();
+  await expect(
+    page.getByRole("heading", { name: "订单已创建", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "查看订单与模拟支付" }).click();
+  await expect(page).toHaveURL(/\/user\/orders\/[A-Za-z0-9_-]+$/u);
+  await expect(page.locator('[data-event-type="ORDER_CREATED"]')).toHaveCount(
+    1,
+  );
 });

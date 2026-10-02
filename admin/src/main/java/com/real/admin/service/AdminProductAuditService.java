@@ -26,7 +26,7 @@ import java.util.List;
 @Service
 public class AdminProductAuditService {
     private static final List<String> PRODUCT_FIELDS =
-            List.of("name", "price", "category", "description");
+            List.of("name", "price", "category", "description", "presentation");
 
     private final ProductService productService;
     private final AdminProductMutationRepository mutationRepository;
@@ -55,7 +55,7 @@ public class AdminProductAuditService {
                     AuditAction.CATALOG_PRODUCT_CREATED,
                     product.getProductId(),
                     AuditResult.SUCCESS,
-                    new AdminProductMutationAuditState(List.of("name", "price", "stock", "category", "description"), "ACTIVE", reason),
+                    new AdminProductMutationAuditState(List.of("name", "price", "stock", "category", "description", "presentation"), "ACTIVE", reason),
                     request
             ));
             return created;

@@ -12,7 +12,7 @@ import { Link } from "react-router-dom";
 
 import { apiClients } from "@/api/clients";
 import { ErrorState, LoadingState } from "@/components/async-states";
-import { ProductArt } from "@/components/product-art";
+import { ProductPhoto } from "@/components/product-gallery";
 import { Button } from "@/components/ui/button";
 
 import "./catalog.css";
@@ -262,7 +262,11 @@ export function ProductCatalog() {
       <div className="product-grid">
         {products.map((product) => (
           <article className="product-card" key={product.productId}>
-            <ProductArt name={product.name} category={product.category} />
+            <ProductPhoto
+              image={product.presentation?.images?.[0]}
+              name={product.name}
+              category={product.category}
+            />
             <div className="product-copy">
               <p className="product-category">{product.category}</p>
               <h3>{product.name}</h3>

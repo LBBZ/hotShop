@@ -11,6 +11,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.Valid;
 
 import java.math.BigDecimal;
 
@@ -26,9 +27,15 @@ public record AdminProductMutationRequest(
         @Size(max = 4000) String description,
         @NotBlank @Size(min = 3, max = 256)
         @Pattern(regexp = "^(?=(?:.*\\S){3,})[^\\r\\n]*$")
-        String reason
+        String reason,
+        @Valid ProductPresentation presentation
 ) {
+    public AdminProductMutationRequest(String name, BigDecimal price, Integer stock,
+                                       String category, String description, String reason) {
+        this(name, price, stock, category, description, reason, null);
+    }
+
     public ProductWriteRequest product() {
-        return new ProductWriteRequest(name, price, stock, category, description);
+        return new ProductWriteRequest(name, price, stock, category, description, presentation);
     }
 }

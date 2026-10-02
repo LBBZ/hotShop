@@ -1,0 +1,68 @@
+{
+  "purpose": "Fictional HotShop demo catalog; all images AI generated. No real product or performance claims. WebP files live in web/public/media/products/.",
+  "conversion": "Browser Canvas WebP quality 0.86, preserving original dimensions; no creative edits.",
+  "assets": [
+    {
+      "file": "radio.webp",
+      "mode": "builtin",
+      "source": "D:\\Codex\\.codex\\generated_images\\01a0f75d-fd0a-7171-b92f-f07d9a965684\\exec-b2e246bd-c0a8-47f7-884e-c55ac41ffedf.png",
+      "reference": "D:\\Codex\\.codex\\generated_images\\01a0f75d-fd0a-7171-b92f-f07d9a965684\\exec-4f755a79-5336-4b85-a650-131e0a29c327.png",
+      "prompt": "Use case: precise-object-edit. Remove only the printed letters and numerals around the radio's cream tuning knob, keeping neat small tick marks as the analog scale. Preserve exactly the radio shape, knob, speaker, orange material texture, antenna, framing, lighting and background. No other edits. No text or numbers anywhere."
+    },
+    {
+      "file": "radio-detail.webp",
+      "mode": "builtin",
+      "source": "D:\\Codex\\.codex\\generated_images\\01a0f75d-fd0a-7171-b92f-f07d9a965684\\exec-3e79da79-4b07-436a-8797-d9a68d34df73.png",
+      "reference": "D:\\Codex\\.codex\\generated_images\\01a0f75d-fd0a-7171-b92f-f07d9a965684\\exec-f1cc281f-6033-491f-b3cf-cde5d39fc298.png",
+      "prompt": "Use case: precise-object-edit. Remove only the printed letters and numerals around the radio's cream tuning knob, keeping neat small tick marks as the analog scale. Preserve exactly the radio shape, knob, speaker, orange material texture, antenna, framing, lighting and background. No other edits. No text or numbers anywhere."
+    },
+    {
+      "file": "speaker.webp",
+      "mode": "builtin",
+      "source": "D:\\Codex\\.codex\\generated_images\\01a0f75d-fd0a-7171-b92f-f07d9a965684\\exec-fd8aca66-8856-48f8-9b5f-d0025209b1f8.png",
+      "prompt": "Use case: product-mockup. Create one high-end ecommerce product photograph for HotShop's fictional demonstration catalog. Square 1024x1024 composition. A single coherent product, centered with generous negative space and wholly inside the frame, elevated editorial studio photography, soft side light and a natural contact shadow, plain very pale lavender seamless background #f7f5fa, true material texture, beautifully precise construction. Three-quarter front view, product fills about 66 percent of frame. No people, hands, extra props, logos, watermark, decorative text or frame. This is a product photo, not a UI layout. Subject: a small sage-green cylindrical portable Bluetooth speaker with woven fabric body, matching green loop strap, subtle cream base and top controls"
+    },
+    {
+      "file": "headphones.webp",
+      "mode": "builtin",
+      "source": "D:\\Codex\\.codex\\generated_images\\01a0f75d-fd0a-7171-b92f-f07d9a965684\\exec-5b596efe-9c97-4474-bcd1-2086e0e3dee7.png",
+      "prompt": "Use case: product-mockup. Create one high-end ecommerce product photograph for HotShop's fictional demonstration catalog. Square 1024x1024 composition. A single coherent product, centered with generous negative space and wholly inside the frame, elevated editorial studio photography, soft side light and a natural contact shadow, plain very pale lavender seamless background #f7f5fa, true material texture, beautifully precise construction. Three-quarter front view, product fills about 66 percent of frame. No people, hands, extra props, logos, watermark, decorative text or frame. This is a product photo, not a UI layout. Subject: matte lavender over-ear wireless headphones, soft padded headband, generous cushions and minimal unbranded oval ear cups"
+    },
+    {
+      "file": "headphones-detail.webp",
+      "mode": "builtin",
+      "source": "D:\\Codex\\.codex\\generated_images\\01a0f75d-fd0a-7171-b92f-f07d9a965684\\exec-af4b89f7-c3b8-4224-9972-819975e08083.png",
+      "prompt": "Use case: precise-object-edit. Asset type: second gallery view for a fictional ecommerce demonstration. Show the exact lavender headphones from the reference in a close editorial detail view, focusing on the soft ear cushion, curved hinge and oval ear cup from the other side. Preserve the same product identity, color, materials, construction, seamless pale lavender studio background and soft light. Change only camera position and framing. Square composition. No added features, logos, text or props."
+    },
+    {
+      "file": "earbuds.webp",
+      "mode": "builtin",
+      "source": "D:\\Codex\\.codex\\generated_images\\01a0f75d-fd0a-7171-b92f-f07d9a965684\\exec-2be368f2-82fc-455e-80f5-a3ca172a193d.png",
+      "prompt": "Use case: product-mockup. Create one high-end ecommerce product photograph for HotShop's fictional demonstration catalog. Square 1024x1024 composition. A single coherent product, centered with generous negative space and wholly inside the frame, elevated editorial studio photography, soft side light and a natural contact shadow, plain very pale lavender seamless background #f7f5fa, true material texture, beautifully precise construction. Three-quarter front view, product fills about 66 percent of frame. No people, hands, extra props, logos, watermark, decorative text or frame. This is a product photo, not a UI layout. Subject: warm ivory wireless in-ear earphones resting neatly inside an open small oval peach charging case"
+    },
+    {
+      "file": "keyboard.webp",
+      "mode": "builtin",
+      "source": "D:\\Codex\\.codex\\generated_images\\01a0f75d-fd0a-7171-b92f-f07d9a965684\\exec-95dc1aa6-c77e-4731-bcf1-bcc9828123d9.png",
+      "prompt": "Use case: product-mockup. Create one high-end ecommerce product photograph for HotShop's fictional demonstration catalog. Square 1024x1024 composition. A single coherent product, centered with generous negative space and wholly inside the frame, elevated editorial studio photography, soft side light and a natural contact shadow, plain very pale lavender seamless background #f7f5fa, true material texture, beautifully precise construction. Three-quarter front view, product fills about 66 percent of frame. No people, hands, extra props, logos, watermark, decorative text or frame. This is a product photo, not a UI layout. Subject: a compact 75 percent mechanical keyboard with ivory and muted plum keycaps, a single rose escape key, brushed aluminum frame, neat generic legends, no brand"
+    },
+    {
+      "file": "lamp.webp",
+      "mode": "builtin",
+      "source": "D:\\Codex\\.codex\\generated_images\\01a0f75d-fd0a-7171-b92f-f07d9a965684\\exec-74a09eac-22d4-46b4-942a-7275d1754575.png",
+      "prompt": "Use case: product-mockup. Create one high-end ecommerce product photograph for HotShop's fictional demonstration catalog. Square 1024x1024 composition. A single coherent product, centered with generous negative space and wholly inside the frame, elevated editorial studio photography, soft side light and a natural contact shadow, plain very pale lavender seamless background #f7f5fa, true material texture, beautifully precise construction. Three-quarter front view, product fills about 66 percent of frame. No people, hands, extra props, logos, watermark, decorative text or frame. This is a product photo, not a UI layout. Subject: a sculptural small rose-pink desk lamp with a softly domed shade, narrow upright stem and circular weighted base"
+    },
+    {
+      "file": "mug.webp",
+      "mode": "builtin",
+      "source": "D:\\Codex\\.codex\\generated_images\\01a0f75d-fd0a-7171-b92f-f07d9a965684\\exec-605df040-d04b-4508-8742-c10f5eb2853a.png",
+      "prompt": "Use case: product-mockup. Create one high-end ecommerce product photograph for HotShop's fictional demonstration catalog. Square 1024x1024 composition. A single coherent product, centered with generous negative space and wholly inside the frame, elevated editorial studio photography, soft side light and a natural contact shadow, plain very pale lavender seamless background #f7f5fa, true material texture, beautifully precise construction. Three-quarter front view, product fills about 66 percent of frame. No people, hands, extra props, logos, watermark, decorative text or frame. This is a product photo, not a UI layout. Subject: a warm white ceramic mug with a generous loop handle and a simple soft plum accent glaze around the bottom"
+    },
+    {
+      "file": "bag.webp",
+      "mode": "builtin",
+      "source": "D:\\Codex\\.codex\\generated_images\\01a0f75d-fd0a-7171-b92f-f07d9a965684\\exec-15c47460-64c6-4c30-9249-c9939038badc.png",
+      "prompt": "Use case: product-mockup. Create one high-end ecommerce product photograph for HotShop's fictional demonstration catalog. Square 1024x1024 composition. A single coherent product, centered with generous negative space and wholly inside the frame, elevated editorial studio photography, soft side light and a natural contact shadow, plain very pale lavender seamless background #f7f5fa, true material texture, beautifully precise construction. Three-quarter front view, product fills about 66 percent of frame. No people, hands, extra props, logos, watermark, decorative text or frame. This is a product photo, not a UI layout. Subject: a small dark sage-green canvas crossbody bag with rounded corners, a wide woven adjustable strap and understated brushed metal buckle"
+    }
+  ]
+}

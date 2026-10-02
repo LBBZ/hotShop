@@ -19,11 +19,11 @@ Screenshots show the actual frontend with fixed presentation fixtures. Click to 
 
 ## What you can explore
 
-- **A complete shopping flow** — Search and filter products, view details, make regular purchases, reserve flash-sale stock, and track orders, payments, and reservations.
+- **A complete shopping flow** — Search and filter products, zoom into image galleries, review specifications, make purchases, reserve flash-sale stock, and track orders, payments, and reservations.
 - **AI purchases with user confirmation** — Product lookup and comparison, the user's own orders, and knowledge answers with citations. Purchase requests become drafts that the user confirms.
 - **A dedicated admin workspace** — Product maintenance, stock adjustments, campaign loading, audit records, transaction metrics, and exception summaries.
 
-The interface supports mobile layouts, keyboard navigation, and reduced motion. Original category illustrations are explicitly labeled as artwork.
+The interface supports mobile layouts, keyboard navigation, and reduced motion. Demo products use labeled AI-generated images, with category artwork as a fallback. Administrators can edit image URLs, alternative text, and specifications.
 
 ## Quick start
 
@@ -37,9 +37,9 @@ pwsh -NoProfile -File ./script/demo.ps1 -Action Start
 
 The first run downloads dependencies, builds images, migrates the database, and seeds the demo. After the script reports a successful start, open **http://127.0.0.1:18080** and register to enter your personal workspace.
 
-No model API key is needed: the default demo uses **FakeModel** with predefined responses and a **Mock Provider** for payments. To use a live model, configure DeepSeek or Qwen. The seed contains one product and three campaigns: available, sold out, and expired.
+No model API key is needed: the default demo uses **FakeModel** with predefined responses and a **Mock Provider** for payments. To use a live model, configure DeepSeek or Qwen. The seed contains eight fictional products across audio, electronics, home, and travel, plus three campaigns: available, sold out, and expired.
 
-Try `购买商品 913001 数量 1 件` in the assistant (“buy one unit of product 913001”), review the draft, and confirm to create an order. The [demo guide](docs/delivery/demo.md) covers admin sign-in, knowledge queries, restart, and stop commands. If the port is busy, append `-WebPort 18081` to the initial start command.
+Try `推荐通勤耳机` (“suggest headphones for commuting”), select two products to compare prices and specifications, then prepare a purchase draft. An order is created only after your confirmation. You can also type `购买商品 913001 数量 1 件` (“buy one unit of product 913001”). The [demo guide](docs/delivery/demo.md) covers admin sign-in, knowledge queries, restart, and stop commands. If the port is busy, append `-WebPort 18081` to the initial start command.
 
 ## Implementation highlights
 

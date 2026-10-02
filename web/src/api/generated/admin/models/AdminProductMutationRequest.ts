@@ -13,6 +13,14 @@
  */
 
 import { mapValues } from '../runtime';
+import type { ProductPresentation } from './ProductPresentation';
+import {
+    ProductPresentationFromJSON,
+    ProductPresentationFromJSONTyped,
+    ProductPresentationToJSON,
+    ProductPresentationToJSONTyped,
+} from './ProductPresentation';
+
 /**
  *
  * @export
@@ -37,6 +45,12 @@ export interface AdminProductMutationRequest {
      * @memberof AdminProductMutationRequest
      */
     name: string;
+    /**
+     *
+     * @type {ProductPresentation}
+     * @memberof AdminProductMutationRequest
+     */
+    presentation?: ProductPresentation;
     /**
      *
      * @type {string}
@@ -82,6 +96,7 @@ export function AdminProductMutationRequestFromJSONTyped(json: any, ignoreDiscri
         'category': json['category'],
         'description': json['description'] == null ? undefined : json['description'],
         'name': json['name'],
+        'presentation': json['presentation'] == null ? undefined : ProductPresentationFromJSON(json['presentation']),
         'price': json['price'],
         'reason': json['reason'],
         'stock': json['stock'],
@@ -102,6 +117,7 @@ export function AdminProductMutationRequestToJSONTyped(value?: AdminProductMutat
         'category': value['category'],
         'description': value['description'],
         'name': value['name'],
+        'presentation': ProductPresentationToJSON(value['presentation']),
         'price': value['price'],
         'reason': value['reason'],
         'stock': value['stock'],

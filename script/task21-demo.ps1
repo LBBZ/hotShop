@@ -105,6 +105,7 @@ try {
     $seed = Get-Content (Join-Path $demoRoot 'web/scripts/task-13-e2e-seed.sql') -Raw -Encoding utf8
     # Keep the live demonstration window open for one day from first seed.
     $seed = $seed.Replace('INTERVAL 30 MINUTE','INTERVAL 1 DAY')
+    $seed += "`n" + (Get-Content (Join-Path $demoRoot 'database/data/demo-catalog.sql') -Raw -Encoding utf8)
     $seed | & docker @compose exec -T mysql sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql --default-character-set=utf8mb4 --protocol=TCP --host=127.0.0.1 --user=root --database="$MYSQL_DATABASE"'
     if ($LASTEXITCODE -ne 0) { throw 'Demo seed failed; resources retained.' }
     Invoke-Docker ($compose + @('exec','-T','agent-service','python','-m','hotshop_agent.index_cli','rebuild'))

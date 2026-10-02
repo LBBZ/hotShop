@@ -13,6 +13,14 @@
  */
 
 import { mapValues } from '../runtime';
+import type { ProductPresentation } from './ProductPresentation';
+import {
+    ProductPresentationFromJSON,
+    ProductPresentationFromJSONTyped,
+    ProductPresentationToJSON,
+    ProductPresentationToJSONTyped,
+} from './ProductPresentation';
+
 /**
  *
  * @export
@@ -43,6 +51,12 @@ export interface ProductResponse {
      * @memberof ProductResponse
      */
     name: string;
+    /**
+     *
+     * @type {ProductPresentation}
+     * @memberof ProductResponse
+     */
+    presentation?: ProductPresentation;
     /**
      *
      * @type {string}
@@ -97,6 +111,7 @@ export function ProductResponseFromJSONTyped(json: any, ignoreDiscriminator: boo
         'createdAt': (new Date(json['createdAt'])),
         'description': json['description'] == null ? undefined : json['description'],
         'name': json['name'],
+        'presentation': json['presentation'] == null ? undefined : ProductPresentationFromJSON(json['presentation']),
         'price': json['price'],
         'productId': json['productId'],
         'stock': json['stock'],
@@ -119,6 +134,7 @@ export function ProductResponseToJSONTyped(value?: ProductResponse | null, ignor
         'createdAt': ((value['createdAt']).toISOString()),
         'description': value['description'],
         'name': value['name'],
+        'presentation': ProductPresentationToJSON(value['presentation']),
         'price': value['price'],
         'productId': value['productId'],
         'stock': value['stock'],

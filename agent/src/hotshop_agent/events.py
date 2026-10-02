@@ -18,6 +18,7 @@ EventType = Literal[
     "tool.completed",
     "tool.failed",
     "purchase_draft.created",
+    "catalog.results",
     "rag.completed",
     "usage",
     "error",
@@ -45,6 +46,7 @@ EVENT_DATA_KEYS: dict[str, frozenset[str]] = {
         }
     ),
     "rag.completed": frozenset({"outcome", "citations"}),
+    "catalog.results": frozenset({"mode", "productIds"}),
     "usage": frozenset({"inputTokens", "outputTokens", "estimatedCostUsd"}),
     "error": frozenset({"code", "message", "retryable"}),
     "done": frozenset({"state"}),
@@ -411,11 +413,25 @@ class StreamEvent(BaseModel):
             raise ValueError("SSE event contains non-allowlisted data")
         if event_type == "purchase_draft.created" and not _valid_purchase_draft(value):
             raise ValueError("SSE purchase draft is invalid")
+        if event_type == "catalog.results" and not valid_catalog_results(value):
+            raise ValueError("SSE catalog results are invalid")
         return value
 
     def encode(self) -> str:
         payload = self.model_dump(by_alias=True, exclude_none=True)
         return f"event: {self.type}\ndata: {safe_json(payload)}\n\n"
+
+
+def valid_catalog_results(value: dict[str, Any]) -> bool:
+    ids = value.get("productIds")
+    return (
+        isinstance(value.get("mode"), str)
+        and value.get("mode") in {"search", "compare", "detail"}
+        and isinstance(ids, list)
+        and len(ids) <= 20
+        and all(isinstance(item, str) and re.fullmatch(r"[1-9][0-9]{0,18}", item) for item in ids)
+        and len(ids) == len(set(ids))
+    )
 
 
 def _valid_purchase_draft(value: dict[str, Any]) -> bool:

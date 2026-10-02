@@ -2,6 +2,7 @@ import { apiClients } from "@/api/clients";
 import type {
   AdminProductEditRequest,
   AdminStockAdjustmentRequest,
+  ProductPresentation,
 } from "@/api/generated/admin";
 import { adminAuth } from "@/auth/domains";
 
@@ -50,6 +51,7 @@ export interface AdminProduct {
   category: string;
   description?: string;
   createdAt: string | Date;
+  presentation?: ProductPresentation;
 }
 
 export interface ProductMutation {
@@ -59,6 +61,7 @@ export interface ProductMutation {
   category: string;
   description?: string;
   reason: string;
+  presentation?: ProductPresentation;
 }
 
 export type ProductEdit = AdminProductEditRequest;
@@ -220,6 +223,7 @@ export const adminApi = {
           price: value.price,
           category: value.category,
           description: value.description,
+          presentation: value.presentation,
           reason: value.reason,
         }),
       },

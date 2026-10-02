@@ -33,6 +33,26 @@ function responseFromChunks(chunks: string[]) {
 }
 
 describe("Agent SSE contract", () => {
+  it("accepts authoritative catalog IDs and rejects invented fields or malformed IDs", () => {
+    const catalog = event("catalog.results", 3, {
+      mode: "compare",
+      productIds: ["913003", "913004"],
+    });
+    expect(guardAgentEvent(catalog, { sessionId, runId })).toEqual(catalog);
+    for (const data of [
+      { mode: "search", productIds: ["1", "1"] },
+      { mode: "search", productIds: [1] },
+      { mode: "search", productIds: ["01"] },
+      { mode: {}, productIds: ["1"] },
+      { mode: "search", productIds: ["1"], price: "1.00" },
+    ])
+      expect(
+        guardAgentEvent(event("catalog.results", 3, data), {
+          sessionId,
+          runId,
+        }),
+      ).toBeNull();
+  });
   it("accepts strict citations and rejects unknown fields or another run", () => {
     const citation = event("rag.completed", 1, {
       outcome: "hit",

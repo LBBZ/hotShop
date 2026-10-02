@@ -10,6 +10,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.Valid;
 
 import java.math.BigDecimal;
 
@@ -31,6 +32,11 @@ public record ProductWriteRequest(
         @Size(max = 100)
         String category,
         @Size(max = 4000)
-        String description
+        String description,
+        @Valid ProductPresentation presentation
 ) {
+    public ProductWriteRequest(String name, BigDecimal price, Integer stock,
+                               String category, String description) {
+        this(name, price, stock, category, description, null);
+    }
 }

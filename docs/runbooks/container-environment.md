@@ -29,7 +29,7 @@ pwsh -NoProfile -File .\script\demo.ps1 -Action Restart -ProjectName hotshop-tas
 
 - 管理员：`task13-admin` / `Task13Admin!2026`，公开的一次性本机演示账号。
 - 用户：浏览器注册页创建自己的用户名和密码，注册成功后自动登录。不会写入既有用户数据。
-- 商品 `913001`，活动 `913001` 正常、`913002` 售罄、`913003` 已结束。
+- 8 件演示商品 `913001`–`913008`，包含图片、规格与售罄示例；活动 `913001` 正常、`913002` 售罄、`913003` 已结束。
 - seed 复用 `web/scripts/task-13-e2e-seed.sql`，只在全新项目执行一次，将其 30 分钟活动窗口延至
   首次初始化后一日。`Restart` 不重置库存/版本/窗口；过期后用新的独立项目演示。
 - `Stop` 只停止这个项目，保留数据、容器、网络和镜像。失败时也保留资源供排障；不存在自动删除流程。
@@ -98,7 +98,7 @@ docker compose --env-file .env.example --profile app up -d --build
 固定、仅 DB 0 的具名连接：缓存/认证限流只注入 `redis-cache`，秒杀装载与 Reservation 只注入
 `redis-seckill`；请求期间不创建连接工厂，也不按 dbIndex 选择逻辑库。
 
-Redis Stream 消费者位于 `task` 容器。它依赖 MySQL 完成当前全部迁移（至 V1.11）和
+Redis Stream 消费者位于 `task` 容器。它依赖 MySQL 完成当前全部迁移（至 V1.12）和
 `redis-seckill` 健康；转单事务不等待 RabbitMQ 发布，已提交的 Outbox 由独立发布器投递。消费开关默认开启，对账默认 dry-run 且
 自动修复关闭。
 

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ShieldCheck } from "lucide-react";
+import { ArrowLeft, MessageCircle, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useStore } from "zustand";
@@ -8,7 +8,7 @@ import { apiClients } from "@/api/clients";
 import { ApiProblemError } from "@/api/core/problem";
 import { userAuth } from "@/auth/domains";
 import { ErrorState, LoadingState } from "@/components/async-states";
-import { ProductArt } from "@/components/product-art";
+import { ProductGallery } from "@/components/product-gallery";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +16,8 @@ import {
   getOrCreatePurchaseIntent,
   purchaseIntentFingerprint,
 } from "@/features/transactions/purchase-intent";
+
+import "./product-detail.css";
 
 interface CreatedOrder {
   orderId: string;
@@ -49,6 +51,13 @@ export function ProductDetailPage() {
   });
 
   const buy = async () => {
+    if (
+      busy ||
+      !Number.isInteger(quantity) ||
+      quantity < 1 ||
+      quantity > Math.min(100, query.data?.stock ?? 0)
+    )
+      return;
     setBusy(true);
     setProblem(undefined);
     try {
@@ -127,6 +136,9 @@ export function ProductDetailPage() {
       </div>
     );
   const product = query.data;
+  const maximum = Math.min(100, product.stock);
+  const validQuantity =
+    Number.isInteger(quantity) && quantity >= 1 && quantity <= maximum;
   return (
     <article className="product-detail public-page">
       <Link className="back-link" to="/#catalog">
@@ -134,35 +146,82 @@ export function ProductDetailPage() {
         返回商品目录
       </Link>
       <div className="product-detail-grid">
-        <div className="product-detail-visual">
-          <ProductArt name={product.name} category={product.category} />
-          <p className="detail-art-caption">
-            商品以名称与详情描述为准 · 图案为品类示意
-          </p>
-        </div>
+        <ProductGallery
+          key={product.productId}
+          name={product.name}
+          category={product.category}
+          presentation={product.presentation}
+        />
         <div className="product-detail-copy">
           <Badge tone={product.stock > 0 ? "healthy" : "warning"}>
             {product.stock > 0 ? `可售库存 ${product.stock}` : "已售罄"}
           </Badge>
-          <p className="eyebrow">PRODUCT / {product.productId}</p>
+          <p className="eyebrow">
+            {product.category} / {product.productId}
+          </p>
           <h1>{product.name}</h1>
           <p>{product.description ?? "当前商品没有更多描述。"}</p>
           <div className="detail-price">
             <span>普通售价</span>
             <strong>¥ {product.price}</strong>
           </div>
-          <label className="field quantity-field">
-            <span>购买数量</span>
-            <input
-              type="number"
-              min="1"
-              max={Math.max(1, product.stock)}
-              value={quantity}
-              onChange={(event) =>
-                setQuantity(Math.max(1, Number(event.target.value)))
-              }
-            />
-          </label>
+          {product.presentation?.specifications?.length ? (
+            <dl className="product-specifications">
+              {product.presentation.specifications.map((spec, index) => (
+                <div key={`${spec.name}-${index}`}>
+                  <dt>{spec.name}</dt>
+                  <dd>{spec.value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
+          <div className="product-purchase-panel">
+            <label className="field quantity-field">
+              <span>购买数量</span>
+              <input
+                type="number"
+                min="1"
+                max={Math.max(1, maximum)}
+                step="1"
+                inputMode="numeric"
+                disabled={busy || product.stock === 0}
+                aria-invalid={product.stock > 0 && !validQuantity}
+                aria-describedby={
+                  product.stock > 0 && !validQuantity
+                    ? "quantity-error"
+                    : undefined
+                }
+                value={quantity}
+                onChange={(event) => setQuantity(Number(event.target.value))}
+              />
+            </label>
+            <Button
+              type="button"
+              size="lg"
+              disabled={!validQuantity || busy}
+              data-purchase-button
+              onClick={() => void buy()}
+            >
+              {busy
+                ? "正在创建订单…"
+                : product.stock === 0
+                  ? "暂时售罄"
+                  : session
+                    ? "创建待支付订单"
+                    : "登录后购买"}
+            </Button>
+          </div>
+          {product.stock > 0 && !validQuantity ? (
+            <p className="inline-problem" id="quantity-error" role="alert">
+              请输入 1 至 {maximum} 之间的整数。
+            </p>
+          ) : null}
+          <Link
+            className="product-ask-agent"
+            to={`/user/agent?prompt=${encodeURIComponent(`查看商品 ${product.productId}`)}`}
+          >
+            <MessageCircle aria-hidden="true" /> 问问购物助手
+          </Link>
           <div className="safety-note">
             <ShieldCheck aria-hidden="true" />
             <p>
@@ -174,14 +233,6 @@ export function ProductDetailPage() {
               {problem}
             </p>
           ) : null}
-          <Button
-            type="button"
-            size="lg"
-            disabled={product.stock === 0 || busy}
-            onClick={() => void buy()}
-          >
-            {busy ? "正在创建订单…" : session ? "创建待支付订单" : "登录后购买"}
-          </Button>
         </div>
       </div>
     </article>

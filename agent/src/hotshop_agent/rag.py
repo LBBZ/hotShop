@@ -223,6 +223,25 @@ def route_query(query: str, identity: IdentityKind, owner_id: str) -> RouteDecis
         )
     ):
         return _user_tool(identity, "list_my_reservations", {"limit": 10})
+    detail = re.fullmatch(r"(?:查看|了解)商品\s*([1-9][0-9]{0,18})[。？！?!]?", query.strip())
+    if detail:
+        return _user_tool(identity, "get_product", {"productId": detail.group(1)})
+    comparison = re.fullmatch(
+        r"(?:请)?(?:对比|比较)\s*(?:商品)?\s*([1-9][0-9]{0,18})"
+        r"\s*(?:和|与|、|,|，)\s*(?:商品)?\s*([1-9][0-9]{0,18})[。？！?!]?",
+        query.strip(),
+    )
+    if comparison:
+        return _user_tool(identity, "compare_products", {"productIds": list(comparison.groups())})
+    discovery = re.fullmatch(
+        r"(?:请)?(?:帮我找|找一找|搜索|推荐|看看)\s*(.{1,80}?)(?:[。？！?!])?", query.strip()
+    )
+    if discovery:
+        keyword = discovery.group(1).strip()
+        # These demo phrases map to a catalog search, never to invented stock or prices.
+        if keyword in {"通勤耳机", "适合通勤的耳机"}:
+            keyword = "耳机"
+        return _user_tool(identity, "search_products", {"keyword": keyword, "limit": 8})
     if any(
         word in normalized
         for word in (

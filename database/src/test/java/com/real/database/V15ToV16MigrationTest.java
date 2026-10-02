@@ -38,8 +38,8 @@ class V15ToV16MigrationTest {
         }
         Flyway latest = Flyway.configure().dataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword())
                 .locations("classpath:db/migration").load();
-        assertThat(latest.migrate().migrationsExecuted).isEqualTo(6);
-        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("1.11");
+        assertThat(latest.migrate().migrationsExecuted).isEqualTo(7);
+        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("1.12");
         assertThat(latest.validateWithResult().validationSuccessful).isTrue();
         try (var connection = DriverManager.getConnection(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword());
              var statement = connection.createStatement();

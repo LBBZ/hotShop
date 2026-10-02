@@ -39,6 +39,10 @@ Spring Security 验证旧路径在已认证请求下返回 404。以下对照只
 Controller 的 HTTP 签名只使用 `*Request`、`*Response` 和 `CursorPageResponse` DTO。持久化实体只在
 Controller 内部与领域服务之间使用，不进入请求/响应签名或 OpenAPI schema。
 
+商品读写 DTO 的可选 `presentation` 包含 `images`（最多 8 个 `{url,alt}`）、`specifications`（最多 12 个 `{name,value}`）及 `imageNote`。图片地址只接受 HTTPS 或 `/media/products/` 下的 PNG/JPEG/WebP 路径。更新商品时省略或传 `null` 保留已有展示资料；显式对象替换整份资料，空数组清空对应内容。元数据编辑仍不接受库存字段。
+
+Agent SSE 的 `catalog.results` 只在受限商品工具成功后发出，携带 `mode=search|compare|detail` 与最多 20 个唯一商品 ID，不携带模型生成的价格或图片。浏览器验证事件所属会话与运行，再从公共商品接口读取最新资料；对比和购买草稿都需要用户点击，创建订单仍需单独确认。
+
 ### 1.1 身份域与令牌生命周期
 
 认证边界在签名验证阶段按 issuer、audience、`typ`、`kid` 和独立公钥集合隔离，不能靠

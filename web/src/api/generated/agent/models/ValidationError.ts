@@ -29,6 +29,18 @@ import {
 export interface ValidationError {
     /**
      *
+     * @type {object}
+     * @memberof ValidationError
+     */
+    ctx?: object;
+    /**
+     *
+     * @type {any}
+     * @memberof ValidationError
+     */
+    input?: any | null;
+    /**
+     *
      * @type {Array<ValidationErrorLocInner>}
      * @memberof ValidationError
      */
@@ -67,6 +79,8 @@ export function ValidationErrorFromJSONTyped(json: any, ignoreDiscriminator: boo
     }
     return {
 
+        'ctx': json['ctx'] == null ? undefined : json['ctx'],
+        'input': json['input'] == null ? undefined : json['input'],
         'loc': ((json['loc'] as Array<any>).map(ValidationErrorLocInnerFromJSON)),
         'msg': json['msg'],
         'type': json['type'],
@@ -84,6 +98,8 @@ export function ValidationErrorToJSONTyped(value?: ValidationError | null, ignor
 
     return {
 
+        'ctx': value['ctx'],
+        'input': value['input'],
         'loc': ((value['loc'] as Array<any>).map(ValidationErrorLocInnerToJSON)),
         'msg': value['msg'],
         'type': value['type'],

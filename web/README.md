@@ -17,7 +17,7 @@ HotShop 的 React 单应用：公开商城、个人购物空间、购物助手�
 | `/user/agent`                                                            | 购物助手、连续对话、静态知识引用和需用户确认的购买草稿                          |
 | `/admin/login`、`/admin`                                                 | 独立管理员身份、运营总览、商品/库存、活动、订单、异常、Outbox、审计与受限 Agent |
 
-视觉系统使用灰蓝背景、深蓝文字、珊瑚色操作提示与青色成功状态。展示标题、正文与紧凑数据分别使用 Barlow Condensed、Manrope、IBM Plex Mono；字体由项目依赖本地打包。响应式布局、键盘焦点、状态朗读与减少动效规则集中在 [styles.css](src/styles.css) 及组件中。
+商城与个人工作区使用浅紫背景、深紫文字和玫红操作色，后台使用灰蓝背景、深蓝导航与珊瑚色强调。展示标题、正文与紧凑数据分别使用 Barlow Condensed、Manrope、IBM Plex Mono；字体由项目依赖本地打包。响应式布局、键盘焦点、状态朗读与减少动效规则见 [基础样式](src/styles.css)、[商城样式](src/storefront.css)和[个人工作区样式](src/user-workspace.css)。
 
 ## 启动
 
@@ -61,13 +61,24 @@ corepack pnpm@10.15.0 api:check
 
 浏览器验证有三个明确入口：
 
-| 范围                | 入口（从仓库根目录执行）                                                                      | 依赖                                                             |
-| ------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| 快速页面/交互回归   | `corepack pnpm@10.15.0 --dir web test:e2e`                                                    | Vite 自动启动；默认使用 mock，真实 Compose 规格未启用            |
-| 真实交易与故障路径  | `pwsh -NoProfile -File script/verify-task19-e2e.ps1`                                          | Docker/Compose 和 PowerShell 7；脚本创建并清理独立后端与测试资源 |
-| 构建后的 Nginx 应用 | `corepack pnpm@10.15.0 --dir web exec playwright test --config playwright.delivery.config.ts` | 已启动完整演示，默认 `http://127.0.0.1:18080`                    |
+| 范围                | 入口（从仓库根目录执行）                             | 依赖                                                             |
+| ------------------- | ---------------------------------------------------- | ---------------------------------------------------------------- |
+| 快速页面/交互回归   | `corepack pnpm@10.15.0 --dir web test:e2e`           | Vite 自动启动；默认使用 mock，真实 Compose 规格未启用            |
+| 真实交易与故障路径  | `pwsh -NoProfile -File script/verify-task19-e2e.ps1` | Docker/Compose 和 PowerShell 7；脚本创建并清理独立后端与测试资源 |
+| 构建后的 Nginx 应用 | `corepack pnpm@10.15.0 --dir web test:delivery`      | 已启动独立演示；默认 `http://127.0.0.1:18080`，覆盖桌面与手机    |
 
 真实交易测试通过 User Mock Checkout API 发起支付，经过 Outbox → RabbitMQ → Task → 签名回调 → timeline/SSE；不会以浏览器路由 mock 或测试侧直接回调代替交易链路。测试定义与既往结果见 [用户交易链路](../docs/architecture/user-transaction-journey.md) 和 [质量报告](../docs/quality)。
+
+`test:delivery` 在桌面 Chromium 与 Pixel 7 两种设备上运行 7 条流程，共 14 个用例，串行执行。它会注册测试账号、购买商品、修改商品描述和调整库存，只能指向可变更的独立演示环境。管理员登录若遇到 HTTP 429，会按服务器的 `Retry-After` 等待并重试一次，不修改限流配置。
+
+使用其他演示端口时，在 `web/` 目录设置地址后运行：
+
+```powershell
+$env:HOTSHOP_DELIVERY_URL = 'http://127.0.0.1:18082'
+pnpm test:delivery
+```
+
+仅验证某种设备可追加 `--project chromium` 或 `--project mobile-chromium`。该套件验证常规交易、用户确认、知识引用及后台库存冲突；服务重启和基础设施故障仍由上表的故障路径脚本覆盖。
 
 ## 身份、查询和流式边界
 

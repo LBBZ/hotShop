@@ -179,7 +179,7 @@ test.describe("TASK-19 real Agent and security journeys", () => {
     try {
       expect((confirmation.confirmationToken ?? "").length).toBeGreaterThan(40);
       await expect(
-        page.getByRole("heading", { name: "订单已由真实交易服务创建" }),
+        page.getByRole("heading", { name: "订单已创建", exact: true }),
       ).toBeVisible({
         timeout: 30_000,
       });

@@ -61,7 +61,35 @@ async function adminLogin(page: Page) {
   await page.goto("/admin/login");
   await page.getByLabel("管理员用户名").fill("task13-admin");
   await page.getByLabel("密码").fill("Task13Admin!2026");
-  await page.getByRole("button", { name: "以 Administrator 身份登录" }).click();
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const loginResponse = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/admin/api/v1/auth/login") &&
+        response.request().method() === "POST",
+    );
+    await page
+      .getByRole("button", { name: "以 Administrator 身份登录" })
+      .click();
+    const response = await loginResponse;
+    if (response.status() !== 429 || attempt === 1) {
+      expect(
+        response.ok(),
+        `Admin login returned HTTP ${response.status()}`,
+      ).toBe(true);
+      break;
+    }
+    // Desktop and mobile journeys share the demo administrator. Honor the real
+    // login throttle between contexts instead of changing application limits.
+    const retryAfter = Number(response.headers()["retry-after"]);
+    expect(
+      Number.isFinite(retryAfter) && retryAfter > 0 && retryAfter <= 300,
+    ).toBe(true);
+    console.info(
+      `Admin login rate limited; retrying after ${retryAfter} seconds.`,
+    );
+    test.setTimeout(test.info().timeout + retryAfter * 1000 + 1000);
+    await page.waitForTimeout(retryAfter * 1000 + 1000);
+  }
   await expect(page.getByRole("heading", { name: "运营脉冲" })).toBeVisible();
 }
 
@@ -161,7 +189,7 @@ test("built application: purchase, Mock payment, reservation and Agent confirmat
   await expect(page.getByText("尚未创建订单")).toBeVisible();
   await page.getByRole("button", { name: "确认并创建订单" }).click();
   await expect(
-    page.getByRole("heading", { name: "订单已由真实交易服务创建" }),
+    page.getByRole("heading", { name: "订单已创建", exact: true }),
   ).toBeVisible({ timeout: 30_000 });
 });
 

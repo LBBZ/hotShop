@@ -19,6 +19,7 @@
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "test:delivery": "playwright test --config playwright.delivery.config.ts",
     "api:generate": "node ./scripts/generate-api-clients.mjs",
     "api:generate:admin": "node ./scripts/generate-admin-api-client.mjs",
     "api:check": "node ./scripts/check-api-drift.mjs",

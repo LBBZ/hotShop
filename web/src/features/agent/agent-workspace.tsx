@@ -30,6 +30,21 @@ import { useTransactionStream } from "@/features/transactions/use-transaction-st
 type Boundary = "user" | "admin";
 type Phase = "idle" | "creating" | "streaming" | "done" | "error" | "cancelled";
 
+const shoppingStageLabels: Record<AgentStreamEvent["type"], string> = {
+  "session.created": "对话已准备好",
+  "message.started": "正在理解你的请求",
+  "message.delta": "正在整理回答",
+  "message.completed": "回答已生成",
+  "tool.started": "正在处理请求",
+  "tool.completed": "处理结果已返回",
+  "tool.failed": "处理未完成",
+  "purchase_draft.created": "购买草稿已准备好",
+  "rag.completed": "资料检索已完成",
+  usage: "处理进度已更新",
+  error: "本次请求未完成",
+  done: "本次处理已结束",
+};
+
 interface DraftItem {
   productId: string;
   quantity: number;
@@ -537,7 +552,10 @@ function AgentConversation({ boundary }: { boundary: Boundary }) {
           </div>
         </div>
 
-        <aside className="agent-stage-rail" aria-label="Agent 运行阶段">
+        <aside
+          className="agent-stage-rail"
+          aria-label={boundary === "user" ? "对话处理进度" : "Agent 运行阶段"}
+        >
           <h3>{boundary === "user" ? "对话进展" : "结构化阶段"}</h3>
           <ol>
             {stages.map((event) => (
@@ -550,8 +568,12 @@ function AgentConversation({ boundary }: { boundary: Boundary }) {
                 ) : (
                   <Radio aria-hidden="true" />
                 )}
-                <span>{event.type}</span>
-                <code>{event.sequence}</code>
+                <span>
+                  {boundary === "user"
+                    ? shoppingStageLabels[event.type]
+                    : event.type}
+                </span>
+                {boundary === "admin" ? <code>{event.sequence}</code> : null}
               </li>
             ))}
           </ol>
@@ -580,7 +602,11 @@ function AgentConversation({ boundary }: { boundary: Boundary }) {
       ) : null}
       <section className="agent-answer" aria-live="polite" aria-atomic="false">
         <h3 ref={answerHeading} tabIndex={-1}>
-          {problem ? "请求需要处理" : "Agent 回答"}
+          {problem
+            ? "请求需要处理"
+            : boundary === "user"
+              ? "购物助手的回答"
+              : "Agent 回答"}
         </h3>
         {problem ? (
           <div className="agent-problem" role="alert">
@@ -646,7 +672,7 @@ function AgentConversation({ boundary }: { boundary: Boundary }) {
             ))}
           </ul>
           <p className="purchase-risk">
-            确认时会重新检查实时库存和价格。确认凭证只在内存中签发并立即消费，不会显示或保存。
+            确认时会重新检查实时库存和价格。订单创建后，仍需到订单页完成支付。
           </p>
           <Button
             type="button"
@@ -664,9 +690,9 @@ function AgentConversation({ boundary }: { boundary: Boundary }) {
           className="agent-order-result"
           aria-labelledby="agent-order-title"
         >
-          <h3 id="agent-order-title">订单已由真实交易服务创建</h3>
-          <p>订单 {orderId} 已提交。下方状态来自可恢复的交易时间线 SSE。</p>
-          <Link to={`/user/orders/${orderId}`}>打开订单与 Mock 收银台</Link>
+          <h3 id="agent-order-title">订单已创建</h3>
+          <p>订单 {orderId} 已提交。可在订单页查看详情并完成支付。</p>
+          <Link to={`/user/orders/${orderId}`}>查看订单与模拟支付</Link>
           <TransactionTimeline
             state={transaction.state}
             connection={transaction.connection}

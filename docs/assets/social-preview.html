@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HotShop · Repository social preview</title>
+    <style>
+      :root {
+        --paper: #f7f5fa;
+        --ink: #30233b;
+        --muted: #6c6374;
+        --line: #ded5e5;
+        --rose: #b83267;
+        --green: #365b4b;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: "Manrope", "Microsoft YaHei", sans-serif;
+        color: var(--ink);
+      }
+      .card {
+        position: relative;
+        width: 1280px;
+        height: 640px;
+        overflow: hidden;
+        background: var(--paper);
+      }
+      header {
+        position: absolute;
+        top: 50px;
+        left: 64px;
+        right: 64px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .identity {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+      }
+      .identity svg {
+        width: 38px;
+        height: 38px;
+      }
+      .utility {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 13px;
+        font-weight: 500;
+        letter-spacing: 1.5px;
+      }
+      .repository {
+        color: var(--muted);
+        letter-spacing: 0;
+        font-size: 15px;
+      }
+      .copy {
+        position: absolute;
+        left: 64px;
+        top: 156px;
+        z-index: 2;
+      }
+      h1 {
+        margin: 0 0 24px -5px;
+        font-size: 112px;
+        font-weight: 700;
+        line-height: 1.04;
+        letter-spacing: -8px;
+      }
+      h1 span {
+        color: var(--rose);
+      }
+      .lead {
+        margin: 0 0 22px;
+        font-size: 31px;
+        font-weight: 600;
+        line-height: 1.45;
+        letter-spacing: -0.5px;
+      }
+      .description {
+        margin: 0;
+        max-width: 490px;
+        font-size: 21px;
+        line-height: 1.65;
+        color: var(--muted);
+      }
+      #artwork {
+        position: absolute;
+        width: 566px;
+        height: 556px;
+        right: 25px;
+        top: 71px;
+      }
+      #artwork svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      .confirmation {
+        position: absolute;
+        bottom: 121px;
+        right: 61px;
+        z-index: 3;
+        display: flex;
+        align-items: center;
+        gap: 13px;
+        padding: 16px 22px;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        box-shadow: 0 12px 28px #4937540e;
+        transform: rotate(-4deg);
+      }
+      .check {
+        display: grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        color: var(--green);
+        background: #e5eee7;
+      }
+      .check svg {
+        width: 20px;
+        height: 20px;
+      }
+      .confirmation strong {
+        display: block;
+        font-size: 17px;
+        font-weight: 600;
+      }
+      .confirmation small {
+        display: block;
+        margin-top: 5px;
+        font-size: 10px;
+        letter-spacing: 1.2px;
+        color: var(--muted);
+      }
+      footer {
+        position: absolute;
+        left: 64px;
+        right: 64px;
+        bottom: 37px;
+        border-top: 1px solid var(--line);
+        padding-top: 23px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 14px;
+      }
+      .stack {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+      }
+      .journey {
+        color: var(--muted);
+        letter-spacing: 0.3px;
+      }
+      .journey span {
+        padding: 0 10px;
+        color: var(--rose);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card" aria-label="HotShop — AI 辅助购物的全栈商城">
+      <header>
+        <div class="identity">
+          <svg viewBox="0 0 64 64" aria-hidden="true">
+            <rect width="64" height="64" rx="17" fill="#30233b" />
+            <path d="M19 22h26l4 29H15z" fill="#edb3cd" />
+            <path
+              d="M24 25V17a8 8 0 0 1 16 0v8"
+              fill="none"
+              stroke="#edb3cd"
+              stroke-width="4"
+              stroke-linecap="round"
+            />
+            <path
+              d="M25 32v12m14-12v12M25 38h14"
+              stroke="#30233b"
+              stroke-width="4"
+              stroke-linecap="round"
+            />
+          </svg>
+          <span class="utility">AI-ASSISTED COMMERCE</span>
+        </div>
+        <span class="utility repository">github.com/LBBZ/hotShop</span>
+      </header>
+      <section class="copy">
+        <h1>hotshop<span>.</span></h1>
+        <p class="lead">从发现好物，到确认购买。</p>
+        <p class="description">
+          A full-stack commerce application<br />with an AI shopping assistant.
+        </p>
+      </section>
+      <div id="artwork" aria-label="HotShop 原创购物袋插画"></div>
+      <aside class="confirmation">
+        <span class="check"
+          ><svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.2"
+            aria-hidden="true"
+          >
+            <path d="m5 12 4 4L19 6" /></svg
+        ></span>
+        <div>
+          <strong>由你确认，再创建订单</strong
+          ><small class="utility">YOU MAKE THE FINAL CALL.</small>
+        </div>
+      </aside>
+      <footer>
+        <div class="stack utility">
+          <span>REACT</span><span>JAVA</span><span>PYTHON</span>
+        </div>
+        <div class="journey">
+          Discover<span>→</span>Review<span>→</span>Confirm
+        </div>
+      </footer>
+    </main>
+  </body>
+</html>

@@ -8,6 +8,7 @@ from script.ci.check_ci_policy import (
     check_agent_test_isolation,
     check_cleanup_powershell,
     check_dockerfile,
+    check_qdrant_image_alignment,
     check_repository,
     check_task19_workflow_gates,
     check_workflow,
@@ -349,6 +350,72 @@ class PolicyTest(unittest.TestCase):
         errors = check_cleanup_powershell(root)
         self.assertTrue(any("temporary -File" in error for error in errors))
         self.assertTrue(any("only be passed when nonempty" in error for error in errors))
+
+
+class QdrantImageAlignmentTest(unittest.TestCase):
+    def setUp(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        self.compose = self.root / "docker-compose.yml"
+        self.example = self.root / ".env.example"
+        self.workflow = self.root / ".github" / "workflows" / "full-verification.yml"
+        self.workflow.parent.mkdir(parents=True)
+        self.compose.write_text(
+            "services:\n  qdrant:\n    image: ${QDRANT_IMAGE:-qdrant/qdrant:v1.19.1}\n",
+            encoding="utf-8",
+        )
+        self.example.write_text("QDRANT_IMAGE=qdrant/qdrant:v1.19.1\n", encoding="utf-8")
+        self.workflow.write_text(
+            "jobs:\n  agent-qdrant:\n    steps:\n      - run: |\n"
+            "          docker run --rm \\\n"
+            f"            qdrant/qdrant:v1.19.1@sha256:{'a' * 64}\n",
+            encoding="utf-8",
+        )
+
+    def test_matching_version_and_pin_pass(self) -> None:
+        self.assertEqual(check_qdrant_image_alignment(self.root), [])
+
+    def test_old_ci_version_is_rejected(self) -> None:
+        self.workflow.write_text(
+            self.workflow.read_text(encoding="utf-8").replace("v1.19.1", "v1.15.4"),
+            encoding="utf-8",
+        )
+        self.assertTrue(any(
+            "Qdrant version must match" in error
+            for error in check_qdrant_image_alignment(self.root)
+        ))
+
+    def test_stale_example_override_is_rejected(self) -> None:
+        self.example.write_text("QDRANT_IMAGE=qdrant/qdrant:v1.15.4\n", encoding="utf-8")
+        self.assertTrue(any(
+            "QDRANT_IMAGE must match" in error
+            for error in check_qdrant_image_alignment(self.root)
+        ))
+
+    def test_floating_ci_image_is_rejected(self) -> None:
+        self.workflow.write_text(
+            self.workflow.read_text(encoding="utf-8").replace(f"@sha256:{'a' * 64}", ""),
+            encoding="utf-8",
+        )
+        self.assertTrue(any(
+            "sha256 digest pin" in error
+            for error in check_qdrant_image_alignment(self.root)
+        ))
+
+    def test_missing_configuration_is_rejected(self) -> None:
+        self.example.unlink()
+        self.assertTrue(any(
+            "missing Qdrant image configuration" in error
+            for error in check_qdrant_image_alignment(self.root)
+        ))
+
+    def test_removed_qdrant_gate_is_rejected(self) -> None:
+        self.workflow.write_text("jobs:\n  java:\n    steps: []\n", encoding="utf-8")
+        self.assertTrue(any(
+            "sha256 digest pin" in error
+            for error in check_qdrant_image_alignment(self.root)
+        ))
 
 
 if __name__ == "__main__":

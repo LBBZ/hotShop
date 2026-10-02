@@ -5,15 +5,15 @@
 在仓库根目录使用 **PowerShell 7+**、Docker Desktop Linux containers 和 **Compose 2.24.4+**
 （覆盖端口依赖 `!override`）。不需要宿主 Java/Node/Python；Dockerfile 会安装锁定的构建依赖。
 首次拉取与构建需要网络，成本应与缓存后的日常启动分别记录。实际验证状态见
-[交付验收报告](../quality/task-21-delivery.md)，不代表另一台新机器已验证。
+[桌面与手机验收](../quality/product-acceptance-2026-10-02.md)，不代表另一台新机器已验证。
 
 ```powershell
 # 从你的 hotShop 仓库根目录执行
-pwsh -NoProfile -File .\script\task21-demo.ps1 -Action Start -ProjectName hotshop-task21-demo0001
+pwsh -NoProfile -File .\script\demo.ps1 -Action Start -ProjectName hotshop-task21-demo0001
 # 浏览器打开 http://127.0.0.1:18080
-pwsh -NoProfile -File .\script\task21-demo.ps1 -Action Status -ProjectName hotshop-task21-demo0001
-pwsh -NoProfile -File .\script\task21-demo.ps1 -Action Stop -ProjectName hotshop-task21-demo0001
-pwsh -NoProfile -File .\script\task21-demo.ps1 -Action Restart -ProjectName hotshop-task21-demo0001
+pwsh -NoProfile -File .\script\demo.ps1 -Action Status -ProjectName hotshop-task21-demo0001
+pwsh -NoProfile -File .\script\demo.ps1 -Action Stop -ProjectName hotshop-task21-demo0001
+pwsh -NoProfile -File .\script\demo.ps1 -Action Restart -ProjectName hotshop-task21-demo0001
 ```
 
 `demo0001` 必须未被使用；省略 `-ProjectName` 会生成随机名，记下输出供后续操作。

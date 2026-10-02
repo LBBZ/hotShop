@@ -14,7 +14,7 @@ Actions: build, start, stop, restart, rebuild, clean, logs, status, config
 Uses Docker Compose v2 with the app and agent profiles.
 clean removes only this project's containers and networks; data volumes stay intact.
 -f supplies a Compose environment file. See .env.example for configuration.
-For an isolated seeded browser demo, use script/task21-demo.ps1 instead.
+For an isolated seeded browser demo, use script/demo.ps1 instead.
 HELP
 }
 while getopts "a:p:s:f:h" option; do

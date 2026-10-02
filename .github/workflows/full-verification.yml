@@ -89,7 +89,7 @@ jobs:
           docker volume create hotshop-full-qdrant
           docker run -d --name hotshop-full-qdrant --network hotshop-full-agent \
             -v hotshop-full-qdrant:/qdrant/storage \
-            qdrant/qdrant:v1.15.4@sha256:6ac4807063bbecddca0250bfbcff52acf18c22263b904d12919349e6d0a408f1
+            qdrant/qdrant:v1.19.1@sha256:12364fe851b9f17356fc88189fc06d1b521262e04659ec7345975b00c9246a10
           for _ in $(seq 1 60); do
             if docker run --rm --network hotshop-full-agent --entrypoint python hotshop-agent:full-test \
               -c "import urllib.request; urllib.request.urlopen('http://hotshop-full-qdrant:6333/readyz', timeout=2)"; then

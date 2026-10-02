@@ -316,6 +316,38 @@ def check_task19_workflow_gates(root: Path) -> list[str]:
     return errors
 
 
+def check_qdrant_image_alignment(root: Path) -> list[str]:
+    """Keep the full RAG gate on the Qdrant version shipped by default."""
+    compose_path = root / "docker-compose.yml"
+    env_path = root / ".env.example"
+    full_path = root / ".github" / "workflows" / "full-verification.yml"
+    missing = [path for path in (compose_path, env_path, full_path) if not path.is_file()]
+    if missing:
+        return [f"{path}: missing Qdrant image configuration" for path in missing]
+
+    compose = re.search(
+        r"\$\{QDRANT_IMAGE:-([^}\s]+)\}", compose_path.read_text(encoding="utf-8")
+    )
+    example = re.search(
+        r"(?m)^QDRANT_IMAGE=([^\s]+)\s*$", env_path.read_text(encoding="utf-8")
+    )
+    job = job_blocks(full_path.read_text(encoding="utf-8")).get("agent-qdrant", "")
+    images = re.findall(r"(?m)^\s+(qdrant/qdrant:[^\s]+)\s*$", job)
+    errors: list[str] = []
+    if not compose:
+        errors.append(f"{compose_path}: QDRANT_IMAGE default is missing")
+    if not example:
+        errors.append(f"{env_path}: QDRANT_IMAGE example is missing")
+    if len(images) != 1 or not PINNED_IMAGE.fullmatch(images[0]):
+        errors.append(f"{full_path}: Agent Qdrant image must have one sha256 digest pin")
+    if compose and example and compose.group(1) != example.group(1):
+        errors.append(f"{env_path}: QDRANT_IMAGE must match docker-compose.yml default")
+    if compose and len(images) == 1:
+        if images[0].split("@", 1)[0] != compose.group(1).split("@", 1)[0]:
+            errors.append(f"{full_path}: Qdrant version must match docker-compose.yml default")
+    return errors
+
+
 def check_repository(root: Path) -> list[str]:
     errors: list[str] = []
     workflow_root = root / ".github" / "workflows"
@@ -343,6 +375,7 @@ def check_repository(root: Path) -> list[str]:
         errors.extend(check_dockerfile(path))
     errors.extend(check_cleanup_powershell(root))
     errors.extend(check_task19_workflow_gates(root))
+    errors.extend(check_qdrant_image_alignment(root))
     return errors
 
 

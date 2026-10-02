@@ -25,7 +25,7 @@
 
 [full-verification.yml](../../.github/workflows/full-verification.yml)支持手动触发，每周六 18:17 UTC 定时运行。它包含完整 Java、真实 Qdrant pytest / full eval、Web 与 OpenAPI、隔离 Compose、真实桌面/移动 E2E、故障恢复矩阵，以及 Gitleaks / OSV / Trivy / Semgrep / ZAP 与镜像扫描，最终由 `Full verification gate` 聚合。
 
-独立 Qdrant 测试镜像当前固定为 **1.15.4**（带 digest）；默认应用 Compose 是 **1.19.1**。二者的测试环境不同，不能把前者的结果表述为后者已通过验证。Qdrant 测试和 eval 串行使用独立内部网络，避免同时重建同一 alias。
+独立 Qdrant 测试镜像固定为 **1.19.1**（带 digest），与默认应用 Compose 和 `.env.example` 的版本一致。CI 策略检查会拒绝这三处的版本偏移或完整测试镜像丢失 digest；升级默认版本时必须同步维护。Qdrant 测试和 eval 串行使用独立内部网络，避免同时重建同一 alias。
 
 两个工作流都使用 FakeModel 和 deterministic embedding。快速 Agent 以 `--network none` 运行；完整 Agent 测试只接入内部 Qdrant 网络，不注入付费模型凭据。Provider 契约使用 MockTransport；它不证明真实厂商在线联调结果。
 

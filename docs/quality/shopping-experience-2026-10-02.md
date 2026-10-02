@@ -15,6 +15,7 @@
 | 检查 | 结果与边界 |
 | --- | --- |
 | Java common | 94 项通过，包含图片地址约束与旧 DTO 兼容 |
+| Java 托管完整验证 | 447 项通过，零失败、零错误、零跳过；包含 Portal 认证 14 项、Agent 工具及购买确认 8 项、后台认证 21 项与后台库存接口 7 项 |
 | MySQL / Flyway | 40 项去重用例通过，覆盖新库、旧库升级、Mapper、后台读取、媒体保留与库存不被覆盖；升级数量断言修正后重跑两项 |
 | Agent | 297 项去重用例通过；6 项跳过、10 项 Redis/Qdrant 集成用例排除；最终受影响 API 与商品发现子集 40 项通过 |
 | Web 单元 | 24 个文件、115 项通过 |
@@ -24,9 +25,11 @@
 | 真实服务验收 | 桌面与手机共 18 项，各项最终均通过；涵盖订单、Mock 支付、预约、Agent 确认、后台编辑、库存冲突、审计与知识引用。布局收尾后，新增图集与推荐购买链路再次通过 4 项 |
 | 响应式与图片 | 详情检查 320 / 390 / 768 / 1440 px；助手检查 320 / 390 / 1440 px。无页面横向溢出或 JavaScript 错误；商品图已解码后截图 |
 
-本机原有 Web node_modules 与锁定清单存在版本差异；Docker 生产构建与托管 Web CI 均按锁文件安装，构建和检查已通过。本地日志位于 Git 忽略目录 `.local/verification/shopping-experience/`。最终托管状态以推送提交的 [Actions 运行](https://github.com/LBBZ/hotShop/actions/workflows/ci.yml)为准，本报告不将尚未结束的托管任务计为通过。
+本机原有 Web node_modules 与锁定清单存在版本差异；Docker 生产构建与托管 Web CI 均按锁文件安装，构建和检查已通过。本地日志位于 Git 忽略目录 `.local/verification/shopping-experience/`。[修正后的托管 CI](https://github.com/LBBZ/hotShop/actions/runs/37031226193) 在提交 `a90e2056500395a36c5b76d6651b6f003589a12f` 上通过 Java、OpenAPI、镜像构建、CI 策略与最终必需门禁。该次只改 Java 测试与文档，Web 和 Agent 按变更检测跳过，沿用首次运行中相同代码的通过结果。
 
 [首次托管 CI](https://github.com/LBBZ/hotShop/actions/runs/37028865487) 的前端、Agent、OpenAPI、镜像构建与 CI 策略检查通过；Java 在两个 Portal 集成测试的初始化阶段失败：测试仍预期 12 次迁移和版本 `1.11`，而新数据库已正确执行 13 次迁移至 `1.12`。已同步这两处断言，保留迁移数量、最终版本、重复执行无变化及校验成功检查；没有跳过相关测试。该修正仅影响测试与报告，不改变运行代码。
+
+修正后的本地 Java 补跑完成 8 项 Agent 购买确认用例，随后 Docker 连接以 `unexpected EOF` 中断，因此未计作完整通过；余下认证和后台用例由上述托管完整验证覆盖。
 
 ## 自检与修正
 

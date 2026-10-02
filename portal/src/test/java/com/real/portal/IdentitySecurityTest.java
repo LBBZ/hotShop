@@ -154,10 +154,10 @@ class IdentitySecurityTest {
                 .validateMigrationNaming(true)
                 .cleanDisabled(true)
                 .load();
-        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(12);
+        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(13);
         assertThat(flyway.migrate().migrationsExecuted).isZero();
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1.11");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1.12");
 
         String passwordHash = new BCryptPasswordEncoder().encode(PASSWORD);
         jdbcTemplate.update(

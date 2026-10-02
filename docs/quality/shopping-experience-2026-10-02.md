@@ -24,7 +24,9 @@
 | 真实服务验收 | 桌面与手机共 18 项，各项最终均通过；涵盖订单、Mock 支付、预约、Agent 确认、后台编辑、库存冲突、审计与知识引用。布局收尾后，新增图集与推荐购买链路再次通过 4 项 |
 | 响应式与图片 | 详情检查 320 / 390 / 768 / 1440 px；助手检查 320 / 390 / 1440 px。无页面横向溢出或 JavaScript 错误；商品图已解码后截图 |
 
-本机原有 Web node_modules 与锁定清单存在版本差异；Docker 生产构建使用锁文件，托管 CI 会按锁文件安装并运行完整检查。本地日志位于 Git 忽略目录 `.local/verification/shopping-experience/`。最终托管状态以推送提交的 [Actions 运行](https://github.com/LBBZ/hotShop/actions/workflows/ci.yml)为准，本报告不将尚未结束的托管任务计为通过。
+本机原有 Web node_modules 与锁定清单存在版本差异；Docker 生产构建与托管 Web CI 均按锁文件安装，构建和检查已通过。本地日志位于 Git 忽略目录 `.local/verification/shopping-experience/`。最终托管状态以推送提交的 [Actions 运行](https://github.com/LBBZ/hotShop/actions/workflows/ci.yml)为准，本报告不将尚未结束的托管任务计为通过。
+
+[首次托管 CI](https://github.com/LBBZ/hotShop/actions/runs/37028865487) 的前端、Agent、OpenAPI、镜像构建与 CI 策略检查通过；Java 在两个 Portal 集成测试的初始化阶段失败：测试仍预期 12 次迁移和版本 `1.11`，而新数据库已正确执行 13 次迁移至 `1.12`。已同步这两处断言，保留迁移数量、最终版本、重复执行无变化及校验成功检查；没有跳过相关测试。该修正仅影响测试与报告，不改变运行代码。
 
 ## 自检与修正
 

@@ -5,6 +5,7 @@
 本轮接续活动重载工作，审计后台对账在持续写入及历史增长时的推进与空间边界。
 基线为 `318053320b3471eda38004eb711b3109e3d7179c`，实现提交为
 `2aed7c3cbc09fdc2fd5f81324d403969341c3274`。日期采用 Asia/Shanghai。
+跨模块验证补充提交为 `d5350840144aec3f5ca06f287ffead754b8c26e2`，只调整测试断言，运行镜像源码仍为上述实现提交。
 
 ## 发现与处理
 
@@ -45,6 +46,14 @@ Compose、应用配置和 `.env.example` 接入 `HOTSHOP_SECKILL_RECONCILIATION_
 这包含既有的数据库 / Redis 中断恢复、补偿崩溃恢复、跨页去重、旧 checkpoint 兼容、服务重启、活动轮转和实际命令读取预算检查。
 两项原有 fence 重启断言按新的“先结束为无法核验，再开始稳定轮次”协议更新；库存数量与真实篡改检测断言保留。
 
+首次[托管 CI](https://github.com/LBBZ/hotShop/actions/runs/37141433745)在 Admin 联合测试失败，其他组件门禁通过。
+本地最初的 36 项范围未覆盖该类：超时投影改变了进行中的扫描，新协议保留一条 `WRITES_DURING_SCAN` WARNING，
+而旧断言仍要求全部 issue 为空。没有通过关闭告警或忽略所有 WARNING 处理此失败。
+补充断言要求全部 issue 恰好是指定类型、级别与原因的那一条，同时校验后续完整扫描的 fence 等于当前库存版本、
+有效数量为 0、无效事实为 0；原有商品库存、审计与后续真实篡改断言继续执行。
+Admin 完整联合类 **6 项通过，0 失败、0 错误、0 跳过**，结束于 `2026-10-03T17:53:25Z`。
+本轮相关本地验证因此为两次运行合计 **42 项通过**，保留首次 CI 失败及补充测试日志。
+
 新服务回归证明：连续追加两次预约后，一轮按原终点结束并写 WARNING；停止写入后，新一轮检查全部 6 个预约，
 之后人为增加 Redis 库存 1，仍产生 CRITICAL 差异且不自动改回库存。另一个服务用例把上限设为 2，验证配置实际传入 Lua、
 WARNING 可查询、seen 已释放，库存与订单数保持原样。
@@ -63,6 +72,7 @@ Lua 独立用例使用最小库存 / 事件夹具，验证扫描算法，不宣�
 
 ```powershell
 ./mvnw -B -pl task -am '-Dtest=ConservationScanContainerTest,SeckillOrderReliabilityContainerTest' '-Dsurefire.failIfNoSpecifiedTests=false' test
+./mvnw -B -pl admin -am '-Dtest=InventoryReconciliationJointContainerTest' '-Dsurefire.failIfNoSpecifiedTests=false' test
 node script/check-docs.mjs
 ```
 

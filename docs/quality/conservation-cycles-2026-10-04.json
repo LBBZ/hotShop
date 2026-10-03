@@ -59,7 +59,33 @@
       "Idle cleanup checks a positive TTL and simulates missing state; it does not wait 24 hours",
       "Small configured limits exercise cap boundaries; no 10000-user load claim",
       "Two existing fence-restart expectations were updated to inconclusive-then-stable cycles; inventory assertions remain"
-    ]
+    ],
+    "adminJointFollowUp": {
+      "suite": {
+        "suite": "com.real.admin.InventoryReconciliationJointContainerTest",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "finishedAt": "2026-10-03T17:53:25Z",
+      "runtimeCodeChanged": false,
+      "assertions": [
+        "Exactly one WARNING with reason WRITES_DURING_SCAN and no other findings",
+        "Latest completed fence equals the current metadata fence",
+        "Latest completed effective quantity and invalid-fact count are zero",
+        "Existing product stock, audit and tampering assertions remain"
+      ]
+    },
+    "totalLocalChecksPassedAcrossRuns": 42,
+    "initialHostedCiFailure": {
+      "sha": "bf778512e7bc2e704e5520f0ce5716be656d85ae",
+      "url": "https://github.com/LBBZ/hotShop/actions/runs/37141433745",
+      "failedSuite": "InventoryReconciliationJointContainerTest",
+      "reason": "Old empty-issue assertion rejected the newly expected projection-interference warning",
+      "otherComponentGates": "passed",
+      "retainedLog": "ci-java-failed.log"
+    }
   },
   "checks": {
     "documentationLinks": "passed",
@@ -79,7 +105,7 @@
     "streamTruncation": false
   },
   "deployment": {
-    "verifiedAt": "2026-10-03T17:40:19.3571548+00:00",
+    "verifiedAt": "2026-10-04T01:40:19.3571548+08:00",
     "containers": [
       {
         "project": "hotshop-task21-accept1002",
@@ -130,5 +156,6 @@
     "Total scan work grows with retained history; Stream archival is unchanged",
     "Clean cycles do not automatically resolve historical warning findings",
     "Hosted CI must be verified for the final merged commit"
-  ]
+  ],
+  "verificationFollowUpCommit": "d5350840144aec3f5ca06f287ffead754b8c26e2"
 }

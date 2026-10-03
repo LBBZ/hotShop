@@ -41,10 +41,18 @@ XGROUP CREATE <stream> hotshop-order-v1 0-0 MKSTREAM
 
 `0-0` 使建组前已经存在的消息也可被消费。Consumer 名为
 `<prefix>-<hostname>-<pid>-<random>`，每个实例唯一。新消息使用 `XREADGROUP ... >`，默认
-`COUNT 20`、`BLOCK 2s`；无阻塞地轮询所有已发现 Stream 后，只有本轮没有消息时才阻塞一个
+`COUNT 20`、`BLOCK 1s`；无阻塞地轮询所有已发现 Stream 后，只有本轮没有消息时才阻塞一个
 Stream。轮询起点每轮递增，配合每 Stream 的批量上限，避免某个高流量活动长期饿死其他活动。
 
 默认参数见第 11 节，均可通过环境变量覆盖。
+
+空闲读取到期返回空结果，不增加处理失败计数。Task 启动时校验实际 Lettuce 命令超时：
+`HOTSHOP_REDIS_SECKILL_TIMEOUT` 必须比 `HOTSHOP_SECKILL_ORDER_READ_BLOCK` 至少长 1 秒，
+为 Redis 超时调度与网络响应留出余量；这是本项目的配置约束，不是 Redis 协议规定的固定间隔。
+阻塞时间至少为 1 毫秒，避免亚毫秒值截断成 Redis 的无限等待 `BLOCK 0`。
+默认组合为阻塞 1 秒、命令超时 2 秒；需要阻塞 2 秒时，将命令超时设为至少 3 秒。
+显式保留旧的 `2s / 2s` 组合会使消费者启动失败，并显示两个配置名及实际值。
+真正的依赖超时仍计入失败并保留日志，恢复后继续轮询；本次调整不更改 Pending 或 ACK 顺序。
 
 ## 3. Pending 恢复和 ACK 边界
 
@@ -268,7 +276,8 @@ MySQL 事务中核验订单 PENDING 状态、数据库到期时间和完整消�
 | `HOTSHOP_SECKILL_ORDER_GROUP` | `hotshop-order-v1` | 消费者组 |
 | `HOTSHOP_SECKILL_ORDER_CONSUMER_PREFIX` | `order` | 实例唯一 consumer 名前缀 |
 | `HOTSHOP_SECKILL_ORDER_READ_BATCH` | `20` | 新消息每 Stream 批量 |
-| `HOTSHOP_SECKILL_ORDER_READ_BLOCK` | `2s` | 空闲阻塞读取 |
+| `HOTSHOP_SECKILL_ORDER_READ_BLOCK` | `1s` | 空闲阻塞读取，至少 1ms |
+| `HOTSHOP_REDIS_SECKILL_TIMEOUT` | `2s` | Redis 命令超时，须比阻塞读取至少长 1s |
 | `HOTSHOP_SECKILL_ORDER_POLL_DELAY` | `250ms` | 轮询间隔 |
 | `HOTSHOP_SECKILL_ORDER_DISCOVERY_INTERVAL` | `10s` | Registry 刷新 |
 | `HOTSHOP_SECKILL_ORDER_CLAIM_IDLE` | `30s` | Pending 可认领 idle |

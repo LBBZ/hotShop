@@ -20,6 +20,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.domain.Range;
 import org.springframework.data.redis.connection.RedisConnection;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.connection.stream.Consumer;
 import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.data.redis.connection.stream.PendingMessage;
@@ -38,6 +39,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -61,6 +63,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class ReservationStreamConsumer {
     private static final Logger log = LoggerFactory.getLogger(ReservationStreamConsumer.class);
     private static final byte[] ZERO_ID = bytes("0-0");
+    private static final Duration READ_RESPONSE_MARGIN = Duration.ofSeconds(1);
 
     private final StringRedisTemplate redis;
     private final SeckillOrderProperties properties;
@@ -95,6 +98,16 @@ public class ReservationStreamConsumer {
             SeckillOrderMetrics metrics,
             Tracer tracer
     ) {
+        // Redis's BLOCK deadline needs room for server scheduling and the response to reach Lettuce.
+        if (redis.getConnectionFactory() instanceof LettuceConnectionFactory connectionFactory) {
+            Duration commandTimeout = connectionFactory.getClientConfiguration().getCommandTimeout();
+            if (commandTimeout.minus(properties.getReadBlock()).compareTo(READ_RESPONSE_MARGIN) < 0) {
+                throw new IllegalArgumentException(
+                        "HOTSHOP_REDIS_SECKILL_TIMEOUT must exceed HOTSHOP_SECKILL_ORDER_READ_BLOCK"
+                                + " by at least 1s (command timeout=" + commandTimeout
+                                + ", read block=" + properties.getReadBlock() + ")");
+            }
+        }
         this.redis = redis;
         this.properties = properties;
         this.reservationGateway = reservationGateway;

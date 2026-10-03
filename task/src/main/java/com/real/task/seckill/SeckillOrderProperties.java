@@ -10,7 +10,7 @@ public class SeckillOrderProperties {
     private String groupName = "hotshop-order-v1";
     private String consumerPrefix = "order";
     private int readBatch = 20;
-    private Duration readBlock = Duration.ofSeconds(2);
+    private Duration readBlock = Duration.ofSeconds(1);
     private Duration discoveryInterval = Duration.ofSeconds(10);
     private Duration claimIdle = Duration.ofSeconds(30);
     private int claimBatch = 20;
@@ -65,7 +65,11 @@ public class SeckillOrderProperties {
     }
 
     public void setReadBlock(Duration readBlock) {
-        this.readBlock = positive(readBlock, "readBlock");
+        positive(readBlock, "readBlock");
+        if (readBlock.compareTo(Duration.ofMillis(1)) < 0) {
+            throw new IllegalArgumentException("HOTSHOP_SECKILL_ORDER_READ_BLOCK must be at least 1ms");
+        }
+        this.readBlock = readBlock;
     }
 
     public Duration getDiscoveryInterval() {

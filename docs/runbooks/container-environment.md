@@ -154,7 +154,8 @@ HOTSHOP_SECKILL_ORDER_CONSUMER_ENABLED=true
 HOTSHOP_SECKILL_ORDER_GROUP=hotshop-order-v1
 HOTSHOP_SECKILL_ORDER_CONSUMER_PREFIX=order
 HOTSHOP_SECKILL_ORDER_READ_BATCH=20
-HOTSHOP_SECKILL_ORDER_READ_BLOCK=2s
+HOTSHOP_SECKILL_ORDER_READ_BLOCK=1s
+HOTSHOP_REDIS_SECKILL_TIMEOUT=2s
 HOTSHOP_SECKILL_ORDER_POLL_DELAY=250ms
 HOTSHOP_SECKILL_ORDER_DISCOVERY_INTERVAL=10s
 HOTSHOP_SECKILL_ORDER_CLAIM_IDLE=30s
@@ -174,6 +175,11 @@ HOTSHOP_SECKILL_RECONCILIATION_AUTO_REPAIR=false
 Consumer name 会在前缀后追加 hostname、PID 和随机后缀，不能把多个副本配置成固定的同名
 consumer。只有同时把 dry-run 设为 `false` 且 auto-repair 设为 `true` 才会执行修复白名单；改动这
 两个开关前必须先评审 OPEN 对账问题和 dry-run 证据。
+
+启用消费者时，Redis 命令超时必须比阻塞读取时间至少长 1 秒，阻塞读取时间不能小于 1 毫秒。
+升级前检查自定义 `.env` 或部署变量：旧的 `READ_BLOCK=2s` / `SECKILL_TIMEOUT=2s` 组合
+应改为 `1s / 2s`，或在确实需要较长等待时设为 `2s / 3s`。不满足约束时 Task 启动失败，
+错误消息包含配置名和实际时长。空闲返回与 Redis 不可用的区别见[Stream 消费说明](../architecture/stream-order-processing.md)。
 
 ## 4. 健康与配置检查
 

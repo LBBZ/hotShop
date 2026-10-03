@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "title": "Bounded background conservation cycles",
+  "date": "2026-10-04",
+  "timezone": "Asia/Shanghai",
+  "baselineCommit": "318053320b3471eda38004eb711b3109e3d7179c",
+  "implementationCommit": "2aed7c3cbc09fdc2fd5f81324d403969341c3274",
+  "tests": {
+    "newRegressions": 7,
+    "baselineObserved": {
+      "tests": 6,
+      "passed": 1,
+      "failures": 5,
+      "errors": 0,
+      "skipped": 0,
+      "finishedAt": "2026-10-03T17:24:06Z",
+      "additionalConfiguredServiceLimitRunOnBaseline": false
+    },
+    "final": {
+      "tests": 36,
+      "passed": 36,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "finishedAt": "2026-10-03T17:31:29Z",
+      "suites": [
+        {
+          "suite": "com.real.task.seckill.ConservationScanContainerTest",
+          "tests": 5,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "suite": "com.real.task.seckill.SeckillOrderReliabilityContainerTest",
+          "tests": 31,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        }
+      ]
+    },
+    "environment": {
+      "host": "Windows Docker Desktop",
+      "java": "21.0.11",
+      "maven": "3.9.16",
+      "mysql": "8.4.11",
+      "redis": "8.8.3-alpine",
+      "testcontainersHostOverride": "host.docker.internal",
+      "runnerMemoryGiB": 2,
+      "javaOptions": "-Xmx512m -XX:ActiveProcessorCount=4"
+    },
+    "retainedDiagnostics": [
+      "Connection timeout output belongs to the existing Redis/MySQL outage recovery cases, whose assertions passed",
+      "Injected compensation failures remain in the complete raw test log"
+    ],
+    "boundaries": [
+      "Standalone Lua cases use minimal inventory and event fixtures",
+      "Idle cleanup checks a positive TTL and simulates missing state; it does not wait 24 hours",
+      "Small configured limits exercise cap boundaries; no 10000-user load claim",
+      "Two existing fence-restart expectations were updated to inconclusive-then-stable cycles; inventory assertions remain"
+    ]
+  },
+  "checks": {
+    "documentationLinks": "passed",
+    "composeConfiguration": "passed",
+    "taskImageBuild": "passed",
+    "imageBuildWorkingTreeDirty": false,
+    "imageBuildSource": "2aed7c3cbc09fdc2fd5f81324d403969341c3274",
+    "newBrowserRun": false
+  },
+  "bounds": {
+    "defaultDistinctEffectiveReservationsPerActivity": 10000,
+    "additionalInitializationFields": 1,
+    "idleSeenTtlSeconds": 86400,
+    "streamTailReadsPerNewCycle": 1,
+    "tailReadCount": 1,
+    "stockWritesByScanner": 0,
+    "streamTruncation": false
+  },
+  "deployment": {
+    "verifiedAt": "2026-10-03T17:40:19.3571548+00:00",
+    "containers": [
+      {
+        "project": "hotshop-task21-accept1002",
+        "image": "sha256:4c3f84296261904260d119422f238a17705fe419f312cd6ec2732480a642ab61",
+        "startedAt": "2026-10-03T17:36:19.872699655Z",
+        "health": "UP",
+        "checkpoint": {
+          "activityId": 913001,
+          "schemaVersion": "3",
+          "state": "COMPLETE",
+          "reason": "",
+          "completedScans": "234",
+          "lastCompletedInvalid": "0",
+          "upperBound": "1790929335520-0"
+        }
+      },
+      {
+        "project": "hotshop-task21-shop1002",
+        "image": "sha256:4c3f84296261904260d119422f238a17705fe419f312cd6ec2732480a642ab61",
+        "startedAt": "2026-10-03T17:38:13.339722877Z",
+        "health": "UP",
+        "checkpoint": {
+          "activityId": 913001,
+          "schemaVersion": "3",
+          "state": "COMPLETE",
+          "reason": "",
+          "completedScans": "227",
+          "lastCompletedInvalid": "0",
+          "upperBound": "1790953942681-0"
+        }
+      }
+    ],
+    "mainWebHttpStatus": 200,
+    "dataReset": false
+  },
+  "observedFollowUp": {
+    "area": "Stream polling",
+    "readBlock": "2s",
+    "defaultRedisCommandTimeout": "2s",
+    "observation": "Repeated idle poll timeout warnings",
+    "fixedInThisChange": false
+  },
+  "limits": [
+    "A changed-fence cycle finishes inconclusive, not as proof of balance agreement or discrepancy",
+    "Concurrent inventory snapshots or change journals are not implemented",
+    "Over-budget activity histories require separate segmented or offline verification",
+    "Bounds are per activity and entry count, not global memory bytes; UNLINK reclamation is asynchronous",
+    "Total scan work grows with retained history; Stream archival is unchanged",
+    "Clean cycles do not automatically resolve historical warning findings",
+    "Hosted CI must be verified for the final merged commit"
+  ]
+}

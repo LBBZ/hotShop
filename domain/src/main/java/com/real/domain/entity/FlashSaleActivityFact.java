@@ -19,6 +19,10 @@ public record FlashSaleActivityFact(
         BigDecimal catalogPrice,
         Integer catalogStock,
         String catalogStatus,
-        LocalDateTime catalogDeletedAt
+        LocalDateTime catalogDeletedAt,
+        long expectedAvailableStock,
+        Long expectedCatalogStock,
+        long committedQuantity,
+        boolean hasReservations
 ) {
 }

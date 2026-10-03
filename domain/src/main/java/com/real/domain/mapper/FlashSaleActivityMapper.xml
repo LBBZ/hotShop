@@ -20,7 +20,15 @@
             product.price AS catalog_price,
             product.stock AS catalog_stock,
             product.status AS catalog_status,
-            product.deleted_at AS catalog_deleted_at
+            product.deleted_at AS catalog_deleted_at,
+            activity.expected_available_stock,
+            product.expected_stock AS expected_catalog_stock,
+            COALESCE((SELECT SUM(reservation.quantity)
+                FROM sale_reservation reservation
+                WHERE reservation.activity_id = activity.activity_id
+                  AND reservation.status = 'ORDER_CREATED'), 0) AS committed_quantity,
+            EXISTS(SELECT 1 FROM sale_reservation reservation
+                WHERE reservation.activity_id = activity.activity_id) AS has_reservations
         FROM flash_sale_activity activity
         LEFT JOIN catalog_product product
             ON product.product_id = activity.product_id

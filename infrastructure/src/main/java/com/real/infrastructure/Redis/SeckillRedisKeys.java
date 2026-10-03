@@ -19,7 +19,11 @@ public final class SeckillRedisKeys {
     }
 
     public static String userReservation(long activityId, long userId) {
-        return activity(activityId) + ":user:" + userId + ":reservation";
+        return userReservationPrefix(activityId) + userId + ":reservation";
+    }
+
+    public static String userReservationPrefix(long activityId) {
+        return activity(activityId) + ":user:";
     }
 
     public static String idempotency(long userId, String idempotencyKeyHash) {

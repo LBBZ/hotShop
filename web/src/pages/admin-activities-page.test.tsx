@@ -58,7 +58,7 @@ describe("AdminActivitiesPage load outcome", () => {
     vi.spyOn(adminApi, "loadActivity").mockResolvedValue(loadResult);
     await confirmLoad();
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("库存核验发现差异");
+    expect(alert).toHaveTextContent("库存核验未确认一致");
     expect(alert).toHaveTextContent("IDEMPOTENT");
     expect(alert).toHaveTextContent("MySQL 可用库存：20");
     expect(alert).toHaveTextContent("Redis 可用库存：19");

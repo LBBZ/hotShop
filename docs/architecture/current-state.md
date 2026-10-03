@@ -141,6 +141,8 @@ stateDiagram-v2
 
 对账默认 dry-run、自动修复关闭；issue/checkpoint 是观察元数据，不是业务已修复证明。合法 Catalog 调整不会直接改写 Redis 秒杀配额，活动装载与跨存储证据需要单独调查。更多见 [后台操作](admin-operations.md)。
 
+活动重复加载按已发布配置识别幂等，而非把建单 / 回库产生的行版本当作新配置。它保留 Redis 余额及预约历史，按有效预约与 MySQL 已承诺数量核验；超过 1,000 条 Stream 事件则报告核验未完成。已使用活动的配置与配额更改仍拒绝，见[装载规则](flash-sale-reservation.md#4-mysql--redis-seckill-装载)和 [ADR-009](adr/ADR-009-preserve-loaded-offer.md)。
+
 ## 6. 架构决策与导航
 
 保留 [ADR-001 多模型](adr/ADR-001-multi-model-provider.md)，补充以下现行决策记录：
@@ -152,5 +154,6 @@ stateDiagram-v2
 - [ADR-006 Outbox 与 Inbox](adr/ADR-006-outbox-inbox.md)
 - [ADR-007 SSE](adr/ADR-007-sse.md)
 - [ADR-008 FakeModel CI](adr/ADR-008-fake-model-ci.md)
+- [ADR-009 活动配置与库存变化](adr/ADR-009-preserve-loaded-offer.md)
 
 静态知识边界见 [RAG](agent-rag.md)，运行生命周期见 [Agent 进程](agent-process.md)，数据库演进见 [数据库结构](database-schema.md)。性能能力只能引用 [TASK-20 报告](../quality/task-20-performance.md) 的实际窗口、完成量和 dropped iterations；目标未达成，不能把 5000 requested RPS 写成稳定承载能力。

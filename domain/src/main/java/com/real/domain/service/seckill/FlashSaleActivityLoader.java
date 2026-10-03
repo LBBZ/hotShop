@@ -8,8 +8,6 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.dao.DataAccessException;
-import org.springframework.data.domain.Range;
-import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
@@ -18,7 +16,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.ZoneOffset;
 import java.util.List;
-import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -26,7 +24,9 @@ import java.util.UUID;
 public class FlashSaleActivityLoader {
     private static final Set<String> ACTIVITY_STATUSES =
             Set.of("DRAFT", "SCHEDULED", "ACTIVE", "PAUSED", "ENDED", "CANCELED");
-    private static final DefaultRedisScript<List> LOAD_SCRIPT = script();
+    private static final int VERIFICATION_EVENT_LIMIT = 1000;
+    private static final DefaultRedisScript<List> LOAD_SCRIPT = script("redis/load-flash-sale-activity-v3.lua");
+    private static final DefaultRedisScript<List> INSPECT_SCRIPT = script("redis/inspect-loaded-activity-v1.lua");
 
     private final FlashSaleActivityMapper activityMapper;
     private final StringRedisTemplate seckillRedis;
@@ -94,7 +94,9 @@ public class FlashSaleActivityLoader {
                     Long.toString(fact.endsAt().toInstant(ZoneOffset.UTC).toEpochMilli()),
                     Integer.toString(fact.version()),
                     Long.toString(expireAt),
-                    Integer.toString(fact.catalogStock())
+                    Integer.toString(fact.catalogStock()),
+                    canInitializeInventory(fact) ? "1" : "0",
+                    fact.hasReservations() ? "1" : "0"
             );
         } catch (DataAccessException exception) {
             throw new SeckillServiceUnavailableException(exception);
@@ -107,7 +109,9 @@ public class FlashSaleActivityLoader {
         Integer redisVersion = integerOrNull(raw.get(1));
         Integer redisStock = integerOrNull(raw.get(2));
         long eventCount = longValue(raw.get(3));
-        Reconciliation reconciliation = reconcile(fact, redisStock, eventCount);
+        Reconciliation reconciliation = code == FlashSaleLoadCode.LOADED || code == FlashSaleLoadCode.IDEMPOTENT
+                ? reconcile(fact, redisVersion, redisStock, eventCount)
+                : new Reconciliation(0, 0, false, "Inventory was not verified after a rejected load");
         return new FlashSaleLoadResult(
                 code,
                 activityId,
@@ -119,65 +123,71 @@ public class FlashSaleActivityLoader {
                 reconciliation.reservationRecords(),
                 reconciliation.reservedQuantity(),
                 reconciliation.consistent(),
-                detail(code)
+                detail(code) + "; " + reconciliation.detail()
         );
     }
 
     private Reconciliation reconcile(
             FlashSaleActivityFact fact,
+            Integer redisVersion,
             Integer redisStock,
             long expectedEventCount
     ) {
-        if (redisStock == null) {
-            return new Reconciliation(0, 0, false);
+        List<?> snapshot;
+        try {
+            snapshot = seckillRedis.execute(INSPECT_SCRIPT, List.of(
+                            SeckillRedisKeys.activityMetadata(fact.activityId()),
+                            SeckillRedisKeys.availableStock(fact.activityId()),
+                            SeckillRedisKeys.reservationStream(fact.activityId())),
+                    Long.toString(fact.activityId()),
+                    SeckillRedisKeys.reservation(fact.activityId(), ""),
+                    SeckillRedisKeys.userReservationPrefix(fact.activityId()),
+                    Integer.toString(VERIFICATION_EVENT_LIMIT));
+        } catch (DataAccessException exception) {
+            throw new SeckillServiceUnavailableException(exception);
         }
-        List<MapRecord<String, Object, Object>> records = seckillRedis.opsForStream().range(
-                SeckillRedisKeys.reservationStream(fact.activityId()),
-                Range.unbounded()
-        );
-        if (records == null) {
-            records = List.of();
+        if (snapshot == null || snapshot.size() != 8) {
+            throw new IllegalStateException("Activity inspection returned an invalid result");
         }
+        long records = longValue(snapshot.get(5));
+        long historicalQuantity = longValue(snapshot.get(6));
+        if ("LIMIT_EXCEEDED".equals(text(snapshot.get(0)))) {
+            return new Reconciliation(records, historicalQuantity, false,
+                    "Inventory check incomplete: more than " + VERIFICATION_EVENT_LIMIT
+                            + " Stream events; use background reconciliation. Counts cover inspected reservations only");
+        }
+        if (!"COMPLETE".equals(text(snapshot.get(0)))) {
+            return new Reconciliation(records, historicalQuantity, false,
+                    "Inventory check found invalid or missing reservation facts");
+        }
+        // The Redis observation is atomic. Re-read the MySQL statement snapshot
+        // (including its receipt sum) to avoid reporting a moving balance as verified.
+        FlashSaleActivityFact after = activityMapper.findFactById(fact.activityId());
+        if (!fact.equals(after)
+                || !Objects.equals(redisVersion, integerOrNull(snapshot.get(1)))
+                || !Objects.equals(redisStock, integerOrNull(snapshot.get(2)))
+                || expectedEventCount != longValue(snapshot.get(4))) {
+            return new Reconciliation(records, historicalQuantity, false,
+                    "Inventory check incomplete: facts changed during observation; retry verification");
+        }
+        long initial = longValue(snapshot.get(3));
+        long effectiveQuantity = longValue(snapshot.get(7));
+        boolean consistent = redisStock != null && redisStock >= 0
+                && initial <= fact.totalStock()
+                && initial == (long) redisStock + effectiveQuantity
+                && initial == fact.availableStock() + fact.committedQuantity()
+                && fact.availableStock() == fact.expectedAvailableStock()
+                && Objects.equals(fact.expectedCatalogStock(), Long.valueOf(fact.catalogStock()));
+        return new Reconciliation(records, historicalQuantity, consistent,
+                consistent ? "Observed reservation and committed inventory balances agree"
+                        : "Observed inventory balances differ; loading did not reset inventory");
+    }
 
-        long reservationRecords = 0;
-        long reservedQuantity = 0;
-        boolean referencesConsistent = true;
-        for (MapRecord<String, Object, Object> record : records) {
-            Map<Object, Object> values = record.getValue();
-            String reservationNo = value(values, "reservationNo");
-            String userId = value(values, "userId");
-            String quantity = value(values, "quantity");
-            if (reservationNo == null || userId == null || quantity == null) {
-                referencesConsistent = false;
-                continue;
-            }
-            try {
-                reservedQuantity += Long.parseLong(quantity);
-                String reservationKey = SeckillRedisKeys.reservation(fact.activityId(), reservationNo);
-                String userKey = SeckillRedisKeys.userReservation(
-                        fact.activityId(),
-                        Long.parseLong(userId)
-                );
-                if (Boolean.TRUE.equals(seckillRedis.hasKey(reservationKey))) {
-                    reservationRecords++;
-                } else {
-                    referencesConsistent = false;
-                }
-                if (!reservationNo.equals(seckillRedis.opsForValue().get(userKey))) {
-                    referencesConsistent = false;
-                }
-            } catch (NumberFormatException exception) {
-                referencesConsistent = false;
-            }
-        }
-        long deducted = (long) fact.availableStock() - redisStock;
-        boolean consistent = redisStock >= 0
-                && redisStock <= fact.availableStock()
-                && records.size() == expectedEventCount
-                && reservationRecords == expectedEventCount
-                && reservedQuantity == deducted
-                && referencesConsistent;
-        return new Reconciliation(reservationRecords, reservedQuantity, consistent);
+    private boolean canInitializeInventory(FlashSaleActivityFact fact) {
+        return !fact.hasReservations()
+                && fact.availableStock() == fact.expectedAvailableStock()
+                && Objects.equals(fact.expectedCatalogStock(), Long.valueOf(fact.catalogStock()))
+                && fact.totalStock() <= fact.catalogStock();
     }
 
     private String validate(FlashSaleActivityFact fact) {
@@ -200,7 +210,7 @@ public class FlashSaleActivityLoader {
                 || fact.availableStock() < 0
                 || fact.availableStock() > fact.totalStock()
                 || fact.catalogStock() == null
-                || fact.totalStock() > fact.catalogStock()) {
+                || fact.catalogStock() < 0) {
             return "Activity inventory is invalid";
         }
         if (fact.perUserLimit() <= 0 || fact.perUserLimit() > fact.totalStock()) {
@@ -239,20 +249,15 @@ public class FlashSaleActivityLoader {
         );
     }
 
-    private static DefaultRedisScript<List> script() {
+    private static DefaultRedisScript<List> script(String path) {
         DefaultRedisScript<List> script = new DefaultRedisScript<>();
-        script.setLocation(new ClassPathResource("redis/load-flash-sale-activity-v2.lua"));
+        script.setLocation(new ClassPathResource(path));
         script.setResultType(List.class);
         return script;
     }
 
     private String money(BigDecimal value) {
         return value.setScale(2).toPlainString();
-    }
-
-    private String value(Map<Object, Object> values, String key) {
-        Object value = values.get(key);
-        return value == null ? null : value.toString();
     }
 
     private String text(Object value) {
@@ -272,7 +277,7 @@ public class FlashSaleActivityLoader {
     private String detail(FlashSaleLoadCode code) {
         return switch (code) {
             case LOADED -> "Activity facts loaded into redis-seckill";
-            case IDEMPOTENT -> "The same database activity version is already loaded";
+            case IDEMPOTENT -> "The same offer is already loaded; its revision and inventory were preserved";
             case STALE_VERSION -> "An older database activity version cannot replace Redis facts";
             case RESERVATIONS_EXIST -> "An activity with Reservations cannot be reset by ordinary loading";
             case INTERNAL_STATE_INVALID -> "Redis activity state is invalid";
@@ -284,7 +289,8 @@ public class FlashSaleActivityLoader {
     private record Reconciliation(
             long reservationRecords,
             long reservedQuantity,
-            boolean consistent
+            boolean consistent,
+            String detail
     ) {
     }
 }

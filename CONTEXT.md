@@ -77,6 +77,22 @@ _Avoid_: Pre-order, pending order
 A Reservation that still owns its activity slot because it has not been released, canceled, expired, or compensated.
 _Avoid_: Successful order
 
+**Activity Quota**:
+The maximum inventory assigned to one Flash Sale Activity's offer. It is a limit on that offer, not an exclusive allocation of the Catalog Product's shared inventory.
+_Avoid_: Product stock, remaining stock
+
+**Activity Available Inventory**:
+The activity's initially available allocation remaining after committed Orders and their cancellations. Accepted Reservations awaiting an Order also occupy that allocation at the reservation boundary.
+_Avoid_: Total quota, shared product stock
+
+**Loaded Offer**:
+The published product, price, quota, per-User limit, status, and time window under which Reservations are accepted. A completed or compensated Reservation remains part of that offer's history.
+_Avoid_: Current inventory balance
+
+**Offer Revision**:
+The identity of a Loaded Offer's configuration. Inventory consumption and restoration do not create a different offer.
+_Avoid_: Inventory revision, latest activity row version
+
 ## Ordering and payment
 
 **Order**:

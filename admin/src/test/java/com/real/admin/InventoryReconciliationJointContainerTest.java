@@ -162,6 +162,9 @@ class InventoryReconciliationJointContainerTest {
         reservations = new FlashSaleReservationService(redis, Duration.ofDays(7), Duration.ofDays(1));
         var properties = new SeckillOrderProperties();
         properties.setReadBlock(Duration.ofMillis(1));
+        properties.setClaimIdle(Duration.ofMillis(1));
+        properties.setRetryInitialBackoff(Duration.ofMillis(1));
+        properties.setRetryMaxBackoff(Duration.ofMillis(1));
         properties.setReconciliationBatch(3);
         properties.setReconciliationDryRun(true);
         properties.setAutoRepair(false);
@@ -322,6 +325,119 @@ class InventoryReconciliationJointContainerTest {
         assertThat(evidence.get("expectedCatalogStock").asInt()).isEqualTo(110);
         assertThat(number("SELECT stock FROM catalog_product WHERE product_id=?", product)).isEqualTo(111);
         assertThat(number("SELECT expected_stock FROM catalog_product WHERE product_id=?", product)).isEqualTo(110);
+    }
+
+    @Test
+    void reloadPreservesOfferAndBalancesThroughOrderTimeoutAndNewReservation() throws Exception {
+        authenticate();
+        long product = createProduct();
+        long activity = product * 10 + 1;
+        loadActivity(activity, product, 100);
+        var originalOffer = redis.opsForHash().entries(SeckillRedisKeys.activityMetadata(activity));
+        var first = reservations.reserve(activity, 77, 3, UUID.randomUUID().toString(), "reload-first");
+        assertThat(first.code()).isEqualTo(FlashSaleReservationCode.ACCEPTED);
+        assertThat(loader.load(activity).consistent()).as("Accepted, not yet committed").isTrue();
+        consumer.refreshStreams();
+        consumer.poll();
+        String order = jdbc.queryForObject("SELECT order_id FROM sale_reservation WHERE reservation_no=?",
+                String.class, first.reservationNo());
+        assertStock(product, 97);
+        var committed = loader.load(activity);
+        assertThat(committed.code()).isEqualTo(FlashSaleLoadCode.IDEMPOTENT);
+        assertThat(committed.consistent()).isTrue();
+        assertThat(committed.databaseVersion()).isGreaterThan(committed.redisVersion());
+        assertThat(committed.redisAvailableStock()).isEqualTo(97);
+        assertThat(redis.opsForHash().get(SeckillRedisKeys.activityMetadata(activity), "databaseVersion"))
+                .isEqualTo(originalOffer.get("databaseVersion"));
+        assertThat(redis.opsForHash().get(SeckillRedisKeys.activityMetadata(activity), "initialAvailableStock"))
+                .isEqualTo("100");
+
+        expire(order);
+        var awaitingProjection = loader.load(activity);
+        assertThat(awaitingProjection.code()).isEqualTo(FlashSaleLoadCode.IDEMPOTENT);
+        assertThat(awaitingProjection.redisAvailableStock()).isEqualTo(97);
+        projectExpiredOutbox(order);
+        var released = loader.load(activity);
+        assertThat(released.code()).isEqualTo(FlashSaleLoadCode.IDEMPOTENT);
+        assertThat(released.consistent()).as("Historical expired reservation is not an active debit").isTrue();
+        assertThat(released.redisAvailableStock()).isEqualTo(100);
+
+        var second = reservations.reserve(activity, 77, 2, UUID.randomUUID().toString(), "reload-next");
+        assertThat(second.code()).isEqualTo(FlashSaleReservationCode.ACCEPTED);
+        var reusedSlot = loader.load(activity);
+        assertThat(reusedSlot.consistent()).as("Released history can share a User with a new reservation").isTrue();
+        assertThat(reusedSlot.reservedQuantity()).isEqualTo(5);
+        assertThat(reusedSlot.redisAvailableStock()).isEqualTo(98);
+        consumer.poll();
+        assertThat(loader.load(activity).consistent()).isTrue();
+        assertStock(product, 98);
+    }
+
+    @Test
+    void sharedCatalogDepletionAndPartialCompensationDoNotResetEitherActivity() throws Exception {
+        authenticate();
+        long product = createProduct();
+        long firstActivity = product * 10 + 1;
+        long secondActivity = product * 10 + 2;
+        loadActivity(firstActivity, product, 100);
+        loadActivity(secondActivity, product, 100);
+        String ordinary = ordinaryPurchase(product, 97);
+        var first = reservations.reserve(firstActivity, 77, 2, UUID.randomUUID().toString(), "reload-shared-a");
+        var second = reservations.reserve(secondActivity, 78, 2, UUID.randomUUID().toString(), "reload-shared-b");
+        assertThat(first.code()).isEqualTo(FlashSaleReservationCode.ACCEPTED);
+        assertThat(second.code()).isEqualTo(FlashSaleReservationCode.ACCEPTED);
+        consumer.refreshStreams();
+        consumer.poll();
+        // Both offers may accept, but only one can commit against the shared last three units.
+        assertStock(product, 1);
+        assertThat(number("SELECT COUNT(*) FROM sale_reservation WHERE activity_id IN (?,?) AND status='ORDER_CREATED'",
+                firstActivity, secondActivity)).isOne();
+        org.awaitility.Awaitility.await().atMost(Duration.ofSeconds(5)).pollInterval(Duration.ofMillis(20))
+                .untilAsserted(() -> {
+                    consumer.poll();
+                    assertThat(number("SELECT COUNT(*) FROM sale_reservation WHERE activity_id IN (?,?) AND status='COMPENSATED'",
+                            firstActivity, secondActivity)).isOne();
+                });
+        for (long activity : List.of(firstActivity, secondActivity)) {
+            String before = redis.opsForValue().get(SeckillRedisKeys.availableStock(activity));
+            var result = loader.load(activity);
+            assertThat(result.code()).isEqualTo(FlashSaleLoadCode.IDEMPOTENT);
+            assertThat(result.consistent()).isTrue();
+            assertThat(redis.opsForValue().get(SeckillRedisKeys.availableStock(activity))).isEqualTo(before);
+        }
+        expire(ordinary);
+        assertStock(product, 98);
+        assertThat(loader.load(firstActivity).consistent()).isTrue();
+        assertThat(loader.load(secondActivity).consistent()).isTrue();
+    }
+
+    @Test
+    void changingUsedOfferStillRejectsReloadAndPreservesEveryReservationFact() throws Exception {
+        authenticate();
+        long product = createProduct();
+        long activity = product * 10 + 1;
+        loadActivity(activity, product, 20);
+        var accepted = reservations.reserve(activity, 77, 1, UUID.randomUUID().toString(), "reload-guard");
+        assertThat(accepted.code()).isEqualTo(FlashSaleReservationCode.ACCEPTED);
+        consumer.refreshStreams();
+        consumer.poll();
+        var metadata = redis.opsForHash().entries(SeckillRedisKeys.activityMetadata(activity));
+        var reservation = redis.opsForHash().entries(SeckillRedisKeys.reservation(activity, accepted.reservationNo()));
+        String stock = redis.opsForValue().get(SeckillRedisKeys.availableStock(activity));
+        try {
+            jdbc.update("UPDATE flash_sale_activity SET total_stock=total_stock+1,version=version+1 WHERE activity_id=?", activity);
+            assertThat(loader.load(activity).code()).isEqualTo(FlashSaleLoadCode.RESERVATIONS_EXIST);
+            assertThat(redis.opsForHash().entries(SeckillRedisKeys.activityMetadata(activity))).isEqualTo(metadata);
+            assertThat(redis.opsForHash().entries(SeckillRedisKeys.reservation(activity, accepted.reservationNo())))
+                    .isEqualTo(reservation);
+            assertThat(redis.opsForValue().get(SeckillRedisKeys.availableStock(activity))).isEqualTo(stock);
+            assertThat(redis.opsForValue().get(SeckillRedisKeys.userReservation(activity, 77)))
+                    .isEqualTo(accepted.reservationNo());
+        } finally {
+            jdbc.update("UPDATE flash_sale_activity SET total_stock=total_stock-1,version=version+1 WHERE activity_id=?", activity);
+        }
+        assertThat(loader.load(activity).code()).isEqualTo(FlashSaleLoadCode.IDEMPOTENT);
+        assertThat(loader.load(activity).consistent()).isTrue();
     }
 
     private static void authenticate() {

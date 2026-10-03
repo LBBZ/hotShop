@@ -45,7 +45,7 @@ export function AdminActivitiesPage() {
         text: `活动 ${target.activityId} 加载请求已完成：${response.result}。${
           response.consistent === true
             ? "本次库存核验一致。"
-            : "库存核验发现差异，请结合预约处理进度进一步检查。"
+            : "库存核验未确认一致，请结合预约处理进度进一步检查。"
         }`,
         facts: response,
       });
@@ -102,11 +102,14 @@ export function AdminActivitiesPage() {
               <li>MySQL 可用库存：{result.facts.databaseAvailableStock}</li>
               <li>Redis 可用库存：{result.facts.redisAvailableStock ?? "—"}</li>
               <li>预约事件：{result.facts.streamEventCount}</li>
-              <li>预约记录：{result.facts.reservationRecordCount}</li>
+              <li>已核验预约记录：{result.facts.reservationRecordCount}</li>
             </ul>
           ) : null}
           {result.kind === "warning" ? (
-            <a href="/admin/exceptions">查看异常与人工处理</a>
+            <>
+              <p>{result.facts?.detail}</p>
+              <a href="/admin/exceptions">查看异常与人工处理</a>
+            </>
           ) : null}
         </section>
       ) : null}

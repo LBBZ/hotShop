@@ -240,7 +240,10 @@ class FlashSaleReservationIntegrationTest {
                 ACTIVITY_ID
         );
         assertThat(loader.load(ACTIVITY_ID).code())
-                .isEqualTo(FlashSaleLoadCode.RESERVATIONS_EXIST);
+                .isEqualTo(FlashSaleLoadCode.IDEMPOTENT);
+
+        jdbcTemplate.update("UPDATE flash_sale_activity SET total_stock=6,version=5 WHERE activity_id=?", ACTIVITY_ID);
+        assertThat(loader.load(ACTIVITY_ID).code()).isEqualTo(FlashSaleLoadCode.RESERVATIONS_EXIST);
 
         String metadataKey = SeckillRedisKeys.activityMetadata(ACTIVITY_ID);
         String stockKey = SeckillRedisKeys.availableStock(ACTIVITY_ID);
@@ -291,6 +294,83 @@ class FlashSaleReservationIntegrationTest {
         assertThat(count("sale_reservation")).isEqualTo(reservationsBefore);
         assertThat(count("sales_order")).isEqualTo(ordersBefore);
         assertThat(count("outbox_event")).isEqualTo(outboxBefore);
+    }
+
+    @Test
+    void unchangedOfferCannotTurnAnUnexplainedDatabaseBalanceIntoNewRedisInventory() {
+        insertActivity(ACTIVITY_ID, 5, 5, 2, "ACTIVE", -60, 600, 3);
+        loader.load(ACTIVITY_ID);
+        jdbcTemplate.update("UPDATE flash_sale_activity SET available_stock=4,version=4 WHERE activity_id=?", ACTIVITY_ID);
+        var result = loader.load(ACTIVITY_ID);
+        assertThat(result.code()).isEqualTo(FlashSaleLoadCode.IDEMPOTENT);
+        assertThat(result.consistent()).isFalse();
+        assertThat(result.redisAvailableStock()).isEqualTo(5);
+        assertThat(result.redisVersion()).isEqualTo(3);
+    }
+
+    @Test
+    void orphanedRedisInventoryIsNeverSilentlyReinitialized() {
+        insertActivity(ACTIVITY_ID, 5, 5, 2, "ACTIVE", -60, 600, 3);
+        seckillRedis.opsForValue().set(SeckillRedisKeys.availableStock(ACTIVITY_ID), "4");
+        assertThat(loader.load(ACTIVITY_ID).code()).isEqualTo(FlashSaleLoadCode.INTERNAL_STATE_INVALID);
+        assertThat(stock(ACTIVITY_ID)).isEqualTo(4);
+        assertThat(seckillRedis.hasKey(SeckillRedisKeys.activityMetadata(ACTIVITY_ID))).isFalse();
+    }
+
+    @Test
+    void durableReservationHistoryPreventsBootstrapAfterRedisFactsAreLost() {
+        insertActivity(ACTIVITY_ID, 5, 5, 2, "ACTIVE", -60, 600, 3);
+        jdbcTemplate.update("""
+                INSERT INTO sale_reservation(reservation_no,activity_id,user_id,product_id,
+                    quantity,reserved_amount,status,expires_at)
+                VALUES('rsv_reload_history',?,99,?,1,1.00,'COMPENSATED',DATE_ADD(UTC_TIMESTAMP(6),INTERVAL 1 HOUR))
+                """, ACTIVITY_ID, PRODUCT_ID);
+        assertThat(loader.load(ACTIVITY_ID).code()).isEqualTo(FlashSaleLoadCode.RESERVATIONS_EXIST);
+        assertThat(seckillRedis.hasKey(SeckillRedisKeys.activityMetadata(ACTIVITY_ID))).isFalse();
+        assertThat(seckillRedis.hasKey(SeckillRedisKeys.availableStock(ACTIVITY_ID))).isFalse();
+    }
+
+    @Test
+    void duplicateStreamDeliveryCountsOneReservationAndNeverAnotherInventoryDebit() {
+        insertActivity(ACTIVITY_ID, 5, 5, 2, "ACTIVE", -60, 600, 3);
+        loader.load(ACTIVITY_ID);
+        reservationService.reserve(ACTIVITY_ID, 99, 1, "reload-duplicate-delivery-000000001", "reload-dedup");
+        String stream = SeckillRedisKeys.reservationStream(ACTIVITY_ID);
+        var original = seckillRedis.opsForStream().range(stream, org.springframework.data.domain.Range.unbounded()).getFirst();
+        seckillRedis.opsForStream().add(MapRecord.create(stream, original.getValue()));
+        var result = loader.load(ACTIVITY_ID);
+        assertThat(result.consistent()).isTrue();
+        assertThat(result.streamEventCount()).isEqualTo(2);
+        assertThat(result.reservationRecordCount()).isEqualTo(1);
+        assertThat(result.reservedQuantity()).isEqualTo(1);
+        assertThat(result.redisAvailableStock()).isEqualTo(4);
+    }
+
+    @Test
+    void largeHistoryEndsVerificationWithoutUnboundedRedisReadOrInventoryMutation() {
+        insertActivity(ACTIVITY_ID, 5, 5, 2, "ACTIVE", -60, 600, 3);
+        loader.load(ACTIVITY_ID);
+        reservationService.reserve(ACTIVITY_ID, 99, 1, "reload-bounded-history-00000000001", "reload-bound");
+        String stream = SeckillRedisKeys.reservationStream(ACTIVITY_ID);
+        var original = seckillRedis.opsForStream().range(stream, org.springframework.data.domain.Range.unbounded()).getFirst();
+        for (int i = 0; i < 1000; i++) seckillRedis.opsForStream().add(MapRecord.create(stream, original.getValue()));
+        long reads = commandCalls("xrange");
+        var result = loader.load(ACTIVITY_ID);
+        assertThat(result.code()).isEqualTo(FlashSaleLoadCode.IDEMPOTENT);
+        assertThat(result.consistent()).isFalse();
+        assertThat(result.detail()).contains("incomplete", "1000", "background reconciliation");
+        assertThat(result.streamEventCount()).isEqualTo(1001);
+        assertThat(result.reservationRecordCount()).isZero();
+        assertThat(result.redisAvailableStock()).isEqualTo(4);
+        assertThat(commandCalls("xrange")).isEqualTo(reads);
+    }
+
+    private long commandCalls(String command) {
+        try (var connection = seckillRedis.getConnectionFactory().getConnection()) {
+            String stats = connection.serverCommands().info("commandstats")
+                    .getProperty("cmdstat_" + command, "calls=0");
+            return Long.parseLong(stats.substring(6).split(",")[0]);
+        }
     }
 
     @Test

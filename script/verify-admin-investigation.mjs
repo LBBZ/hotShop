@@ -161,7 +161,7 @@ try {
       redisCommand("SET", `${prefix}:activity:${activityId}:stock`, "19", "KEEPTTL");
       try {
         await load();
-        await expect(page.getByRole("alert")).toContainText("库存核验发现差异");
+        await expect(page.getByRole("alert")).toContainText("库存核验未确认一致");
         await expect(page.getByRole("alert")).toContainText("MySQL 可用库存：20");
         await expect(page.getByRole("alert")).toContainText("Redis 可用库存：19");
         await expect(page.getByRole("link", { name: "查看异常与人工处理" })).toBeVisible();

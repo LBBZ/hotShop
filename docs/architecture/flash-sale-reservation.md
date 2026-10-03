@@ -37,7 +37,7 @@ SHA-256；User 使用稳定数值 ID。
 
 | 事实 | Key 模板 | 类型 | TTL / 生命周期 |
 | --- | --- | --- | --- |
-| 活动元数据 | `...:activity:{activityId}:meta` | Hash | `endsAt + 7d`，普通装载刷新 |
+| 活动元数据 | `...:activity:{activityId}:meta` | Hash | 首次发布 / 无预约配置替换时设为 `endsAt + 7d`；幂等核验不延长 |
 | 可售库存 | `...:activity:{activityId}:stock` | String integer | `endsAt + 7d` |
 | User 有效占位 | `...:activity:{activityId}:user:{userId}:reservation` | String reservationNo | 接受时计算 `endsAt + 7d` |
 | 幂等结果 | `...:idempotency:user:{userId}:{sha256(key)}` | Hash | 24h |
@@ -62,23 +62,46 @@ authority: PERM_ADMIN_FLASH_SALE_LOAD
 
 - Catalog Product 存在、未删除且 `ACTIVE`，引用 ID 一致；
 - 活动价与 Catalog 价格非负、两位小数，活动价不高于 Catalog 价格；
-- 总库存大于 0、可售库存处于 `[0,total]`、总库存不超过 Catalog stock；
+- 配额大于 0、数据库可用库存处于 `[0,total]`、Catalog stock 非负；
 - per-User limit 大于 0且不超过总库存；
 - `endsAt > startsAt`，status 属于数据库允许集合，version 非负。
 
-当前装载使用 `load-flash-sale-activity-v2.lua`，保留已发布的 v1 文件不覆写。v2 延续原装载
-语义，并在 `LOADED` 或同版本 `IDEMPOTENT` 返回前原子 `SADD` 当前活动 Stream 到版本化 Registry
-Set。Registry、Stream 和其余 Lua Key 使用相同 hash tag。装载 Lua 比较 `databaseVersion`：
+当前使用 [装载 Lua v3](../../domain/src/main/resources/redis/load-flash-sale-activity-v3.lua)，保留 v1 / v2 文件。
+商品、活动价、配额、每人限制、状态和时间窗共同定义已发布的 offer。建单和回库推进 MySQL 行版本，
+但并不发布新的 offer，详见 [ADR-009](adr/ADR-009-preserve-loaded-offer.md)。
 
-- Redis 无事实或数据库版本更新且 Stream 为空：用 staging Key 写全量事实后替换；
-- 同版本且所有事实字段一致：返回 `IDEMPOTENT`，绝不重置已扣库存；
-- 旧版本：`STALE_VERSION`；
-- 已有 Stream 事件时尝试装载更新版本：`RESERVATIONS_EXIST`，禁止静默重置库存或清 User 占位；
-- 类型或同版本事实不一致：`INTERNAL_STATE_INVALID`。
+- 配置相同且数据库行版本不低于已装载版本：返回 `IDEMPOTENT`，保留初始余额、当前 Redis 库存、offer 版本和所有预约。
+- 新建或替换库存必须是未使用的活动：没有数据库预约、没有 Stream / 库存变动历史，实际 / expected 余额一致，配额不超过当前 Catalog stock。初始可用量允许小于总配额，按其实际值建立 `S0`。替换已有配置还要求更高行版本以及未受损的原始 Redis 余额。
+- 已有预约的配置变更：`RESERVATIONS_EXIST`；已释放的预约仍算历史。清空 Stream 不能绕过已有库存 revision 或数据库预约保护。
+- 低于已装载版本：`STALE_VERSION`；同版本更改配置、错误类型、仅余库存而缺少元数据：`INTERNAL_STATE_INVALID`。
+- 普通加载不提供历史活动的增减配额、暂停 / 恢复或丢失事实恢复协议。全新初始化失败返回 `ACTIVITY_INVALID`，不会修正库存来迎合配置。
 
-成功响应同时返回 MySQL available stock、Redis stock、Stream 事件数、Reservation Key 数、累计预约
-quantity 和 `consistent`。管理调用由 Administrator 身份强制授权，并把结果/失败原因、request ID、
-trace ID 和对账摘要写入只追加 `audit_log`。
+`LOADED` 与 `IDEMPOTENT` 都原子登记 Stream Registry 和对账索引。所有 Key 继续使用同一 hash tag。
+响应 `databaseVersion` 是当前 MySQL 行版本；`redisVersion` 及预约事件中的 `activityVersion` 是已发布 offer 的来源版本，
+前者大于后者可以是正常交易推进，不代表配置未同步。
+
+核验使用 [只读观察 Lua](../../domain/src/main/resources/redis/inspect-loaded-activity-v1.lua)，最多检查 1,000 条 Stream 事件，
+按 reservationNo 去重并核对事件与预约的不可变字段。`RESERVED`、`ORDER_CREATED`、`COMPENSATING` 占用库存；
+`COMPENSATED`、`PAYMENT_EXPIRED` 保留历史但不再占用库存，已释放 User 占位可以属于后续预约。
+令 `S0` 为装载初始余额、`E` 为 Redis 有效预约数量、`M` 为 MySQL `ORDER_CREATED` 预约数量，则检查：
+
+```text
+S0 = Redis 当前可用库存 + E
+S0 = MySQL 活动可用库存 + M
+MySQL 活动可用库存 = expected_available_stock
+MySQL 商品可用库存 = expected_stock
+```
+
+商品余额由普通订单和所有活动共享，不能拿某个活动的初始商品库存减该活动销量来核对。MySQL 查询在同一语句读取余额和已承诺数量，
+Redis 观察前后再次比较 MySQL 事实，读到变动时不声明一致。这仍是有限时点的观察，不是跨 MySQL / Redis 的原子快照或交易完成证明。
+MySQL 已回库而 Redis 超时投影尚未执行时，两侧可以各自守恒；加载不会代替投影返还库存。
+
+响应保留两侧库存、Stream 数、已检查的不同预约数、历史预约 quantity 及 `consistent`。
+历史 quantity 包括已释放预约，不能直接当作 `E`。超过扫描上限时不执行完整 `XRANGE`，返回 `consistent=false`，
+`detail` 明确核验未完成并指向后台对账；此时预约统计为已检查数量，不是历史总数。无效引用、余额差异或观察中变动也不会显示核验成功。
+MySQL 的已承诺数量聚合仍按活动索引查询，未宣称其成本与历史规模无关。
+
+管理调用由 Administrator 身份强制授权，并把结果/失败原因、request ID、trace ID 和核验摘要写入只追加 `audit_log`。
 
 ## 5. Reservation Lua v1
 
@@ -144,7 +167,7 @@ Lua 原始错误、Redis 地址、Key、Java 类名和堆栈不会进入 Problem
 | `requestId` | 首次请求的 Request ID |
 | `traceparent`、`tracestate` | 与接受预约同次 `XADD` 写入的 W3C 关联上下文；无值时使用空字符串 |
 | `occurredAtMs` | Redis `TIME` 计算的 epoch milliseconds |
-| `activityVersion` | 装载的 MySQL activity version |
+| `activityVersion` | 已发布 offer 的来源版本；同配置重复加载时保持不变 |
 | `idempotencyKeyHash` | 原 Key 的 SHA-256 lowercase hex |
 | `requestFingerprint` | v1 规范化请求 SHA-256 |
 
@@ -159,7 +182,8 @@ $adminToken = '<administrator-access-token>'
 $activityId = '7001'
 Invoke-RestMethod -Method Post `
   -Uri "http://localhost:8088/admin/api/v1/flash-sales/$activityId/load" `
-  -Headers @{Authorization="Bearer $adminToken"; 'X-Request-Id'='load-7001'}
+  -Headers @{Authorization="Bearer $adminToken"; 'X-Request-Id'='load-7001'} `
+  -ContentType 'application/json' -Body '{"reason":"复查活动装载与库存"}'
 ```
 
 以 User Access Token 预约：

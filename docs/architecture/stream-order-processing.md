@@ -21,7 +21,7 @@
 
 ## 2. Stream 发现、消费者组与公平性
 
-活动装载使用 `load-flash-sale-activity-v2.lua`。v1 文件保留不改；v2 在成功装载和同版本幂等装载时
+活动装载使用 `load-flash-sale-activity-v3.lua`。v1 / v2 文件保留；v3 在成功装载和同配置幂等装载时
 原子执行：
 
 ```text

@@ -286,7 +286,20 @@ class InventoryReconciliationJointContainerTest {
         assertThat(redis.opsForValue().get(SeckillRedisKeys.availableStock(firstActivity))).isEqualTo("20");
         assertThat(redis.opsForHash().get(SeckillRedisKeys.reservation(firstActivity, reservation.reservationNo()),
                 "status")).isEqualTo("PAYMENT_EXPIRED");
-        assertCleanReconciliation();
+        for (int run = 0; run < 6; run++) reconciliation.runBatch();
+        // The expiry projection invalidates an in-progress cycle. Preserve its
+        // one expected warning, while still rejecting every other finding.
+        assertThat(jdbc.queryForList("SELECT issue_type,severity,JSON_UNQUOTE(JSON_EXTRACT(evidence_summary,'$.reason')) AS reason "
+                + "FROM seckill_reconciliation_issue"))
+                .containsExactly(Map.of("issue_type", "REDIS_CONSERVATION_CHECK_INCOMPLETE",
+                        "severity", "WARNING", "reason", "WRITES_DURING_SCAN"));
+        String checkpoint = SeckillRedisKeys.conservationCheckpoint(firstActivity);
+        String metadata = SeckillRedisKeys.activityMetadata(firstActivity);
+        assertThat(redis.opsForHash().get(checkpoint, "lastCompletedFence")).isEqualTo(
+                redis.opsForHash().get(metadata, "databaseVersion") + ":"
+                        + redis.opsForHash().get(metadata, "inventoryRevision"));
+        assertThat(redis.opsForHash().get(checkpoint, "lastCompletedQuantity")).isEqualTo("0");
+        assertThat(redis.opsForHash().get(checkpoint, "lastCompletedInvalid")).isEqualTo("0");
 
         mvc.perform(post("/admin/api/v1/products/{id}/stock-adjustments", product)
                         .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(

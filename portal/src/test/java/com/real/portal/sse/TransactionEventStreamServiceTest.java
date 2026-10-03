@@ -8,7 +8,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.Duration;
+import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicLong;
@@ -52,6 +54,18 @@ class TransactionEventStreamServiceTest {
     @AfterEach
     void stopScheduler() {
         service.shutdown();
+    }
+
+    @Test
+    void caughtUpReconnectImmediatelySendsHeartbeatWithoutAdvancingCursor() {
+        when(timeline.durableOrderEvents("caught-up-order", 7L, 41L)).thenReturn(List.of());
+
+        service.order("caught-up-order", 7L, 41L);
+
+        await().atMost(Duration.ofSeconds(3)).untilAsserted(() ->
+                assertThat(emitter.frames).containsExactly(":heartbeat\n\n"));
+        verify(timeline, times(1)).durableOrderEvents("caught-up-order", 7L, 41L);
+        assertThat(service.activeConnections()).isOne();
     }
 
     @Test
@@ -221,12 +235,21 @@ class TransactionEventStreamServiceTest {
     }
 
     private static final class ControllableSseEmitter extends SseEmitter {
+        private final List<String> frames = new CopyOnWriteArrayList<>();
         private Runnable completion;
         private Runnable timeout;
         private Consumer<Throwable> error;
 
         private ControllableSseEmitter(long timeout) {
             super(timeout);
+        }
+
+        @Override
+        public void send(SseEventBuilder builder) throws IOException {
+            StringBuilder frame = new StringBuilder();
+            builder.build().forEach(item -> frame.append(item.getData()));
+            frames.add(frame.toString());
+            super.send(builder);
         }
 
         @Override

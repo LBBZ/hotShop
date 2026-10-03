@@ -45,3 +45,11 @@ Assert-Equal (@($fractional | Where-Object scenario -eq 'seckill-new-intent'))[0
 Assert-Equal (@($fractional | Where-Object scenario -eq 'mixed-e2e'))[0].users 46 'Fractional mixed planning'
 
 Write-Host 'TASK-20 default configuration planning tests passed.'
+
+$journey = @(Get-Task20RunPlan -Profile journey-baseline)
+Assert-Equal ($journey.scenario -join ',') 'login-baseline,purchase-baseline,seckill-new-intent' 'Journey stages must isolate login and both transaction paths'
+Assert-Equal $journey[0].duration '60s' 'Journey must use a sustained window'
+Assert-Equal $journey[2].users 601 'Journey prepares one identity per arrival plus boundary'
+$bounded = $false
+try { Get-Task20RunPlan -Profile journey-baseline -Rate 1000 -VUs 1000 | Out-Null } catch { $bounded = $true }
+Assert-Equal $bounded $true 'Copied token pools must be bounded before creating resources'

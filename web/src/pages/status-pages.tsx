@@ -1,5 +1,5 @@
 import { ArrowLeft, Ban, SearchX, TimerReset } from "lucide-react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 
@@ -9,6 +9,8 @@ interface StatusPageProps {
   title: string;
   description: string;
   icon: typeof Ban;
+  actionTo?: string;
+  actionLabel?: string;
 }
 
 function StatusPage({
@@ -17,6 +19,8 @@ function StatusPage({
   title,
   description,
   icon: Icon,
+  actionTo = "/",
+  actionLabel = "返回首页",
 }: StatusPageProps) {
   return (
     <main className="status-page">
@@ -29,9 +33,9 @@ function StatusPage({
         <h1>{title}</h1>
         <p>{description}</p>
         <Button asChild variant="dark">
-          <Link to="/">
+          <Link to={actionTo}>
             <ArrowLeft aria-hidden="true" className="size-4" />
-            返回首页
+            {actionLabel}
           </Link>
         </Button>
       </div>
@@ -53,13 +57,27 @@ export function ForbiddenPage() {
 
 export function SessionExpiredPage() {
   const [params] = useSearchParams();
+  const location = useLocation();
   const domain = params.get("domain") === "admin" ? "Administrator" : "User";
+  const from = (location.state as { from?: unknown } | null)?.from;
+  const returnTo =
+    typeof from === "string" && /^\/user(?:\/|$)/u.test(from) ? from : "/user";
   return (
     <StatusPage
       code="401"
       eyebrow={`${domain.toUpperCase()} SESSION`}
-      title={`${domain} 会话已结束`}
-      description="Refresh Session 无法恢复，内存中的 Access Token 已清理。重新登录后可以继续。"
+      title="需要重新登录"
+      description={
+        domain === "User"
+          ? "登录状态未能恢复。请重新登录后继续，已创建的订单仍可在「我的订单」查看。"
+          : "登录状态未能恢复，请重新登录后继续处理。"
+      }
+      actionTo={
+        domain === "Administrator"
+          ? "/admin/login"
+          : `/auth?returnTo=${encodeURIComponent(returnTo)}`
+      }
+      actionLabel="重新登录"
       icon={TimerReset}
     />
   );

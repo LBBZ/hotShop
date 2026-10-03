@@ -1,0 +1,772 @@
+{
+  "description": "Selected non-secret fields from the two original run summaries; application images unchanged between runs.",
+  "dockerVm": {
+    "memoryBytes": 8184856576,
+    "version": "29.6.2",
+    "logicalCpus": 32
+  },
+  "runs": [
+    {
+      "runId": "run-journey-baseline-1003a",
+      "startedAt": "2026-10-03T14:49:52.0003014+08:00",
+      "endedAt": "2026-10-03T14:57:00.4244394+08:00",
+      "gitHead": "9070fba0f1a407f37687765ccedffe2beb952c2b",
+      "worktreeCleanAtStart": false,
+      "profile": "journey-baseline",
+      "warmup": "2s",
+      "resourceLimits": [
+        {
+          "name": "/hotshop-task20-run-journey-baseline-1003a-task-service-1",
+          "image": "sha256:2f92aaf0ec39471b0cf6cbc5fcb6ba4a7a3f4c7f4cf0988cce1ae925e83eda1e",
+          "memoryLimitBytes": 671088640,
+          "cpuQuotaNano": 2000000000
+        },
+        {
+          "name": "/hotshop-task20-run-journey-baseline-1003a-portal-service-1",
+          "image": "sha256:43abb459ab6fcbde49afb17a70b7afeea3e499ff82957e0a267a22f43f320b9d",
+          "memoryLimitBytes": 671088640,
+          "cpuQuotaNano": 2000000000
+        },
+        {
+          "name": "/hotshop-task20-run-journey-baseline-1003a-admin-service-1",
+          "image": "sha256:d2cc0c334121721c3823b2ad217d8aa6835b45e896d9fc168c3fc9e8fe9409d6",
+          "memoryLimitBytes": 536870912,
+          "cpuQuotaNano": 1000000000
+        },
+        {
+          "name": "/hotshop-task20-run-journey-baseline-1003a-redis-seckill-1",
+          "image": "sha256:0b2b77d3ea5078274795e3177cdbdada8b96316684a38911d528534ed679b5ec",
+          "memoryLimitBytes": 67108864,
+          "cpuQuotaNano": 0
+        },
+        {
+          "name": "/hotshop-task20-run-journey-baseline-1003a-redis-cache-1",
+          "image": "sha256:0b2b77d3ea5078274795e3177cdbdada8b96316684a38911d528534ed679b5ec",
+          "memoryLimitBytes": 67108864,
+          "cpuQuotaNano": 0
+        },
+        {
+          "name": "/hotshop-task20-run-journey-baseline-1003a-mysql-1",
+          "image": "sha256:6ea90827b1100f8f2ae306a539f86d2c264a26ed435a2a9f75551dd5c3aeb242",
+          "memoryLimitBytes": 805306368,
+          "cpuQuotaNano": 1500000000
+        },
+        {
+          "name": "/hotshop-task20-run-journey-baseline-1003a-rabbitmq-1",
+          "image": "sha256:3b65fea508306d6a79908f82a7a4ad11ea51defb45f5f8db44455b9f71a6de58",
+          "memoryLimitBytes": 268435456,
+          "cpuQuotaNano": 1000000000
+        },
+        {
+          "name": "/hotshop-task20-run-journey-baseline-1003a-prometheus-1",
+          "image": "sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996",
+          "memoryLimitBytes": 268435456,
+          "cpuQuotaNano": 1000000000
+        }
+      ],
+      "scenarios": [
+        {
+          "scenario": "login-baseline",
+          "requestedRps": 20,
+          "duration": "60s",
+          "vus": 32,
+          "identityPreparation": "unique-user-login-per-iteration",
+          "attempts": 835,
+          "successes": 835,
+          "completedWithinWindow": 803,
+          "completedAfterWindow": 32,
+          "completedWithinWindowRps": 13.383,
+          "p95Ms": 2757.4664588,
+          "p99Ms": 3009.83497134,
+          "droppedIterations": 366,
+          "systemErrors": 0,
+          "checksFailed": 0,
+          "ordinaryPurchase": null,
+          "reservationFacts": {
+            "initialStock": 1,
+            "mysqlRemainingStock": 1,
+            "redisRemainingStock": 1,
+            "reservations": 0,
+            "validOrders": 0,
+            "duplicateValidOrders": 0,
+            "oversell": 0,
+            "outboxPending": 0,
+            "inboxPending": 0,
+            "streamPending": 0,
+            "reconciliationDifferences": 0,
+            "asyncOrderMs": {
+              "formula": "TIMESTAMPDIFF(MICROSECOND,sale_reservation.reserved_at,sales_order.created_at)/1000",
+              "sampleCount": 0,
+              "p50": null,
+              "p95": null,
+              "p99": null,
+              "max": null
+            }
+          },
+          "resources": {
+            "sampleCount": 134,
+            "containersObserved": 9,
+            "maxContainerCpuPercent": 203.78,
+            "maxContainerMemoryBytes": 566440755,
+            "byContainer": [
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003a-admin-service-1",
+                "samples": 15,
+                "maxCpuPercent": 0.91,
+                "maxMemoryBytes": 295174144
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003a-k6-run-5d6a12a12f30",
+                "samples": 14,
+                "maxCpuPercent": 9.77,
+                "maxMemoryBytes": 75266785
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003a-mysql-1",
+                "samples": 15,
+                "maxCpuPercent": 13.8,
+                "maxMemoryBytes": 566440755
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003a-portal-service-1",
+                "samples": 15,
+                "maxCpuPercent": 203.78,
+                "maxMemoryBytes": 327365427
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003a-prometheus-1",
+                "samples": 15,
+                "maxCpuPercent": 2.23,
+                "maxMemoryBytes": 62170071
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003a-rabbitmq-1",
+                "samples": 15,
+                "maxCpuPercent": 103.57,
+                "maxMemoryBytes": 198076006
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003a-redis-cache-1",
+                "samples": 15,
+                "maxCpuPercent": 6.06,
+                "maxMemoryBytes": 14627635
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003a-redis-seckill-1",
+                "samples": 15,
+                "maxCpuPercent": 4.28,
+                "maxMemoryBytes": 8335131
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003a-task-service-1",
+                "samples": 15,
+                "maxCpuPercent": 10.11,
+                "maxMemoryBytes": 290455552
+              }
+            ]
+          },
+          "businessCorrectnessPassed": true,
+          "evidenceComplete": true
+        },
+        {
+          "scenario": "purchase-baseline",
+          "requestedRps": 20,
+          "duration": "60s",
+          "vus": 32,
+          "identityPreparation": "setup-token-pool",
+          "attempts": 1200,
+          "successes": 1200,
+          "completedWithinWindow": 1200,
+          "completedAfterWindow": 0,
+          "completedWithinWindowRps": 20.0,
+          "p95Ms": 23.738880749999996,
+          "p99Ms": 36.788165659999976,
+          "droppedIterations": 0,
+          "systemErrors": 0,
+          "checksFailed": 0,
+          "ordinaryPurchase": {
+            "initialStock": 1201,
+            "remainingStock": 1,
+            "orders": 1200,
+            "quantity": 1200,
+            "duplicateUserOrders": 0,
+            "missingPublishedEvents": 0
+          },
+          "reservationFacts": {
+            "initialStock": 1201,
+            "mysqlRemainingStock": 1201,
+            "redisRemainingStock": 1201,
+            "reservations": 0,
+            "validOrders": 0,
+            "duplicateValidOrders": 0,
+            "oversell": 0,
+            "outboxPending": 0,
+            "inboxPending": 0,
+            "streamPending": 0,
+            "reconciliationDifferences": 0,
+            "asyncOrderMs": {
+              "formula": "TIMESTAMPDIFF(MICROSECOND,sale_reservation.reserved_at,sales_order.created_at)/1000",
+              "sampleCount": 0,
+              "p50": null,
+              "p95": null,
+              "p99": null,
+              "max": null
+            }
+          },
+          "resources": {
+            "sampleCount": 287,
+            "containersObserved": 9,
+            "maxContainerCpuPercent": 210.09,
+            "maxContainerMemoryBytes": 592445440,
+            "byContainer": [
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003a-admin-service-1",
+                "samples": 32,
+                "maxCpuPercent": 2.04,
+                "maxMemoryBytes": 289721549
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003a-k6-run-1cf7305f5143",
+                "samples": 31,
+                "maxCpuPercent": 14.28,
+                "maxMemoryBytes": 201012019
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003a-mysql-1",
+                "samples": 32,
+                "maxCpuPercent": 45.9,
+                "maxMemoryBytes": 592445440
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003a-portal-service-1",
+                "samples": 32,
+                "maxCpuPercent": 210.09,
+                "maxMemoryBytes": 331245158
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003a-prometheus-1",
+                "samples": 32,
+                "maxCpuPercent": 4.0,
+                "maxMemoryBytes": 73966551
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003a-rabbitmq-1",
+                "samples": 32,
+                "maxCpuPercent": 108.18,
+                "maxMemoryBytes": 193567130
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003a-redis-cache-1",
+                "samples": 32,
+                "maxCpuPercent": 4.05,
+                "maxMemoryBytes": 13516145
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003a-redis-seckill-1",
+                "samples": 32,
+                "maxCpuPercent": 3.96,
+                "maxMemoryBytes": 8679064
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003a-task-service-1",
+                "samples": 32,
+                "maxCpuPercent": 28.96,
+                "maxMemoryBytes": 295593574
+              }
+            ]
+          },
+          "businessCorrectnessPassed": true,
+          "evidenceComplete": true
+        },
+        {
+          "scenario": "seckill-new-intent",
+          "requestedRps": 20,
+          "duration": "60s",
+          "vus": 32,
+          "identityPreparation": "setup-token-pool",
+          "attempts": 1200,
+          "successes": 1200,
+          "completedWithinWindow": 1200,
+          "completedAfterWindow": 0,
+          "completedWithinWindowRps": 20.0,
+          "p95Ms": 8.427371149999999,
+          "p99Ms": 9.882869409999998,
+          "droppedIterations": 0,
+          "systemErrors": 0,
+          "checksFailed": 0,
+          "ordinaryPurchase": null,
+          "reservationFacts": {
+            "initialStock": 1201,
+            "mysqlRemainingStock": 1,
+            "redisRemainingStock": 1,
+            "reservations": 1200,
+            "validOrders": 1200,
+            "duplicateValidOrders": 0,
+            "oversell": 0,
+            "outboxPending": 0,
+            "inboxPending": 0,
+            "streamPending": 0,
+            "reconciliationDifferences": 0,
+            "asyncOrderMs": {
+              "formula": "TIMESTAMPDIFF(MICROSECOND,sale_reservation.reserved_at,sales_order.created_at)/1000",
+              "sampleCount": 1200,
+              "p50": 250.204,
+              "p95": 705.398,
+              "p99": 1679.747,
+              "max": 2064.369
+            }
+          },
+          "resources": {
+            "sampleCount": 287,
+            "containersObserved": 9,
+            "maxContainerCpuPercent": 214.94,
+            "maxContainerMemoryBytes": 599156326,
+            "byContainer": [
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003a-admin-service-1",
+                "samples": 32,
+                "maxCpuPercent": 1.72,
+                "maxMemoryBytes": 287204966
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003a-k6-run-73caf9a566fe",
+                "samples": 31,
+                "maxCpuPercent": 19.26,
+                "maxMemoryBytes": 206988902
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003a-mysql-1",
+                "samples": 32,
+                "maxCpuPercent": 46.78,
+                "maxMemoryBytes": 599156326
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003a-portal-service-1",
+                "samples": 32,
+                "maxCpuPercent": 214.94,
+                "maxMemoryBytes": 327050854
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003a-prometheus-1",
+                "samples": 32,
+                "maxCpuPercent": 3.98,
+                "maxMemoryBytes": 79576433
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003a-rabbitmq-1",
+                "samples": 32,
+                "maxCpuPercent": 103.31,
+                "maxMemoryBytes": 177419059
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003a-redis-cache-1",
+                "samples": 32,
+                "maxCpuPercent": 3.07,
+                "maxMemoryBytes": 12582912
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003a-redis-seckill-1",
+                "samples": 32,
+                "maxCpuPercent": 3.87,
+                "maxMemoryBytes": 11156849
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003a-task-service-1",
+                "samples": 32,
+                "maxCpuPercent": 44.17,
+                "maxMemoryBytes": 295908147
+              }
+            ]
+          },
+          "businessCorrectnessPassed": true,
+          "evidenceComplete": true
+        }
+      ],
+      "businessCorrectnessPassed": true,
+      "runIntegrityPassed": true,
+      "ownedResourcesZero": true,
+      "target5000RpsActuallyReached": false
+    },
+    {
+      "runId": "run-journey-baseline-1003b",
+      "startedAt": "2026-10-03T15:14:23.3927466+08:00",
+      "endedAt": "2026-10-03T15:20:24.4831331+08:00",
+      "gitHead": "9070fba0f1a407f37687765ccedffe2beb952c2b",
+      "worktreeCleanAtStart": false,
+      "profile": "journey-baseline",
+      "warmup": "2s",
+      "resourceLimits": [
+        {
+          "name": "/hotshop-task20-run-journey-baseline-1003b-portal-service-1",
+          "image": "sha256:43abb459ab6fcbde49afb17a70b7afeea3e499ff82957e0a267a22f43f320b9d",
+          "memoryLimitBytes": 671088640,
+          "cpuQuotaNano": 4000000000
+        },
+        {
+          "name": "/hotshop-task20-run-journey-baseline-1003b-admin-service-1",
+          "image": "sha256:d2cc0c334121721c3823b2ad217d8aa6835b45e896d9fc168c3fc9e8fe9409d6",
+          "memoryLimitBytes": 536870912,
+          "cpuQuotaNano": 1000000000
+        },
+        {
+          "name": "/hotshop-task20-run-journey-baseline-1003b-task-service-1",
+          "image": "sha256:2f92aaf0ec39471b0cf6cbc5fcb6ba4a7a3f4c7f4cf0988cce1ae925e83eda1e",
+          "memoryLimitBytes": 671088640,
+          "cpuQuotaNano": 2000000000
+        },
+        {
+          "name": "/hotshop-task20-run-journey-baseline-1003b-rabbitmq-1",
+          "image": "sha256:3b65fea508306d6a79908f82a7a4ad11ea51defb45f5f8db44455b9f71a6de58",
+          "memoryLimitBytes": 268435456,
+          "cpuQuotaNano": 1000000000
+        },
+        {
+          "name": "/hotshop-task20-run-journey-baseline-1003b-redis-cache-1",
+          "image": "sha256:0b2b77d3ea5078274795e3177cdbdada8b96316684a38911d528534ed679b5ec",
+          "memoryLimitBytes": 67108864,
+          "cpuQuotaNano": 0
+        },
+        {
+          "name": "/hotshop-task20-run-journey-baseline-1003b-prometheus-1",
+          "image": "sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996",
+          "memoryLimitBytes": 268435456,
+          "cpuQuotaNano": 1000000000
+        },
+        {
+          "name": "/hotshop-task20-run-journey-baseline-1003b-redis-seckill-1",
+          "image": "sha256:0b2b77d3ea5078274795e3177cdbdada8b96316684a38911d528534ed679b5ec",
+          "memoryLimitBytes": 67108864,
+          "cpuQuotaNano": 0
+        },
+        {
+          "name": "/hotshop-task20-run-journey-baseline-1003b-mysql-1",
+          "image": "sha256:6ea90827b1100f8f2ae306a539f86d2c264a26ed435a2a9f75551dd5c3aeb242",
+          "memoryLimitBytes": 805306368,
+          "cpuQuotaNano": 1500000000
+        }
+      ],
+      "scenarios": [
+        {
+          "scenario": "login-baseline",
+          "requestedRps": 20,
+          "duration": "60s",
+          "vus": 32,
+          "identityPreparation": "unique-user-login-per-iteration",
+          "attempts": 1201,
+          "successes": 1201,
+          "completedWithinWindow": 1198,
+          "completedAfterWindow": 3,
+          "completedWithinWindowRps": 19.967,
+          "p95Ms": 165.530118,
+          "p99Ms": 592.338344,
+          "droppedIterations": 0,
+          "systemErrors": 0,
+          "checksFailed": 0,
+          "ordinaryPurchase": null,
+          "reservationFacts": {
+            "initialStock": 1,
+            "mysqlRemainingStock": 1,
+            "redisRemainingStock": 1,
+            "reservations": 0,
+            "validOrders": 0,
+            "duplicateValidOrders": 0,
+            "oversell": 0,
+            "outboxPending": 0,
+            "inboxPending": 0,
+            "streamPending": 0,
+            "reconciliationDifferences": 0,
+            "asyncOrderMs": {
+              "formula": "TIMESTAMPDIFF(MICROSECOND,sale_reservation.reserved_at,sales_order.created_at)/1000",
+              "sampleCount": 0,
+              "p50": null,
+              "p95": null,
+              "p99": null,
+              "max": null
+            }
+          },
+          "resources": {
+            "sampleCount": 125,
+            "containersObserved": 9,
+            "maxContainerCpuPercent": 286.67,
+            "maxContainerMemoryBytes": 560463872,
+            "byContainer": [
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003b-admin-service-1",
+                "samples": 14,
+                "maxCpuPercent": 3.78,
+                "maxMemoryBytes": 299263590
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003b-k6-run-e3765d94ef9f",
+                "samples": 13,
+                "maxCpuPercent": 4.51,
+                "maxMemoryBytes": 83099648
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003b-mysql-1",
+                "samples": 14,
+                "maxCpuPercent": 13.29,
+                "maxMemoryBytes": 560463872
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003b-portal-service-1",
+                "samples": 14,
+                "maxCpuPercent": 286.67,
+                "maxMemoryBytes": 317823386
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003b-prometheus-1",
+                "samples": 14,
+                "maxCpuPercent": 2.93,
+                "maxMemoryBytes": 53571748
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003b-rabbitmq-1",
+                "samples": 14,
+                "maxCpuPercent": 101.46,
+                "maxMemoryBytes": 191155405
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003b-redis-cache-1",
+                "samples": 14,
+                "maxCpuPercent": 3.5,
+                "maxMemoryBytes": 9609150
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003b-redis-seckill-1",
+                "samples": 14,
+                "maxCpuPercent": 2.8,
+                "maxMemoryBytes": 8466203
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003b-task-service-1",
+                "samples": 14,
+                "maxCpuPercent": 4.64,
+                "maxMemoryBytes": 296851866
+              }
+            ]
+          },
+          "businessCorrectnessPassed": true,
+          "evidenceComplete": true
+        },
+        {
+          "scenario": "purchase-baseline",
+          "requestedRps": 20,
+          "duration": "60s",
+          "vus": 32,
+          "identityPreparation": "setup-token-pool",
+          "attempts": 1201,
+          "successes": 1201,
+          "completedWithinWindow": 1200,
+          "completedAfterWindow": 1,
+          "completedWithinWindowRps": 20.0,
+          "p95Ms": 23.554307,
+          "p99Ms": 45.729659,
+          "droppedIterations": 0,
+          "systemErrors": 0,
+          "checksFailed": 0,
+          "ordinaryPurchase": {
+            "initialStock": 1201,
+            "remainingStock": 0,
+            "orders": 1201,
+            "quantity": 1201,
+            "duplicateUserOrders": 0,
+            "missingPublishedEvents": 0
+          },
+          "reservationFacts": {
+            "initialStock": 1201,
+            "mysqlRemainingStock": 1201,
+            "redisRemainingStock": 1201,
+            "reservations": 0,
+            "validOrders": 0,
+            "duplicateValidOrders": 0,
+            "oversell": 0,
+            "outboxPending": 0,
+            "inboxPending": 0,
+            "streamPending": 0,
+            "reconciliationDifferences": 0,
+            "asyncOrderMs": {
+              "formula": "TIMESTAMPDIFF(MICROSECOND,sale_reservation.reserved_at,sales_order.created_at)/1000",
+              "sampleCount": 0,
+              "p50": null,
+              "p95": null,
+              "p99": null,
+              "max": null
+            }
+          },
+          "resources": {
+            "sampleCount": 215,
+            "containersObserved": 9,
+            "maxContainerCpuPercent": 392.17,
+            "maxContainerMemoryBytes": 576821658,
+            "byContainer": [
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003b-admin-service-1",
+                "samples": 24,
+                "maxCpuPercent": 2.47,
+                "maxMemoryBytes": 305240474
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003b-k6-run-8fd26e0dbf1c",
+                "samples": 23,
+                "maxCpuPercent": 25.02,
+                "maxMemoryBytes": 175321907
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003b-mysql-1",
+                "samples": 24,
+                "maxCpuPercent": 37.74,
+                "maxMemoryBytes": 576821658
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003b-portal-service-1",
+                "samples": 24,
+                "maxCpuPercent": 392.17,
+                "maxMemoryBytes": 323275981
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003b-prometheus-1",
+                "samples": 24,
+                "maxCpuPercent": 3.79,
+                "maxMemoryBytes": 67989668
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003b-rabbitmq-1",
+                "samples": 24,
+                "maxCpuPercent": 102.95,
+                "maxMemoryBytes": 176055910
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003b-redis-cache-1",
+                "samples": 24,
+                "maxCpuPercent": 3.66,
+                "maxMemoryBytes": 9342812
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003b-redis-seckill-1",
+                "samples": 24,
+                "maxCpuPercent": 3.0,
+                "maxMemoryBytes": 8888779
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003b-task-service-1",
+                "samples": 24,
+                "maxCpuPercent": 34.46,
+                "maxMemoryBytes": 304821043
+              }
+            ]
+          },
+          "businessCorrectnessPassed": true,
+          "evidenceComplete": true
+        },
+        {
+          "scenario": "seckill-new-intent",
+          "requestedRps": 20,
+          "duration": "60s",
+          "vus": 32,
+          "identityPreparation": "setup-token-pool",
+          "attempts": 1201,
+          "successes": 1201,
+          "completedWithinWindow": 1200,
+          "completedAfterWindow": 1,
+          "completedWithinWindowRps": 20.0,
+          "p95Ms": 8.732585,
+          "p99Ms": 11.030901,
+          "droppedIterations": 0,
+          "systemErrors": 0,
+          "checksFailed": 0,
+          "ordinaryPurchase": null,
+          "reservationFacts": {
+            "initialStock": 1201,
+            "mysqlRemainingStock": 0,
+            "redisRemainingStock": 0,
+            "reservations": 1201,
+            "validOrders": 1201,
+            "duplicateValidOrders": 0,
+            "oversell": 0,
+            "outboxPending": 0,
+            "inboxPending": 0,
+            "streamPending": 0,
+            "reconciliationDifferences": 0,
+            "asyncOrderMs": {
+              "formula": "TIMESTAMPDIFF(MICROSECOND,sale_reservation.reserved_at,sales_order.created_at)/1000",
+              "sampleCount": 1201,
+              "p50": 258.222,
+              "p95": 1039.996,
+              "p99": 1991.317,
+              "max": 2289.025
+            }
+          },
+          "resources": {
+            "sampleCount": 215,
+            "containersObserved": 9,
+            "maxContainerCpuPercent": 402.34,
+            "maxContainerMemoryBytes": 591292006,
+            "byContainer": [
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003b-admin-service-1",
+                "samples": 24,
+                "maxCpuPercent": 2.15,
+                "maxMemoryBytes": 296537293
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003b-k6-run-d92803f88013",
+                "samples": 23,
+                "maxCpuPercent": 13.89,
+                "maxMemoryBytes": 165150720
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003b-mysql-1",
+                "samples": 24,
+                "maxCpuPercent": 48.73,
+                "maxMemoryBytes": 591292006
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003b-portal-service-1",
+                "samples": 24,
+                "maxCpuPercent": 402.34,
+                "maxMemoryBytes": 321912832
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003b-prometheus-1",
+                "samples": 24,
+                "maxCpuPercent": 2.72,
+                "maxMemoryBytes": 70317507
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003b-rabbitmq-1",
+                "samples": 24,
+                "maxCpuPercent": 103.1,
+                "maxMemoryBytes": 176685056
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003b-redis-cache-1",
+                "samples": 24,
+                "maxCpuPercent": 3.85,
+                "maxMemoryBytes": 10622075
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003b-redis-seckill-1",
+                "samples": 24,
+                "maxCpuPercent": 4.75,
+                "maxMemoryBytes": 13683917
+              },
+              {
+                "name": "hotshop-task20-run-journey-baseline-1003b-task-service-1",
+                "samples": 24,
+                "maxCpuPercent": 40.2,
+                "maxMemoryBytes": 302409318
+              }
+            ]
+          },
+          "businessCorrectnessPassed": true,
+          "evidenceComplete": true
+        }
+      ],
+      "businessCorrectnessPassed": true,
+      "runIntegrityPassed": true,
+      "ownedResourcesZero": true,
+      "target5000RpsActuallyReached": false
+    }
+  ]
+}

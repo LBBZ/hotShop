@@ -9,6 +9,7 @@ import {
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { userAuth } from "@/auth/domains";
+import { mapProblemResponse } from "@/api/core/problem";
 import type { AgentStreamEvent } from "@/features/agent/agent-stream";
 
 const mocks = vi.hoisted(() => ({
@@ -98,6 +99,28 @@ afterEach(() => {
 });
 
 describe("Agent request lifecycle", () => {
+  it("keeps the question and creates a new conversation after the server loses its session", async () => {
+    mount();
+    submit("第一次提问");
+    await waitFor(() => expect(mocks.consume).toHaveBeenCalledOnce());
+    const missing = await mapProblemResponse(
+      Response.json(
+        { detail: "Resource not found", code: "NOT_FOUND" },
+        { status: 404 },
+      ),
+    );
+    mocks.addMessage.mockRejectedValueOnce(missing);
+    submit("服务重启后继续查商品");
+    await screen.findByText(
+      "上一段对话已失效，请重新发送问题以开始新对话。购买仍需你确认。",
+    );
+    expect(screen.getByLabelText("请求")).toHaveValue("服务重启后继续查商品");
+    expect(mocks.createSession).toHaveBeenCalledOnce();
+    expect(mocks.startRun).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "发送请求" }));
+    await waitFor(() => expect(mocks.createSession).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.consume).toHaveBeenCalledTimes(2));
+  });
   it("cancels a run whose creation response arrives after the user cancels", async () => {
     let release: ((value: { id: string }) => void) | undefined;
     mocks.startRun.mockImplementation(

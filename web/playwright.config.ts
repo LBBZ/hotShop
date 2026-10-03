@@ -10,7 +10,7 @@ if (!Number.isInteger(webPort) || webPort < 1 || webPort > 65_535) {
 export default defineConfig({
   testDir: "./e2e",
   // The delivery suite requires the separately started, built Nginx application.
-  testIgnore: /task-21-delivery-real\.spec\.ts/,
+  testIgnore: /(?:task-21-delivery|recovery)-real\.spec\.ts/,
   globalSetup: "./e2e/real-compose.setup.ts",
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),

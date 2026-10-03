@@ -17,6 +17,7 @@
     "vite.config.ts",
     "playwright.config.ts",
     "playwright.delivery.config.ts",
+    "playwright.recovery.config.ts",
     "eslint.config.js",
     "e2e/**/*.ts"
   ]

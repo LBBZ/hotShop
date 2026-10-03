@@ -160,11 +160,11 @@ function ConvertTo-Task20Rates {
 
 function Get-Task20RunPlan {
     param(
-        [Parameter(Mandatory)][ValidateSet('smoke','baseline','target-5k','agent-isolation')][string]$Profile,
+        [Parameter(Mandatory)][ValidateSet('smoke','baseline','target-5k','agent-isolation','journey-baseline')][string]$Profile,
         [int[]]$Rates = @(100,250,500,1000), [int]$Rate = 0, [int]$VUs = 0,
         [string]$Duration = '', [int]$UserCount = 0, [int]$Inventory = 0
     )
-    $durationValue = if ($Duration) { $Duration } elseif ($Profile -eq 'agent-isolation') { '15s' } else { '10s' }
+    $durationValue = if ($Duration) { $Duration } elseif ($Profile -eq 'journey-baseline') { '60s' } elseif ($Profile -eq 'agent-isolation') { '15s' } else { '10s' }
     $seconds = ConvertFrom-Task20DurationSeconds $durationValue
     $plan = [System.Collections.Generic.List[object]]::new()
     function Add-Stage([int]$Slot,[string]$Scenario,[int]$StageRate,[int]$StageVUs,[string]$StageDuration,[int]$DefaultUsers,[int]$DefaultInventory) {
@@ -173,6 +173,16 @@ function Get-Task20RunPlan {
         $plan.Add([pscustomobject][ordered]@{ slot=$Slot; scenario=$Scenario; rate=$StageRate; vus=$StageVUs; duration=$StageDuration; users=$users; inventory=$stock })
     }
     switch ($Profile) {
+        'journey-baseline' {
+            $stageRate = if ($Rate) { $Rate } else { 10 }
+            $workers = if ($VUs) { $VUs } else { 32 }
+            $required = [int][Math]::Ceiling($stageRate * $seconds) + 1
+            # Bound setup data copied to each VU; target-5k retains its own login model.
+            if ($required * $workers -gt 100000) { throw 'Journey token pool exceeds the bounded 100000 identity/VU product; reduce Rate, Duration or VUs.' }
+            Add-Stage 1 'login-baseline' $stageRate $workers $durationValue $required 1
+            Add-Stage 2 'purchase-baseline' $stageRate $workers $durationValue $required $required
+            Add-Stage 3 'seckill-new-intent' $stageRate $workers $durationValue $required $required
+        }
         'smoke' {
             $smokeVus = if ($VUs) { $VUs } else { 5 }
             Add-Stage 1 'smoke' 5 $smokeVus $durationValue $smokeVus $smokeVus

@@ -16,6 +16,7 @@ import { useStore } from "zustand";
 
 import { apiClients } from "@/api/clients";
 import { apiEnvironment } from "@/api/core/environment";
+import { findApiProblemError } from "@/api/core/problem";
 import { adminAuth, userAuth } from "@/auth/domains";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -431,11 +432,17 @@ function AgentConversation({ boundary }: { boundary: Boundary }) {
       const failedRun = activeRun.current;
       activeRun.current = null;
       if (failedRun) void cancelRun(failedRun);
+      const conversationLost =
+        findApiProblemError(error)?.problem.status === 404;
+      if (conversationLost) sessionId.current = null;
       setDraft(null);
+      setQuestion((current) => current || content);
       setProblem(
-        error instanceof Error
-          ? error.message
-          : "Agent 服务暂时不可用；商品和交易核心仍可继续使用。",
+        conversationLost
+          ? "上一段对话已失效，请重新发送问题以开始新对话。购买仍需你确认。"
+          : error instanceof Error
+            ? error.message
+            : "Agent 服务暂时不可用；商品和交易核心仍可继续使用。",
       );
       setPhase("error");
     } finally {

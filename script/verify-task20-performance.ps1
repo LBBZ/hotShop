@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('smoke', 'baseline', 'target-5k', 'agent-isolation')]
+    [ValidateSet('smoke', 'baseline', 'target-5k', 'agent-isolation', 'journey-baseline')]
     [string]$Profile = 'smoke',
     [string[]]$Rates = @('100', '250', '500', '1000'),
     [int]$Rate = 0,
@@ -260,6 +260,16 @@ FROM flash_sale_activity a WHERE a.activity_id=$ActivityId;
     }
 }
 
+function Wait-PurchaseDrain([long]$ProductId, [long]$ExpectedOrders) {
+    $deadline = [DateTimeOffset]::UtcNow.AddMinutes(3)
+    do {
+        $row = @(Invoke-Mysql "SELECT CONCAT_WS('\t', (SELECT COUNT(*) FROM sales_order_item WHERE product_id=$ProductId), (SELECT COUNT(*) FROM outbox_event WHERE status IN ('NEW','PUBLISHING','FAILED')));")[-1] -split "`t"
+        if ([long]$row[0] -eq $ExpectedOrders -and [long]$row[1] -eq 0) { return $true }
+        Start-Sleep -Seconds 2
+    } while ([DateTimeOffset]::UtcNow -lt $deadline)
+    return $false
+}
+
 function Wait-AsyncDrain([long]$ActivityId, [long]$ExpectedReservations) {
     $deadline = [DateTimeOffset]::UtcNow.AddMinutes(3)
     do {
@@ -277,6 +287,11 @@ function Wait-AsyncDrain([long]$ActivityId, [long]$ExpectedReservations) {
 
 function Invoke-K6Scenario([string]$Scenario, [int]$ScenarioRate, [int]$ScenarioVUs, [string]$ScenarioDuration, [int]$ScenarioUsers, [int]$ScenarioInventory, [int]$Slot) {
     $activityId = New-Activity -Slot $Slot -Stock $ScenarioInventory -Users $ScenarioUsers
+    $purchaseProductId = 0L
+    if ($Scenario -eq 'purchase-baseline') {
+        $purchaseProductId = [long](@(Invoke-Mysql "INSERT INTO catalog_product (sku,name,price,stock,expected_stock,category,status) VALUES ('PURCHASE-$DataSeed-$Slot','Isolated ordinary purchase',10,$ScenarioInventory,$ScenarioInventory,'LOAD','ACTIVE'); SELECT LAST_INSERT_ID();")[-1])
+    }
+    Set-RunEnvironment TASK20_PRODUCT_ID "$purchaseProductId"
     $scenarioDir = Join-Path $artifactDir ((ConvertTo-Task20SafeFileName "$Slot-$Scenario-$ScenarioRate"))
     New-Item -ItemType Directory -Force -Path $scenarioDir | Out-Null
     # Treat -VUs as an explicit generator resource budget. k6 reports dropped
@@ -344,17 +359,29 @@ function Invoke-K6Scenario([string]$Scenario, [int]$ScenarioRate, [int]$Scenario
     $http5xx = [long](Get-Task20MetricValue $k6Summary 'hotshop_http_5xx' 'count')
     $httpOther = [long](Get-Task20MetricValue $k6Summary 'hotshop_http_other' 'count')
     $scenarioIterations = [double](Get-Task20MetricValue $k6Summary 'hotshop_scenario_iterations' 'count')
+    $journeyAttempts = [long](Get-Task20MetricValue $k6Summary 'hotshop_journey_attempts' 'count')
+    $journeySuccesses = [long](Get-Task20MetricValue $k6Summary 'hotshop_journey_successes' 'count')
+    $withinWindow = [long](Get-Task20MetricValue $k6Summary 'hotshop_journey_completed_in_window' 'count')
+    $afterWindow = [long](Get-Task20MetricValue $k6Summary 'hotshop_journey_completed_after_window' 'count')
     $expectedReservations = $acceptedNew
     $drained = if ($null -eq $k6Summary) {
         # Without the k6 summary there is no trustworthy accepted-count target;
         # fail integrity immediately instead of waiting for an unknowable drain.
         $false
+    } elseif ($Scenario -eq 'purchase-baseline') {
+        Wait-PurchaseDrain $purchaseProductId $journeySuccesses
     } elseif ($Scenario -eq 'read-baseline') {
         $true
     } else {
         Wait-AsyncDrain $activityId $expectedReservations
     }
     $facts = Get-ScenarioFacts -ActivityId $activityId -InitialStock $ScenarioInventory
+    $purchaseFacts = $null
+    if ($purchaseProductId -gt 0) {
+        $row = @(Invoke-Mysql "SELECT CONCAT_WS('\t', p.stock, (SELECT COUNT(*) FROM sales_order o JOIN sales_order_item i ON i.order_id=o.order_id WHERE i.product_id=p.product_id), (SELECT COALESCE(SUM(i.quantity),0) FROM sales_order_item i WHERE i.product_id=p.product_id), (SELECT COUNT(*) FROM (SELECT o.user_id FROM sales_order o JOIN sales_order_item i ON i.order_id=o.order_id WHERE i.product_id=$purchaseProductId GROUP BY o.user_id HAVING COUNT(*)>1) duplicates)) FROM catalog_product p WHERE p.product_id=$purchaseProductId;")[-1] -split "`t"
+        $purchaseFacts = [ordered]@{ initialStock=$ScenarioInventory; remainingStock=[long]$row[0]; orders=[long]$row[1]; quantity=[long]$row[2]; duplicateUserOrders=[long]$row[3] }
+        $purchaseFacts['missingPublishedEvents'] = [long](@(Invoke-Mysql "SELECT COUNT(*) FROM sales_order o JOIN sales_order_item i ON i.order_id=o.order_id WHERE i.product_id=$purchaseProductId AND (NOT EXISTS (SELECT 1 FROM outbox_event e WHERE e.aggregate_type='ORDER' AND e.aggregate_id=o.order_id AND e.event_type='ORDER_CREATED' AND e.status='PUBLISHED') OR NOT EXISTS (SELECT 1 FROM outbox_event e WHERE e.aggregate_type='ORDER' AND e.aggregate_id=o.order_id AND e.event_type='LEGACY_ORDER_TIMEOUT_REQUESTED' AND e.status='PUBLISHED'));")[-1])
+    }
     if ($ScenarioDuration -match '^(\d+)s$') { $durationSeconds = [double]$Matches[1] }
     elseif ($ScenarioDuration -match '^(\d+)m$') { $durationSeconds = [double]$Matches[1] * 60 }
     elseif ($ScenarioDuration -match '^(\d+)ms$') { $durationSeconds = [double]$Matches[1] / 1000 }
@@ -363,6 +390,10 @@ function Invoke-K6Scenario([string]$Scenario, [int]$ScenarioRate, [int]$Scenario
     $newIntentRps = if ($attempted -gt 0) { [Math]::Round($attempted / $durationSeconds, 3) } else { 0 }
     $p95 = Get-Task20MetricValue $k6Summary 'hotshop_new_intent_duration_ms' 'p(95)'
     $p99 = Get-Task20MetricValue $k6Summary 'hotshop_new_intent_duration_ms' 'p(99)'
+    if ($Scenario -in @('login-baseline','purchase-baseline')) {
+        $p95 = Get-Task20MetricValue $k6Summary 'hotshop_journey_duration_ms' 'p(95)'
+        $p99 = Get-Task20MetricValue $k6Summary 'hotshop_journey_duration_ms' 'p(99)'
+    }
     $dropped = [long](Get-Task20MetricValue $k6Summary 'dropped_iterations' 'count')
     $systemErrors = [long](Get-Task20MetricValue $k6Summary 'hotshop_business_system_errors' 'count')
     $checksFailed = [long](Get-Task20MetricValue $k6Summary 'checks' 'fails')
@@ -391,7 +422,11 @@ function Invoke-K6Scenario([string]$Scenario, [int]$ScenarioRate, [int]$Scenario
     $agentFailureCount = [long](Get-Task20MetricValue $k6Summary 'hotshop_agent_failures' 'count')
     $agentP95 = Get-Task20MetricValue $k6Summary 'hotshop_agent_run_duration_ms' 'p(95)'
     $agentP99 = Get-Task20MetricValue $k6Summary 'hotshop_agent_run_duration_ms' 'p(99)'
-    $executionComplete = if ($Scenario -eq 'read-baseline') {
+    $executionComplete = if ($Scenario -in @('login-baseline','purchase-baseline')) {
+        $journeyAttempts -gt 0 -and $journeySuccesses -eq $journeyAttempts -and ($null -eq $purchaseFacts -or (
+            $purchaseFacts.orders -eq $journeySuccesses -and $purchaseFacts.quantity -eq $journeySuccesses -and
+            $purchaseFacts.remainingStock -eq ($ScenarioInventory - $journeySuccesses) -and $purchaseFacts.duplicateUserOrders -eq 0 -and $purchaseFacts.missingPublishedEvents -eq 0))
+    } elseif ($Scenario -eq 'read-baseline') {
         [long](Get-Task20MetricValue $k6Summary 'http_reqs' 'count') -gt 0
     } elseif ($Scenario -eq 'oversell-boundary') {
         $attempted -gt $ScenarioInventory -and $facts.reservations -eq $ScenarioInventory
@@ -409,7 +444,7 @@ function Invoke-K6Scenario([string]$Scenario, [int]$ScenarioRate, [int]$Scenario
         -IdempotencyConflicts $idempotencyConflicts -UnclassifiedProblems $unclassifiedProblems
     $targetMet = $Scenario -in @('seckill-new-intent','agent-isolation') -and `
         (Test-Task20PerformanceTarget -Facts $facts -BusinessCorrectnessPassed $correct `
-            -ActualNewIntentRps $newIntentRps -RequestedRps $ScenarioRate -DroppedIterations $dropped `
+            -ActualNewIntentRps ($withinWindow / $durationSeconds) -RequestedRps $ScenarioRate -DroppedIterations $dropped `
             -SystemErrors $systemErrors -P99 $p99)
     $result = [ordered]@{
         scenario = $Scenario; targetRps = $ScenarioRate; actualRps = $actualRps; newIntentRps = $newIntentRps
@@ -424,7 +459,11 @@ function Invoke-K6Scenario([string]$Scenario, [int]$ScenarioRate, [int]$Scenario
         http5xxRatio = if (($http2xx+$http4xx+$http5xx+$httpOther) -gt 0) { [Math]::Round($http5xx / ($http2xx+$http4xx+$http5xx+$httpOther), 6) } else { 0 }
         duration = $ScenarioDuration; warmup = $Warmup; activityId = $activityId
         users = $ScenarioUsers; inventory = $ScenarioInventory; vus = $ScenarioVUs
-        identityPreparation = if ($Profile -eq 'target-5k') { 'unique-user-login-per-iteration' } else { 'setup-token-pool' }
+        identityPreparation = if ($Scenario -eq 'login-baseline' -or $Profile -eq 'target-5k') { 'unique-user-login-per-iteration' } else { 'setup-token-pool' }
+        completedWithinWindowRps = [Math]::Round($withinWindow / $durationSeconds, 3)
+        journeyAttempts = $journeyAttempts; journeySuccesses = $journeySuccesses
+        completedWithinWindow = $withinWindow; completedAfterWindow = $afterWindow
+        ordinaryPurchase = $purchaseFacts
         throughputDenominatorSeconds = $durationSeconds
         p95Ms = $p95; p99Ms = $p99; droppedIterations = $dropped
         systemErrors = $systemErrors; checksFailed = $checksFailed; k6ExitCode = $k6Exit
@@ -514,9 +553,16 @@ try {
     if ($Profile -eq 'agent-isolation') { $profiles += @('--profile','agent') }
     $up = @($profiles + @('up','-d'))
     if (-not $SkipBuild) { $up += '--build' }
+    if ($Profile -eq 'journey-baseline') {
+        $up += @('portal-service','admin-service','task-service','prometheus')
+    }
     $code = Invoke-Task20Compose -Project $project -Arguments $up
     Record-Command ($(if ($SkipBuild) { 'docker compose ... up -d' } else { 'docker compose ... up -d --build' })) $code
     $composeUpSucceeded = $true
+    $resourceIds = @(& docker ps -q --filter "label=com.docker.compose.project=$project")
+    @(& docker inspect @resourceIds | ConvertFrom-Json | ForEach-Object {
+        [ordered]@{ name=$_.Name; image=$_.Image; memoryLimitBytes=$_.HostConfig.Memory; cpuQuotaNano=$_.HostConfig.NanoCpus }
+    }) | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $artifactDir 'resource-limits.json') -Encoding utf8
     Wait-Task20HttpReady "http://127.0.0.1:$($ports[0])/actuator/health"
     Wait-Task20HttpReady "http://127.0.0.1:$($ports[1])/actuator/health"
     if ($Profile -eq 'agent-isolation') { Wait-Task20HttpReady "http://127.0.0.1:$($ports[3])/health/ready" }
@@ -592,7 +638,7 @@ try {
 }
 
 $newStages = @($scenarioResults | Where-Object { $_.scenario -in @('seckill-new-intent','agent-isolation') })
-$credible = @($newStages | Where-Object { $_.performanceTargetMet } | Sort-Object actualRps -Descending | Select-Object -First 1)
+$credible = @($newStages | Where-Object { $_.performanceTargetMet -and $_.throughputDenominatorSeconds -ge 60 } | Sort-Object completedWithinWindowRps -Descending | Select-Object -First 1)
 $target5k = @($newStages | Where-Object { $_.targetRps -eq 5000 -and $_.newIntentRps -ge 4950 -and $_.duration -eq '10s' -and $_.performanceTargetMet }).Count -gt 0
 $correctness = $failures.Count -eq 0 -and @($scenarioResults | Where-Object { -not $_.businessCorrectnessPassed -and $_.scenario -ne 'read-baseline' }).Count -eq 0
 $integrity = $scenarioResults.Count -gt 0 -and $cleanup.resourcesZero -and `
@@ -604,7 +650,7 @@ $summary = [ordered]@{
     requestedActivityId = $ActivityId
     warmup = $Warmup; scenarios = @($scenarioResults)
     target5000RpsActuallyReached = $target5k
-    highestCredibleSustainedRps = if ($credible.Count) { $credible[0].newIntentRps } else { $null }
+    highestCredibleSustainedRps = if ($credible.Count) { $credible[0].completedWithinWindowRps } else { $null }
     performanceTargetMet = $target5k
     businessCorrectnessPassed = $correctness
     runIntegrityPassed = $integrity

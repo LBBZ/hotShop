@@ -94,6 +94,8 @@ export function createAuthDomain(
   }
 
   async function performRefresh(epoch: number): Promise<AccessSession> {
+    // A page may log out or change account while waiting for another tab.
+    if (epoch !== identityEpoch) throw new SessionExpiredError(config.name);
     const csrfToken = readCookie(config.csrfCookieName);
     const headers = new Headers();
     if (csrfToken) {
@@ -103,6 +105,7 @@ export function createAuthDomain(
     const response = await rawFetch(config.refreshPath, {
       method: "POST",
       headers,
+      signal: AbortSignal.timeout(15_000),
     });
     if (!response.ok) {
       throw await mapProblemResponse(response);
@@ -119,11 +122,25 @@ export function createAuthDomain(
     return session;
   }
 
+  async function coordinatedRefresh(epoch: number): Promise<AccessSession> {
+    // Cookies are shared by tabs, while access tokens intentionally stay in each
+    // page's memory. Read the current CSRF cookie only after acquiring the lock.
+    if (typeof navigator !== "undefined" && navigator.locks) {
+      const resource = `hotshop:refresh:${config.name}:${toApiUrl(config.baseUrl, config.refreshPath)}`;
+      return navigator.locks.request(
+        resource,
+        { signal: AbortSignal.timeout(20_000) },
+        () => performRefresh(epoch),
+      );
+    }
+    return performRefresh(epoch);
+  }
+
   function refresh(): Promise<AccessSession> {
     if (!refreshInFlight || refreshEpoch !== identityEpoch) {
       const epoch = identityEpoch;
       refreshEpoch = epoch;
-      const pending = performRefresh(epoch)
+      const pending = coordinatedRefresh(epoch)
         .catch((error: unknown) => {
           if (epoch === identityEpoch) store.getState().clearSession("expired");
           throw error;

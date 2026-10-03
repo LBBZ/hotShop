@@ -1,13 +1,13 @@
 import http from 'k6/http';
 import exec from 'k6/execution';
 import { check, sleep } from 'k6';
-import { Trend } from 'k6/metrics';
+import { Counter, Trend } from 'k6/metrics';
 import { config, tags, username } from '../lib/config.js';
 import { newIntentKey } from '../lib/identity.js';
 import { identityPool, loginIdentity } from '../lib/identity-pool.js';
 import {
   accepted, agentAttempts, agentFailures, agentRuns, assertResponse, classifyReservation, jsonHeaders, newIntents, parseJson,
-  scenarioIterations,
+  scenarioIterations, observeHttp,
 } from '../lib/http.js';
 
 const statusObservation = new Trend('hotshop_reservation_status_observed_ms', true);
@@ -15,6 +15,21 @@ const newIntentDuration = new Trend('hotshop_new_intent_duration_ms', true);
 const readDuration = new Trend('hotshop_read_duration_ms', true);
 const agentDuration = new Trend('hotshop_agent_run_duration_ms', true);
 const loginBatchSize = 20;
+const journeyAttempts = new Counter('hotshop_journey_attempts');
+const journeySuccesses = new Counter('hotshop_journey_successes');
+const journeyWithinWindow = new Counter('hotshop_journey_completed_in_window');
+const journeyLate = new Counter('hotshop_journey_completed_after_window');
+const journeyDuration = new Trend('hotshop_journey_duration_ms', true);
+
+function observeJourney(response, successful) {
+  const metricTags = tags(config.scenario, config.scenario, 'new');
+  journeyAttempts.add(1, metricTags);
+  journeySuccesses.add(successful ? 1 : 0, metricTags);
+  const within = Date.now() < exec.scenario.startTime + seconds(config.duration) * 1000;
+  journeyWithinWindow.add(successful && within ? 1 : 0, metricTags);
+  journeyLate.add(successful && !within ? 1 : 0, metricTags);
+  journeyDuration.add(response.timings.duration, metricTags);
+}
 
 function arrival(execName, rate = config.rate, startTime = config.warmup, duration = config.duration) {
   return {
@@ -29,6 +44,10 @@ function selectedScenarios() {
     warmup: arrival('warmupRead', Math.min(config.rate, 10), '0s', config.warmup),
   };
   switch (config.scenario) {
+    case 'login-baseline':
+      return { ...warmup, login_baseline: arrival('loginBaseline') };
+    case 'purchase-baseline':
+      return { ...warmup, purchase_baseline: arrival('purchaseBaseline') };
     case 'smoke':
       return { ...warmup, smoke: { executor: 'per-vu-iterations', exec: 'smoke', vus: config.vus, iterations: 1, startTime: config.warmup } };
     case 'read-baseline':
@@ -62,6 +81,11 @@ export const options = {
 };
 
 export function setup() {
+  if (config.scenario === 'login-baseline') {
+    const required = Math.ceil(config.rate * seconds(config.duration)) + 1;
+    if (required > config.userCount) throw new Error('Insufficient unique login identities');
+    return identityPool(required);
+  }
   const needsTokens = config.scenario !== 'read-baseline';
   if (!needsTokens) return { tokens: [], reservations: [] };
 
@@ -102,6 +126,32 @@ export function setup() {
     }
   }
   return { tokens, reservations: [] };
+}
+
+export function loginBaseline(data) {
+  scenarioIterations.add(1, tags(config.scenario, 'login', 'new'));
+  const index = exec.scenario.iterationInTest;
+  if (index >= data.size) exec.test.abort('unique login identity pool exhausted');
+  const response = http.post(`${config.baseUrl}/api/v1/auth/login`,
+    JSON.stringify({ username: username(index), password: config.password }),
+    { headers: { 'Content-Type': 'application/json' }, tags: tags(config.scenario, 'login', 'new'), redirects: 0 });
+  const successful = response.status === 200 && typeof parseJson(response)?.accessToken === 'string';
+  observeHttp(response, tags(config.scenario, 'login', 'new'));
+  observeJourney(response, successful);
+  check(response, { 'measured login succeeds': () => successful });
+}
+
+export function purchaseBaseline(data) {
+  scenarioIterations.add(1, tags(config.scenario, 'order-create', 'new'));
+  const index = exec.scenario.iterationInTest;
+  const response = http.post(`${config.baseUrl}/api/v1/orders`,
+    JSON.stringify({ items: [{ productId: __ENV.PRODUCT_ID, quantity: 1 }] }),
+    { headers: jsonHeaders(tokenAt(data, index), { 'Idempotency-Key': newIntentKey(config.runId, config.activityId, 'purchase', index) }),
+      tags: tags(config.scenario, 'order-create', 'new'), redirects: 0 });
+  const successful = response.status === 201 && typeof parseJson(response)?.orderId === 'string';
+  observeHttp(response, tags(config.scenario, 'order-create', 'new'));
+  observeJourney(response, successful);
+  check(response, { 'ordinary purchase creates one order': () => successful });
 }
 
 function seconds(value) {
@@ -194,6 +244,7 @@ export function seckillNewIntent(data) {
   const response = reservationRequest(tokenAt(data, index), index, config.scenario, 'new');
   scenarioIterations.add(1, tags(config.scenario, 'reservation-create', 'new'));
   const result = classifyReservation(response, config.scenario, 'new');
+  observeJourney(response, result.kind === 'accepted');
   check(response, {
     'new intent has no idempotency conflict': () => result.problemCode !== 'IDEMPOTENCY_KEY_CONFLICT',
   });

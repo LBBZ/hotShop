@@ -68,6 +68,19 @@ docker compose --env-file .env.example config --quiet
 - 浏览器对 refresh/logout 读取本域 CSRF cookie，并原样放入 `X-CSRF-Token`；服务端常量时间比较。
 - Access Token 只从 login/refresh JSON body 取得并保存在内存，禁止 localStorage。
 
+### 4.1 多标签与轮换响应丢失
+
+支持 Web Locks 的浏览器会按同源、身份域及 refresh 地址串行化轮换；取得锁后才读取当前
+CSRF cookie。每个标签仍只在自己的内存中保存 Access Token，不通过持久存储或广播共享凭据。
+排队等待最长 20 秒，发出后的 refresh 请求最长 15 秒；等待期间退出的页面不会继续发起轮换。
+Web Locks 要求安全上下文（HTTPS 或受信的本机地址）。不同源以及不支持该 API 的浏览器只有
+原有的单标签并发合并，不能据此宣称覆盖所有多标签环境。
+
+若服务端已轮换、浏览器却因断网或跳转丢失响应，页面显示“需要重新登录”，并提供返回原用户
+页面的登录入口。客户端不会自动重试这个结果未知的 refresh，也不放宽服务端 family 重放检测。
+已创建订单保留在服务端；普通购买的响应丢失后，刷新重试沿用原幂等键并恢复同一订单。
+真实多标签竞争与响应丢失的复现命令见[恢复验收](../quality/performance-recovery-2026-10-03.md)。
+
 ## 5. Redis 和数据库故障语义
 
 `redis-cache` 保存短 TTL 的认证限流计数。key 带 `hotshop:auth:` 命名空间，只包含 hash/最小化

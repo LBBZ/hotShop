@@ -100,7 +100,8 @@ public class TransactionEventStreamService {
             throw exception;
         }
         AtomicLong cursor = new AtomicLong(lastEventId);
-        AtomicLong lastWrite = new AtomicLong(System.currentTimeMillis());
+        // Flush an idle stream immediately so a caught-up reconnect receives its headers.
+        AtomicLong lastWrite = new AtomicLong(0L);
         AtomicBoolean released = new AtomicBoolean();
         AtomicReference<ScheduledFuture<?>> task = new AtomicReference<>();
 

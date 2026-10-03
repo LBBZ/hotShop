@@ -1,0 +1,75 @@
+# 2026-10-03 知识内容、检索与恢复验收
+
+[证据索引](evidence-index.md) · [结构化结果](knowledge-quality-2026-10-03.json) · [使用说明](../product/help.md) · [RAG 手册](../runbooks/agent-rag.md)
+
+受测源码为 `627ba93fdbbf822e559dce71877a295fd94c4be6`，基线为 `b78b0fceb20181258ae1221d314882dcd174ee09`。
+源码在提交前完成容器构建与测试，随后原样提交；真实浏览器在该清洁提交上再次验收。后续证据与索引提交不改变运行代码。
+日期采用 Asia/Shanghai；模型保持 FakeModel，向量保持 deterministic，未调用付费模型或真实 embedding 服务。
+
+## 纠正了什么
+
+- 旧知识声称可以从订单详情发起售后，并提及帮助中心、站内工单等未实现入口。新版按页面与接口实际能力重写，明确模拟支付及未提供的功能，不承诺真实商家的退换条件。
+- 5 类知识分别提供中英文资料，共 10 份，版本为 `1.1.0`，采用独立 ID 与 locale。引用改为仓库中维护的使用说明，不再指向虚构文档域名。
+- “看看售后政策”和英文退换、账户、支持、活动问法进入对应知识类型；“看看商品 913001 的库存和售后政策”优先查实时商品。普通推荐仍进入商品搜索。
+- `task17-v3` 增加 20 项评测。检索须经过实际静态路由，引用核对首位文档及所有引用字段，无关问题使用真实语料和原阈值 `0.15` 验证拒答。
+- 换票失败增加脱敏分类日志。追踪上报限制为最多 2 个并发请求，单次超时 2 秒，失败后退避 30 秒；饱和或退避期丢弃 span，避免无限创建后台任务。该追踪机制为尽力交付。
+
+## 验证结果
+
+| 检查 | 结果与边界 |
+| --- | --- |
+| Agent 完整 pytest | 331 通过、7 跳过，61.90 秒；连接独立真实 Qdrant |
+| 静态检查 | Ruff、格式检查、严格 mypy 均通过，共 58 个 Python 文件 |
+| Quick eval | 48/48；内存向量库；15 项检索、4 项引用及其余类别均达标 |
+| Full eval | 49/49；真实 Qdrant；额外验证原子重建、版本更新和按语言删除 |
+| 真实浏览器 | 12/12，修复后连续两次通过，其中一次在清洁提交上执行 |
+| 文档与脚本 | 本地链接、锚点、JavaScript 语法及差异空白检查通过 |
+
+7 项跳过分别是 6 项需要 `AGENT_CONTAINER_IMAGE` 的 Docker 运行时安全检查，以及 1 项需要 `AGENT_TEST_REDIS_URL` 的独立 Redis 检查。本轮没有配置这两个独立环境矩阵，不能把跳过算作通过。
+
+浏览器访问隔离项目 `hotshop-task21-accept1002` 的真实 Web、Java、Agent 与 Qdrant。
+12 条流程包含中文售后及改写、浏览式问法、英文售后与退款、英文账户、中文支持、英文活动、无关问题、Qdrant 断线、断线期间实时商品查询和恢复。
+脚本核对实际回答中的功能边界、全部引用的版本和来源，以及运行日志中的 `requestId/runId`。实时商品查询要求 `get_product` 成功且没有 RAG 事件。
+Qdrant 仅 Stop/Start，未删除数据卷；恢复时 Agent 进程未重启。
+
+主要执行命令如下，测试容器通过独立内部网络访问 Qdrant；pytest 与 eval 串行执行：
+
+```text
+docker build --target test -t hotshop-knowledge-agent-tests:1003 -f agent/Dockerfile agent
+ruff check .
+ruff format --check .
+mypy --no-incremental src tests
+python -m pytest -p pytest_asyncio.plugin -p no:cacheprovider --junitxml=/reports/junit-release.xml
+python -m hotshop_agent.eval_runner --suite quick --output /reports/quick-v3.json
+python -m hotshop_agent.eval_runner --suite full --output /reports/full-v3.json
+node script/verify-reconcile-rag.mjs hotshop-task21-accept1002 http://127.0.0.1:18082
+node script/check-docs.mjs
+git diff --check
+```
+
+测试镜像使用仓库固定的 Python 3.12.14 与依赖锁；Qdrant 为
+`qdrant/qdrant:v1.19.1@sha256:12364fe851b9f17356fc88189fc06d1b521262e04659ec7345975b00c9246a10`。
+评测结果保存数据集 SHA-256 和语料分块哈希；索引版本另外包含 embedding 配置，两者不是同一个值。
+
+## 失败记录与解释边界
+
+1. 修复前，13 项路由回归中 9 项失败、4 项通过。旧售后改写和英文匹配的不足使用本轮语料修订解决，没有降低全局阈值。
+2. 增加英文资料后，旧 Qdrant 测试与 lifecycle 评测仍把“删除中文活动资料”断言成“所有语言活动资料消失”，各导致一次失败。现同时验证中文消失、英文保留，并要求更新后的账户资料全部使用新版本。
+3. 浏览器恢复步骤连续三次在创建 run 时返回 503，尚未进入 RAG；同轮断线期间的实时商品查询均已成功。新增日志明确第三次为 `exchange_connect_timeout`。新进程对同一 Portal 的健康请求成功，首个请求耗时约 149 ms。
+4. 新增追踪测试复现慢收集器下 100 条并发上报，以及首次 HTTP 503 后仍继续上报 20 次。限制并发并退避后，两项测试通过，原浏览器故障场景连续两次通过。采样配置、换票超时和检索阈值均未放宽。
+
+本轮证据支持“不可用的追踪收集器增加后台工作，并干扰同进程连接恢复”的判断。
+DNS 工作竞争是机制推断：[libuv 官方文档](https://docs.libuv.org/en/v1.x/threadpool.html)说明地址解析使用共享线程池；本轮未采集线程栈，不能把推断写成已逐线程证明的根因。
+更早报告中的瞬时 `RetrievalError` 仍缺少原始现场证据，本轮不宣称已证明其原因。
+
+本机原始红绿日志保存在忽略目录 `.local/verification/knowledge-quality/`；公开 JSON 只保存测试计数、版本、引用、请求关联标识和有限诊断结果，不包含凭据或用户会话内容。
+
+## 演示环境与范围
+
+主演示 `hotshop-task21-shop1002` 已更新 Agent 并重建 10 个知识分块，首页、商品查询和 Agent readiness 均返回 200。
+主演示与验收环境的 44 个运行源码、语料和评测文件内容哈希相同：
+`9467d65e80624e5bad049b1567d1ec2650169e6058f21997a32643706fa39e4b`。
+索引 active collection 为 `hotshop_knowledge_v_dd984102911d2017`。本轮没有重新初始化商品或交易数据。
+独立测试 Qdrant 容器与内部网络已按本轮 owner 标签核对后删除；两个演示项目继续运行。
+
+这些结果覆盖有限的路由、检索、引用和恢复案例，不代表任意自然语言、真实模型生成质量或应用完整国际化。后续工作见[当前待办](../delivery/next-iteration.md)。

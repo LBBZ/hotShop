@@ -1,0 +1,417 @@
+{
+  "schemaVersion": "1.0",
+  "date": "2026-10-03",
+  "sourceCommit": "627ba93fdbbf822e559dce71877a295fd94c4be6",
+  "baselineCommit": "b78b0fceb20181258ae1221d314882dcd174ee09",
+  "unitTests": {
+    "passed": 331,
+    "skipped": 7,
+    "skippedScopes": [
+      "6 Docker runtime security cases require AGENT_CONTAINER_IMAGE",
+      "1 real Redis case requires AGENT_TEST_REDIS_URL"
+    ],
+    "seconds": 61.9
+  },
+  "baselineRegression": {
+    "routingFailed": 9,
+    "traceFailureRequests": 21,
+    "traceBurstRequests": 100,
+    "routingPassed": 4
+  },
+  "evaluations": {
+    "full": {
+      "schemaVersion": "1.0",
+      "datasetVersion": "task17-v3",
+      "datasetSha256": "dbf8f98abde9ed02845977bc427e811f24695425d137ac1873dc320f89e92948",
+      "knowledgeVersion": "d883fd5ce57c58f3f7c3f166a773dbdad853d9505d1058c91eae71a25edc5e27",
+      "suite": "full",
+      "provider": {
+        "model": "fake",
+        "embedding": "deterministic",
+        "vectorStore": "qdrant"
+      },
+      "total": 49,
+      "passed": 49,
+      "categories": {
+        "authorization": {
+          "passed": 4,
+          "total": 4,
+          "rate": 1.0,
+          "threshold": 1.0,
+          "met": true
+        },
+        "citation": {
+          "passed": 4,
+          "total": 4,
+          "rate": 1.0,
+          "threshold": 1.0,
+          "met": true
+        },
+        "dynamic_routing": {
+          "passed": 17,
+          "total": 17,
+          "rate": 1.0,
+          "threshold": 1.0,
+          "met": true
+        },
+        "lifecycle": {
+          "passed": 1,
+          "total": 1,
+          "rate": 1.0,
+          "threshold": 1.0,
+          "met": true
+        },
+        "refusal": {
+          "passed": 5,
+          "total": 5,
+          "rate": 1.0,
+          "threshold": 1.0,
+          "met": true
+        },
+        "retrieval": {
+          "passed": 15,
+          "total": 15,
+          "rate": 1.0,
+          "threshold": 0.9,
+          "met": true
+        },
+        "security": {
+          "passed": 3,
+          "total": 3,
+          "rate": 1.0,
+          "threshold": 1.0,
+          "met": true
+        }
+      },
+      "failedCaseIds": [],
+      "passedThresholds": true
+    },
+    "quick": {
+      "schemaVersion": "1.0",
+      "datasetVersion": "task17-v3",
+      "datasetSha256": "dbf8f98abde9ed02845977bc427e811f24695425d137ac1873dc320f89e92948",
+      "knowledgeVersion": "d883fd5ce57c58f3f7c3f166a773dbdad853d9505d1058c91eae71a25edc5e27",
+      "suite": "quick",
+      "provider": {
+        "model": "fake",
+        "embedding": "deterministic",
+        "vectorStore": "memory"
+      },
+      "total": 48,
+      "passed": 48,
+      "categories": {
+        "authorization": {
+          "passed": 4,
+          "total": 4,
+          "rate": 1.0,
+          "threshold": 1.0,
+          "met": true
+        },
+        "citation": {
+          "passed": 4,
+          "total": 4,
+          "rate": 1.0,
+          "threshold": 1.0,
+          "met": true
+        },
+        "dynamic_routing": {
+          "passed": 17,
+          "total": 17,
+          "rate": 1.0,
+          "threshold": 1.0,
+          "met": true
+        },
+        "refusal": {
+          "passed": 5,
+          "total": 5,
+          "rate": 1.0,
+          "threshold": 1.0,
+          "met": true
+        },
+        "retrieval": {
+          "passed": 15,
+          "total": 15,
+          "rate": 1.0,
+          "threshold": 1.0,
+          "met": true
+        },
+        "security": {
+          "passed": 3,
+          "total": 3,
+          "rate": 1.0,
+          "threshold": 1.0,
+          "met": true
+        }
+      },
+      "failedCaseIds": [],
+      "passedThresholds": true
+    }
+  },
+  "browser": {
+    "project": "hotshop-task21-accept1002",
+    "agentImage": "sha256:0099defff826a30ef3eaff9ef0ba543f09cc1cb599952b9f2916743eb8b062e0",
+    "sourceCommit": "627ba93fdbbf822e559dce71877a295fd94c4be6",
+    "dirty": false,
+    "sameAgentProcess": true,
+    "originalTransientCause": "unresolved; injected outage does not prove the historical cause",
+    "results": [
+      {
+        "label": "direct-cn",
+        "requestId": "reconcile-direct-cn-1791027783910",
+        "runId": "0213a456-e316-4b18-bb63-2bdeec73053f",
+        "outcome": "hit",
+        "citations": [
+          {
+            "documentId": "after-sales-general",
+            "title": "演示项目的售后能力",
+            "version": "1.1.0",
+            "source": "https://github.com/LBBZ/hotShop/blob/master/docs/product/help.md#after-sales",
+            "chunkId": "after-sales-general-0000"
+          }
+        ]
+      },
+      {
+        "label": "original-paraphrase",
+        "requestId": "reconcile-original-paraphrase-1791027786313",
+        "runId": "c57580d8-5e69-4214-a5a1-e14239b2a86b",
+        "outcome": "hit",
+        "citations": [
+          {
+            "documentId": "after-sales-general",
+            "title": "演示项目的售后能力",
+            "version": "1.1.0",
+            "source": "https://github.com/LBBZ/hotShop/blob/master/docs/product/help.md#after-sales",
+            "chunkId": "after-sales-general-0000"
+          }
+        ]
+      },
+      {
+        "label": "browse-policy",
+        "requestId": "reconcile-browse-policy-1791027786847",
+        "runId": "78389a9c-aec5-4128-a71a-d4ca4e23cb8f",
+        "outcome": "hit",
+        "citations": [
+          {
+            "documentId": "after-sales-general",
+            "title": "演示项目的售后能力",
+            "version": "1.1.0",
+            "source": "https://github.com/LBBZ/hotShop/blob/master/docs/product/help.md#after-sales",
+            "chunkId": "after-sales-general-0000"
+          }
+        ]
+      },
+      {
+        "label": "english",
+        "requestId": "reconcile-english-1791027787144",
+        "runId": "90da9641-3d04-4b2b-a46c-2644f12beaba",
+        "outcome": "hit",
+        "citations": [
+          {
+            "documentId": "after-sales-general-en",
+            "title": "After-sales in the demo",
+            "version": "1.1.0",
+            "source": "https://github.com/LBBZ/hotShop/blob/master/docs/product/help.md#after-sales",
+            "chunkId": "after-sales-general-en-0000"
+          }
+        ]
+      },
+      {
+        "label": "english-refund",
+        "requestId": "reconcile-english-refund-1791027787426",
+        "runId": "90add381-22f0-4bde-814b-4258d26cc4bb",
+        "outcome": "hit",
+        "citations": [
+          {
+            "documentId": "after-sales-general-en",
+            "title": "After-sales in the demo",
+            "version": "1.1.0",
+            "source": "https://github.com/LBBZ/hotShop/blob/master/docs/product/help.md#after-sales",
+            "chunkId": "after-sales-general-en-0000"
+          }
+        ]
+      },
+      {
+        "label": "account-english",
+        "requestId": "reconcile-account-english-1791027787726",
+        "runId": "532d83cf-6984-4439-b700-5e0a3026b8a0",
+        "outcome": "hit",
+        "citations": [
+          {
+            "documentId": "faq-account-security-en",
+            "title": "Account and login help",
+            "version": "1.1.0",
+            "source": "https://github.com/LBBZ/hotShop/blob/master/docs/product/help.md#account",
+            "chunkId": "faq-account-security-en-0000"
+          },
+          {
+            "documentId": "faq-user-support",
+            "title": "问题反馈与支持入口",
+            "version": "1.1.0",
+            "source": "https://github.com/LBBZ/hotShop/blob/master/docs/product/help.md#support",
+            "chunkId": "faq-user-support-0000"
+          },
+          {
+            "documentId": "faq-user-support-en",
+            "title": "Support and issue reports",
+            "version": "1.1.0",
+            "source": "https://github.com/LBBZ/hotShop/blob/master/docs/product/help.md#support",
+            "chunkId": "faq-user-support-en-0000"
+          }
+        ]
+      },
+      {
+        "label": "support-cn",
+        "requestId": "reconcile-support-cn-1791027788011",
+        "runId": "cc62d250-4020-47ee-bff1-acc84f9910a4",
+        "outcome": "hit",
+        "citations": [
+          {
+            "documentId": "faq-user-support",
+            "title": "问题反馈与支持入口",
+            "version": "1.1.0",
+            "source": "https://github.com/LBBZ/hotShop/blob/master/docs/product/help.md#support",
+            "chunkId": "faq-user-support-0000"
+          }
+        ]
+      },
+      {
+        "label": "campaign-english",
+        "requestId": "reconcile-campaign-english-1791027788326",
+        "runId": "52aecd56-9240-40c4-ab8d-e588abef4211",
+        "outcome": "hit",
+        "citations": [
+          {
+            "documentId": "campaign-general-rules-en",
+            "title": "Flash sale rules",
+            "version": "1.1.0",
+            "source": "https://github.com/LBBZ/hotShop/blob/master/docs/product/help.md#campaigns",
+            "chunkId": "campaign-general-rules-en-0000"
+          }
+        ]
+      },
+      {
+        "label": "unrelated",
+        "requestId": "reconcile-unrelated-1791027788644",
+        "runId": "fe837b7f-179b-4f07-88cb-556fafe65f92",
+        "outcome": "empty",
+        "citations": []
+      },
+      {
+        "label": "disconnected",
+        "requestId": "reconcile-disconnected-1791027789529",
+        "runId": "690eb684-adae-4e5d-a3dc-f53600f9835a",
+        "outcome": "unavailable",
+        "citations": []
+      },
+      {
+        "label": "dynamic-during-outage",
+        "requestId": "reconcile-dynamic-during-outage-1791027792442",
+        "runId": "a863bbaa-ca64-4fc4-8ed6-958946548b2f",
+        "outcome": "dynamic",
+        "tool": "get_product"
+      },
+      {
+        "label": "recovered",
+        "requestId": "reconcile-recovered-1791027799371",
+        "runId": "6f6e1974-8c6a-42e0-98e3-b921b706d1ca",
+        "outcome": "hit",
+        "citations": [
+          {
+            "documentId": "after-sales-general",
+            "title": "演示项目的售后能力",
+            "version": "1.1.0",
+            "source": "https://github.com/LBBZ/hotShop/blob/master/docs/product/help.md#after-sales",
+            "chunkId": "after-sales-general-0000"
+          }
+        ]
+      }
+    ],
+    "diagnostics": [
+      {
+        "requestId": "reconcile-direct-cn-1791027783910",
+        "runId": "0213a456-e316-4b18-bb63-2bdeec73053f",
+        "outcome": "hit",
+        "errorType": ""
+      },
+      {
+        "requestId": "reconcile-original-paraphrase-1791027786313",
+        "runId": "c57580d8-5e69-4214-a5a1-e14239b2a86b",
+        "outcome": "hit",
+        "errorType": ""
+      },
+      {
+        "requestId": "reconcile-browse-policy-1791027786847",
+        "runId": "78389a9c-aec5-4128-a71a-d4ca4e23cb8f",
+        "outcome": "hit",
+        "errorType": ""
+      },
+      {
+        "requestId": "reconcile-english-1791027787144",
+        "runId": "90da9641-3d04-4b2b-a46c-2644f12beaba",
+        "outcome": "hit",
+        "errorType": ""
+      },
+      {
+        "requestId": "reconcile-english-refund-1791027787426",
+        "runId": "90add381-22f0-4bde-814b-4258d26cc4bb",
+        "outcome": "hit",
+        "errorType": ""
+      },
+      {
+        "requestId": "reconcile-account-english-1791027787726",
+        "runId": "532d83cf-6984-4439-b700-5e0a3026b8a0",
+        "outcome": "hit",
+        "errorType": ""
+      },
+      {
+        "requestId": "reconcile-support-cn-1791027788011",
+        "runId": "cc62d250-4020-47ee-bff1-acc84f9910a4",
+        "outcome": "hit",
+        "errorType": ""
+      },
+      {
+        "requestId": "reconcile-campaign-english-1791027788326",
+        "runId": "52aecd56-9240-40c4-ab8d-e588abef4211",
+        "outcome": "hit",
+        "errorType": ""
+      },
+      {
+        "requestId": "reconcile-unrelated-1791027788644",
+        "runId": "fe837b7f-179b-4f07-88cb-556fafe65f92",
+        "outcome": "empty",
+        "errorType": ""
+      },
+      {
+        "requestId": "reconcile-disconnected-1791027789529",
+        "runId": "690eb684-adae-4e5d-a3dc-f53600f9835a",
+        "outcome": "unavailable",
+        "errorType": "qdrant_connect"
+      },
+      {
+        "requestId": "reconcile-recovered-1791027799371",
+        "runId": "6f6e1974-8c6a-42e0-98e3-b921b706d1ca",
+        "outcome": "hit",
+        "errorType": ""
+      }
+    ]
+  },
+  "deployment": {
+    "knowledgeIndex": {
+      "schemaVersion": "1.0",
+      "alias": "hotshop_knowledge",
+      "collection": "hotshop_knowledge_v_dd984102911d2017",
+      "version": "dd984102911d2017",
+      "points": 10
+    },
+    "webPort": 18083,
+    "project": "hotshop-task21-shop1002",
+    "sameRuntimeContentAsAcceptance": true,
+    "runtimeContentSha256": "9467d65e80624e5bad049b1567d1ec2650169e6058f21997a32643706fa39e4b"
+  },
+  "limitations": [
+    "FakeModel and deterministic embeddings only",
+    "Historical RetrievalError cause remains unresolved",
+    "Three pre-fix recovery runs failed before RAG; diagnostics identified exchange_connect_timeout",
+    "Unavailable collector DNS contention is an inference; no thread dump was captured"
+  ]
+}

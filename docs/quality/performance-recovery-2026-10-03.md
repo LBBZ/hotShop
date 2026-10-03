@@ -8,6 +8,7 @@
 ## 版本与环境
 
 - 工作基线：`9070fba0f1a407f37687765ccedffe2beb952c2b`，运行时包含本轮未提交的脚本和 Web 修复。
+- 修复提交：`55ead7cc2ff1c4f32926fb628ae8ba534b398b91`。提交后在干净工作树运行 `recovery-1003f`，5 项真实恢复检查全部通过（28.4 秒），清理结果为 true。下列 A/B 数据保留当时的基线及 dirty 标记，未改写成新提交的性能数据。
 - 性能 A/B 固定使用同一组已有应用镜像；Java 运行时代码来自 `0083b8a`，其后到工作基线的变化为测试与文档。SSE 首心跳修复随后单独构建并验收，不计入 A/B 的性能增益。
 - Docker Desktop Linux VM：32 个逻辑 CPU、8,184,856,576 字节内存，Docker 29.6.2；Windows 宿主为共享开发机。
 - Portal 640 MiB，A 为 2 CPU、B 为 4 CPU；Admin 1 CPU/512 MiB，Task 2 CPU/640 MiB，MySQL 1.5 CPU/768 MiB，RabbitMQ 1 CPU/256 MiB，两个 Redis 各 64 MiB，Prometheus 256 MiB，k6 512 MiB。

@@ -24,6 +24,7 @@ public class SeckillOrderProperties {
     private int reconciliationActivities = 10;
     private Duration reconciliationTimeBudget = Duration.ofSeconds(2);
     private int reconciliationBatch = 100;
+    private int reconciliationMaxReservations = 10_000;
     private boolean reconciliationDryRun = true;
     private boolean autoRepair = false;
 
@@ -175,6 +176,14 @@ public class SeckillOrderProperties {
 
     public void setReconciliationBatch(int reconciliationBatch) {
         this.reconciliationBatch = positive(reconciliationBatch, "reconciliationBatch");
+    }
+
+    public int getReconciliationMaxReservations() {
+        return reconciliationMaxReservations;
+    }
+
+    public void setReconciliationMaxReservations(int maximum) {
+        this.reconciliationMaxReservations = positive(maximum, "reconciliationMaxReservations");
     }
 
     public boolean isReconciliationDryRun() {

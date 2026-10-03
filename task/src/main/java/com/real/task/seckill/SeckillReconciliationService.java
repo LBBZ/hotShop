@@ -23,7 +23,7 @@ import java.util.Set;
 public class SeckillReconciliationService {
     private static final DefaultRedisScript<List> CONSERVATION_PAGE = new DefaultRedisScript<>();
     static {
-        CONSERVATION_PAGE.setLocation(new ClassPathResource("redis/reconcile-conservation-page-v1.lua"));
+        CONSERVATION_PAGE.setLocation(new ClassPathResource("redis/reconcile-conservation-page-v2.lua"));
         CONSERVATION_PAGE.setResultType(List.class);
     }
     private static final String REGISTRY_CHECKPOINT =
@@ -588,13 +588,23 @@ public class SeckillReconciliationService {
                         SeckillRedisKeys.conservationCheckpoint(activityId),
                         SeckillRedisKeys.conservationSeen(activityId)),
                 Integer.toString(budget),
-                SeckillRedisKeys.reservation(activityId, ""));
-        if (page == null || page.size() != 8) throw new IllegalStateException("Invalid conservation page");
+                SeckillRedisKeys.reservation(activityId, ""),
+                Integer.toString(properties.getReconciliationMaxReservations()));
+        if (page == null || page.size() != 11) throw new IllegalStateException("Invalid conservation page");
         updateNamedCheckpoint("conservation-" + activityId,
                 page.get(0) + ";fence=" + page.get(6) + ";scanned=" + page.get(1)
-                        + ";restarted=" + page.get(7));
-        // IN_PROGRESS is persisted and observable; it is never a successful audit.
-        // A busy activity may restart until a complete unchanged writer epoch fits.
+                        + ";restarted=" + page.get(7) + ";reason=" + page.get(8));
+        // A finished moving / over-budget cycle is observable, not a successful
+        // balance check. Only a complete unchanged cycle may judge conservation.
+        if ("INCONCLUSIVE".equals(page.get(0).toString())) {
+            metrics.inventory("conservation_scan", "inconclusive");
+            finding("REDIS_CONSERVATION_CHECK_INCOMPLETE", "WARNING", activityId,
+                    null, stream, null, Map.of("schemaVersion", 1,
+                            "reason", page.get(8).toString(), "inventoryFence", page.get(6).toString(),
+                            "upperBound", page.get(10).toString(), "seenReservations", number(page.get(9).toString()),
+                            "maximumReservations", properties.getReconciliationMaxReservations()));
+            findings++;
+        }
         if ("COMPLETE".equals(page.get(0).toString())) {
             long quantity = number(page.get(2).toString());
             long initial = number(page.get(3).toString());
@@ -609,6 +619,9 @@ public class SeckillReconciliationService {
                                 "inventoryFence", page.get(6).toString(),
                                 "equationHolds", initial - current == quantity));
                 findings++;
+                metrics.inventory("conservation_scan", "violation");
+            } else {
+                metrics.inventory("conservation_scan", "consistent");
             }
         }
 

@@ -94,6 +94,7 @@ hotshop:
       reconciliation-activities: ${HOTSHOP_SECKILL_RECONCILIATION_ACTIVITIES:10}
       reconciliation-time-budget: ${HOTSHOP_SECKILL_RECONCILIATION_TIME_BUDGET:2s}
       reconciliation-batch: ${HOTSHOP_SECKILL_RECONCILIATION_BATCH:100}
+      reconciliation-max-reservations: ${HOTSHOP_SECKILL_RECONCILIATION_MAX_RESERVATIONS:10000}
       reconciliation-dry-run: ${HOTSHOP_SECKILL_RECONCILIATION_DRY_RUN:true}
       auto-repair: ${HOTSHOP_SECKILL_RECONCILIATION_AUTO_REPAIR:false}
 

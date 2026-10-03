@@ -137,7 +137,7 @@ stateDiagram-v2
 
 [ProductMapper](../../domain/src/main/java/com/real/domain/mapper/ProductMapper.xml) 的元数据更新不写 stock。库存调整使用 signed delta、expectedVersion、原因，并在锁定行后比较版本；旧版本返回 `STOCK_ADJUSTMENT_CONFLICT`，失败不覆盖新库存。版本用于库存并发冲突，不代表商品每个元数据字段都有乐观锁。
 
-[SeckillReconciliationService](../../task/src/main/java/com/real/task/seckill/SeckillReconciliationService.java) 读取同一行实际库存和 expected 值，结合订单、预约、Stream 与账本证据。Redis 守恒扫描使用 [分页 Lua](../../task/src/main/resources/redis/reconcile-conservation-page-v1.lua) 的 `XRANGE COUNT`、持久 cursor、`databaseVersion:inventoryRevision` fence 和按 reservationNo 去重的 seen hash。fence 改变或 seen 丢失会重扫，只有完整且同 fence 的扫描才有守恒结论；`IN_PROGRESS` 不是通过。持续写入可能使扫描长期重启，seen 大小随扫描中不同预约增长，原始 Stream 未自动截断。
+[SeckillReconciliationService](../../task/src/main/java/com/real/task/seckill/SeckillReconciliationService.java) 读取同一行实际库存和 expected 值，结合订单、预约、Stream 与账本证据。Redis 守恒扫描使用[分页 Lua v2](../../task/src/main/resources/redis/reconcile-conservation-page-v2.lua)的固定 Stream 终点、`XRANGE COUNT`、持久 cursor 与库存 fence。写入变化时继续推进，但整轮结果标为无法核验；只有完整且同 fence 的扫描才判断守恒。seen 按 reservationNo 去重，每活动默认上限 10,000，空闲 24 小时过期；缺失去重证据或旧 schema 会重启。`IN_PROGRESS` / `INCONCLUSIVE` 都不是通过，持续写入时的一致快照与更大历史的分段核验仍未实现；原始 Stream 未自动截断。
 
 对账默认 dry-run、自动修复关闭；issue/checkpoint 是观察元数据，不是业务已修复证明。合法 Catalog 调整不会直接改写 Redis 秒杀配额，活动装载与跨存储证据需要单独调查。更多见 [后台操作](admin-operations.md)。
 
@@ -155,5 +155,6 @@ stateDiagram-v2
 - [ADR-007 SSE](adr/ADR-007-sse.md)
 - [ADR-008 FakeModel CI](adr/ADR-008-fake-model-ci.md)
 - [ADR-009 活动配置与库存变化](adr/ADR-009-preserve-loaded-offer.md)
+- [ADR-010 有界守恒扫描轮次](adr/ADR-010-bounded-conservation-cycles.md)
 
 静态知识边界见 [RAG](agent-rag.md)，运行生命周期见 [Agent 进程](agent-process.md)，数据库演进见 [数据库结构](database-schema.md)。性能能力只能引用 [TASK-20 报告](../quality/task-20-performance.md) 的实际窗口、完成量和 dropped iterations；目标未达成，不能把 5000 requested RPS 写成稳定承载能力。

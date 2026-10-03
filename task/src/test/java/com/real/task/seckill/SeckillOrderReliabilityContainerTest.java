@@ -113,6 +113,7 @@ class SeckillOrderReliabilityContainerTest {
         failpoint.clear();
         properties.setReconciliationDryRun(true);
         properties.setReconciliationBatch(200);
+        properties.setReconciliationMaxReservations(10_000);
         properties.setReconciliationActivities(1);
         properties.setReconciliationTimeBudget(Duration.ofSeconds(2));
         properties.setAutoRepair(false);
@@ -725,7 +726,7 @@ class SeckillOrderReliabilityContainerTest {
     }
 
     @Test
-    void review04CompensationBetweenPagesRestartsSnapshotAndStillFindsRealTampering() {
+    void compensationBetweenPagesInvalidatesOneCycleAndStillFindsRealTampering() {
         seedActivity(125, 225, 100, 100);
         Accepted first = accepted(15000, 125, 225, 25000, 1, "1.00");
         appendAccepted(first);
@@ -738,12 +739,15 @@ class SeckillOrderReliabilityContainerTest {
         assertThat(reservationGateway.compensate(parsed.event(), "review-compensation", "INVENTORY_SHORTAGE").successful()).isTrue();
         // A new reservation by the same user legally owns the restored user slot.
         appendAccepted(accepted(16000, 125, 225, 25000, 1, "1.00"));
-        for (int i = 0; i < 4; i++) reconciliationService.runBatch();
-        assertThat(redis.opsForHash().get(SeckillRedisKeys.conservationCheckpoint(125), "restarts"))
+        for (int i = 0; i < 2; i++) reconciliationService.runBatch();
+        assertThat(redis.opsForHash().get(SeckillRedisKeys.conservationCheckpoint(125), "state"))
+                .isEqualTo("INCONCLUSIVE");
+        assertThat(redis.opsForHash().get(SeckillRedisKeys.conservationCheckpoint(125), "inconclusiveScans"))
                 .isEqualTo("1");
+        for (int i = 0; i < 4; i++) reconciliationService.runBatch();
         assertThat(redis.opsForHash().get(SeckillRedisKeys.conservationCheckpoint(125), "lastCompletedQuantity"))
                 .isEqualTo("8");
-        assertThat(jdbc.queryForList("SELECT * FROM seckill_reconciliation_issue")).isEmpty();
+        assertThat(jdbc.queryForList("SELECT * FROM seckill_reconciliation_issue WHERE severity='CRITICAL'")).isEmpty();
 
         redis.opsForValue().increment(SeckillRedisKeys.availableStock(125));
         for (int i = 0; i < 4; i++) reconciliationService.runBatch();
@@ -1066,7 +1070,7 @@ class SeckillOrderReliabilityContainerTest {
     }
 
     @Test
-    void reviewDedupWriterFenceRestartRecountsPreviouslySeenReservations() {
+    void writerFenceChangeDiscardsMixedTotalsBeforeRecountingReservations() {
         seedActivity(183, 283, 100, 100);
         Accepted first = accepted(83000, 183, 283, 93000, 2, "1.00");
         appendAccepted(first);
@@ -1077,12 +1081,60 @@ class SeckillOrderReliabilityContainerTest {
         reconciliationService.runBatch();
         var parsed = ReservationAcceptedEvent.parse(first.stream(), "1-0", new LinkedHashMap<Object, Object>(first.fields()));
         assertThat(reservationGateway.compensate(parsed.event(), "dedup-restart", "INVENTORY_SHORTAGE").successful()).isTrue();
-        for (int i = 0; i < 2; i++) reconciliationService.runBatch();
+        reconciliationService.runBatch();
         String key = SeckillRedisKeys.conservationCheckpoint(183);
-        assertThat(redis.opsForHash().get(key, "restarts")).isEqualTo("1");
+        assertThat(redis.opsForHash().get(key, "state")).isEqualTo("INCONCLUSIVE");
+        assertThat(redis.opsForHash().get(key, "inconclusiveScans")).isEqualTo("1");
+        for (int i = 0; i < 2; i++) reconciliationService.runBatch();
         assertThat(redis.opsForHash().get(key, "lastCompletedQuantity")).isEqualTo("3");
         assertThat(jdbc.queryForList("SELECT * FROM seckill_reconciliation_issue WHERE issue_type='REDIS_STOCK_CONSERVATION_VIOLATION'"))
                 .isEmpty();
+    }
+
+    @Test
+    void busyConservationCycleIsObservableAndAQuietCycleStillFindsTampering() {
+        seedActivity(184, 284, 100, 100);
+        for (int i = 0; i < 4; i++) appendAccepted(accepted(84000 + i, 184, 284, 94000 + i, 1, "1.00"));
+        consumer.refreshStreams();
+        properties.setReconciliationBatch(2);
+        reconciliationService.runBatch();
+        for (int i = 4; i < 6; i++) {
+            appendAccepted(accepted(84000 + i, 184, 284, 94000 + i, 1, "1.00"));
+            reconciliationService.runBatch();
+        }
+        assertThat(jdbc.queryForObject("SELECT cursor_value FROM seckill_reconciliation_checkpoint WHERE checkpoint_name=?",
+                String.class, "conservation-184")).contains("INCONCLUSIVE", "WRITES_DURING_SCAN");
+        assertThat(jdbc.queryForList("SELECT severity FROM seckill_reconciliation_issue WHERE issue_type='REDIS_CONSERVATION_CHECK_INCOMPLETE' AND activity_id=184"))
+                .containsExactly(Map.of("severity", "WARNING"));
+        String checkpoint = SeckillRedisKeys.conservationCheckpoint(184);
+        assertThat(redis.opsForHash().get(checkpoint, "completedScans")).isNull();
+        for (int i = 0; i < 4; i++) reconciliationService.runBatch();
+        assertThat(redis.opsForHash().get(checkpoint, "lastCompletedQuantity")).isEqualTo("6");
+        assertThat(jdbc.queryForList("SELECT * FROM seckill_reconciliation_issue WHERE issue_type='REDIS_STOCK_CONSERVATION_VIOLATION'"))
+                .isEmpty();
+        redis.opsForValue().increment(SeckillRedisKeys.availableStock(184));
+        for (int i = 0; i < 4; i++) reconciliationService.runBatch();
+        assertThat(jdbc.queryForList("SELECT severity FROM seckill_reconciliation_issue WHERE issue_type='REDIS_STOCK_CONSERVATION_VIOLATION' AND activity_id=184"))
+                .containsExactly(Map.of("severity", "CRITICAL"));
+        assertThat(redis.opsForValue().get(SeckillRedisKeys.availableStock(184))).isEqualTo("95");
+    }
+
+    @Test
+    void configuredConservationLimitProducesAWarningWithoutRepairingInventory() {
+        seedActivity(185, 285, 100, 100);
+        for (int i = 0; i < 4; i++) appendAccepted(accepted(85000 + i, 185, 285, 95000 + i, 1, "1.00"));
+        consumer.refreshStreams();
+        properties.setReconciliationBatch(2);
+        properties.setReconciliationMaxReservations(2);
+        reconciliationService.runBatch();
+        assertThat(reconciliationService.runBatch().repairs()).isZero();
+        assertThat(jdbc.queryForObject("SELECT cursor_value FROM seckill_reconciliation_checkpoint WHERE checkpoint_name=?",
+                String.class, "conservation-185")).contains("INCONCLUSIVE", "RESERVATION_LIMIT");
+        assertThat(jdbc.queryForList("SELECT severity FROM seckill_reconciliation_issue WHERE issue_type='REDIS_CONSERVATION_CHECK_INCOMPLETE' AND activity_id=185"))
+                .containsExactly(Map.of("severity", "WARNING"));
+        assertThat(redis.hasKey(SeckillRedisKeys.conservationSeen(185))).isFalse();
+        assertThat(redis.opsForValue().get(SeckillRedisKeys.availableStock(185))).isEqualTo("96");
+        assertThat(count("sales_order")).isZero();
     }
 
     private void appendAccepted(Accepted event) {

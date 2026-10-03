@@ -380,6 +380,21 @@ Principal；未知 Reservation 与他人 Reservation 统一返回 404，防止�
 
 ## 有界守恒扫描
 
-`task/src/main/resources/redis/reconcile-conservation-page-v1.lua` 每页使用 `XRANGE COUNT`，以 `databaseVersion:inventoryRevision` 作为扫描 fence；实际改变有效占用量的写入推进 revision。持久 checkpoint 和无 TTL 的 seen hash 在同一 Lua 中维护，按 reservationNo 跨页去重；每个 delivery 仍需校验事实，不能用 eventId 不同重复计数。fence 改变、schema 旧或 seen 缺失会重启扫描；只有 COMPLETE 才使用完整守恒结果。持续写入可能持续重启，IN_PROGRESS 不得报告通过。分页限制单次读取，不保证 seen 总空间恒定，活动历史增长也增加完成时间。
+当前使用 [守恒分页 Lua v2](../../task/src/main/resources/redis/reconcile-conservation-page-v2.lua)，保留 v1 文件。每轮以一次 `XREVRANGE COUNT 1` 捕获 Stream 尾部，之后使用 `XRANGE COUNT` 扫描到该固定终点，新追加的事件留到下一轮。`databaseVersion:inventoryRevision` 是库存写入 fence；实际改变有效占用量的写入继续推进 revision，业务写脚本没有变化。
+
+持久 checkpoint 与 seen hash 在同一 Lua 中维护，按 reservationNo 跨页去重；每个 delivery 仍需校验事实，eventId 不同不能让同一预约重复计数。fence 变化只标记本轮受到写入干扰，游标继续推进，不退回第一页。schema 旧或 seen 缺失仍会丢弃不可验证的部分和，从头开始一轮。
+
+| 扫描状态 | 含义与处理 |
+| --- | --- |
+| `IN_PROGRESS` | 当前固定范围尚未扫描完，不表示库存一致 |
+| `COMPLETE` | 在同一 fence 内完整扫描；服务再判断库存等式和事实有效性，可得一致或 CRITICAL 差异 |
+| `INCONCLUSIVE / WRITES_DURING_SCAN` | 本轮已到终点，但发生库存写入，不能使用混合时点的数量判断守恒 |
+| `INCONCLUSIVE / RESERVATION_LIMIT` | 去重预算耗尽，或恢复时配置上限小于已有表，停止聚合并释放 seen |
+
+`HOTSHOP_SECKILL_RECONCILIATION_MAX_RESERVATIONS` 默认 **10,000**，必须为正数，限制每个活动单轮去重表的有效预约数量，另有一个初始化标记。重复投递不占第二个名额；终止时 `UNLINK`，运行中的表按每页续期 **24 小时**。空闲过期后不会沿用缺失去重证据的部分和。这个上限不是 Redis 实际内存字节数或所有活动的全局空间上限，异步回收也不保证 RSS 立即下降。
+
+无法核验的轮次写入 `REDIS_CONSERVATION_CHECK_INCOMPLETE` WARNING，原因同步到 MySQL `conservation-{activityId}` checkpoint；`hotshop.inventory.operations` 的 `operation=conservation_scan` 分别记录 `inconclusive`、`consistent`、`violation`。后续稳定轮次仍可完整检查并发现真实差异，既有 issue 不因一次通过而自动删除或关闭。
+
+固定终点保证单轮范围不会随追加延伸，并不保证持续写入时能获得守恒结论。历史越长，完整扫描越慢；超出预算的活动需要分段或离线核验协议。原始 Stream、业务库存和预约没有因此截断或重置，详见 [ADR-010](adr/ADR-010-bounded-conservation-cycles.md)。
 
 MySQL 守恒比较的是 V1.9 后同一行的实际与 expected 库存；合法扣减/恢复/调整同步维护 expected，不能按初始库存减累计历史订单简单解释。基线和同向篡改的局限见 [当前架构](current-state.md)。

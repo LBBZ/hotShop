@@ -28,7 +28,7 @@ export function AdminOutboxPage() {
     [cursor],
   );
   const replay = async () => {
-    if (!target) return;
+    if (!target || busy) return;
     setBusy(true);
     setNotice(undefined);
     try {
@@ -106,6 +106,7 @@ export function AdminOutboxPage() {
               maxLength={256}
               rows={3}
               value={reason}
+              disabled={busy}
               onChange={(event) => setReason(event.target.value)}
             />
           </label>
@@ -125,6 +126,7 @@ export function AdminOutboxPage() {
             <Button
               type="button"
               variant="ghost"
+              disabled={busy}
               onClick={() => setTarget(undefined)}
             >
               取消
@@ -183,6 +185,7 @@ export function AdminOutboxPage() {
                           <Button
                             type="button"
                             size="sm"
+                            disabled={busy}
                             onClick={() => {
                               setTarget(event);
                               setReason("");

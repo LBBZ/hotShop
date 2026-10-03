@@ -1840,6 +1840,12 @@ a {
   flex: 1;
   max-width: 28rem;
 }
+.admin-investigation-filters {
+  flex-wrap: wrap;
+}
+.admin-investigation-filters .compact-field {
+  min-width: min(100%, 12rem);
+}
 .admin-editor,
 .admin-confirm {
   padding: clamp(1.25rem, 3vw, 2rem);
@@ -1924,6 +1930,23 @@ a {
   border-color: var(--signal);
   color: var(--signal-ink);
   background: var(--signal-wash);
+}
+.admin-notice-warning {
+  border-color: var(--warning-ink);
+  color: var(--warning-ink);
+  background: var(--warning-wash);
+}
+.admin-load-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  margin: 0.75rem 0;
+  padding: 0;
+  list-style: none;
+}
+.admin-notice a {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
 }
 .reconciliation-banner {
   display: grid;

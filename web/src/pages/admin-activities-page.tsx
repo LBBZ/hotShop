@@ -2,6 +2,7 @@ import { useState } from "react";
 import { DatabaseZap } from "lucide-react";
 
 import { findApiProblemError } from "@/api/core/problem";
+import type { FlashSaleActivityLoadResponse } from "@/api/generated/admin";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { adminApi, type AdminActivity } from "@/features/admin/admin-api";
@@ -20,35 +21,45 @@ export function AdminActivitiesPage() {
   const [cursor, setCursor] = useState<string>();
   const [target, setTarget] = useState<AdminActivity>();
   const [reason, setReason] = useState("");
-  const [result, setResult] = useState<string>();
+  const [result, setResult] = useState<{
+    kind: "success" | "warning" | "error";
+    text: string;
+    facts?: FlashSaleActivityLoadResponse;
+  }>();
   const [busy, setBusy] = useState(false);
   const resource = useAdminResource(
     () => adminApi.activities(cursor, status),
     [cursor, status],
   );
   const load = async () => {
-    if (!target) return;
+    if (!target || busy) return;
     setBusy(true);
     setResult(undefined);
     try {
-      const response = await adminApi.loadActivity(target.activityId, reason);
-      const loadResult =
-        typeof response.result === "string"
-          ? response.result
-          : typeof response.detail === "string"
-            ? response.detail
-            : "成功";
-      setResult(`活动 ${target.activityId} 已完成加载校验：${loadResult}`);
+      const response = await adminApi.loadActivity(
+        target.activityId,
+        reason.trim(),
+      );
+      setResult({
+        kind: response.consistent === true ? "success" : "warning",
+        text: `活动 ${target.activityId} 加载请求已完成：${response.result}。${
+          response.consistent === true
+            ? "本次库存核验一致。"
+            : "库存核验发现差异，请结合预约处理进度进一步检查。"
+        }`,
+        facts: response,
+      });
       setTarget(undefined);
       setReason("");
       resource.reload();
     } catch (caught) {
       const problem = findApiProblemError(caught)?.problem;
-      setResult(
-        problem
-          ? `${problem.detail}（请求 ID ${problem.requestId}）`
+      setResult({
+        kind: "error",
+        text: problem
+          ? `${problem.detail}（代码 ${problem.code}，请求 ID ${problem.requestId}）`
           : "活动加载没有完成。",
-      );
+      });
     } finally {
       setBusy(false);
     }
@@ -71,16 +82,33 @@ export function AdminActivitiesPage() {
             >
               <option value="">全部</option>
               <option value="DRAFT">草稿</option>
+              <option value="SCHEDULED">待开始</option>
               <option value="ACTIVE">进行中</option>
+              <option value="PAUSED">已暂停</option>
               <option value="ENDED">已结束</option>
+              <option value="CANCELED">已取消</option>
             </select>
           </label>
         }
       />
       {result ? (
-        <p className="admin-notice" role="status">
-          {result}
-        </p>
+        <section
+          className={`admin-notice admin-notice-${result.kind}`}
+          role={result.kind === "success" ? "status" : "alert"}
+        >
+          <p>{result.text}</p>
+          {result.facts ? (
+            <ul className="admin-load-facts">
+              <li>MySQL 可用库存：{result.facts.databaseAvailableStock}</li>
+              <li>Redis 可用库存：{result.facts.redisAvailableStock ?? "—"}</li>
+              <li>预约事件：{result.facts.streamEventCount}</li>
+              <li>预约记录：{result.facts.reservationRecordCount}</li>
+            </ul>
+          ) : null}
+          {result.kind === "warning" ? (
+            <a href="/admin/exceptions">查看异常与人工处理</a>
+          ) : null}
+        </section>
       ) : null}
       {target ? (
         <section
@@ -103,6 +131,7 @@ export function AdminActivitiesPage() {
               minLength={3}
               maxLength={256}
               value={reason}
+              disabled={busy}
               onChange={(event) => setReason(event.target.value)}
             />
           </label>
@@ -118,6 +147,7 @@ export function AdminActivitiesPage() {
             <Button
               type="button"
               variant="ghost"
+              disabled={busy}
               onClick={() => setTarget(undefined)}
             >
               取消
@@ -175,7 +205,12 @@ export function AdminActivitiesPage() {
                             type="button"
                             variant="secondary"
                             size="sm"
-                            onClick={() => setTarget(activity)}
+                            disabled={busy}
+                            onClick={() => {
+                              setTarget(activity);
+                              setReason("");
+                              setResult(undefined);
+                            }}
                           >
                             <DatabaseZap aria-hidden="true" />
                             加载并核验

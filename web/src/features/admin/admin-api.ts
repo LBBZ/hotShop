@@ -2,6 +2,7 @@ import { apiClients } from "@/api/clients";
 import type {
   AdminProductEditRequest,
   AdminStockAdjustmentRequest,
+  FlashSaleActivityLoadResponse,
   ProductPresentation,
 } from "@/api/generated/admin";
 import { adminAuth } from "@/auth/domains";
@@ -248,7 +249,7 @@ export const adminApi = {
       `/admin/api/v1/flash-sales${queryString({ limit: 20, cursor, status, productId })}`,
     ),
   loadActivity: (activityId: string, reason: string) =>
-    json<Record<string, unknown>>(
+    json<FlashSaleActivityLoadResponse>(
       `/admin/api/v1/flash-sales/${encodeURIComponent(activityId)}/load`,
       {
         method: "POST",
@@ -288,9 +289,9 @@ export const adminApi = {
     json<CursorPage<ReconciliationIssue>>(
       `/admin/api/v1/operations/reconciliation-issues${queryString({ limit: 20, cursor, status })}`,
     ),
-  manualReviews: (cursor?: string, status?: string) =>
+  manualReviews: (cursor?: string) =>
     json<CursorPage<ManualReview>>(
-      `/admin/api/v1/operations/manual-reviews${queryString({ limit: 20, cursor, status })}`,
+      `/admin/api/v1/operations/manual-reviews${queryString({ limit: 20, cursor })}`,
     ),
   reconciliationStatus: () =>
     json<ReconciliationStatus>(

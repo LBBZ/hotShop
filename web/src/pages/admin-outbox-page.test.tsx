@@ -106,4 +106,43 @@ describe("AdminOutboxPage", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("task14-replay-denied");
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
+
+  it("keeps the submitted event visible and prevents switching or cancelling while replay is pending", async () => {
+    vi.spyOn(adminApi, "failedOutbox").mockResolvedValue({
+      items: [event, { ...event, eventId: "second-failed-event" }],
+      hasMore: false,
+    });
+    let finish!: () => void;
+    const replay = vi.spyOn(adminApi, "replayOutbox").mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const user = userEvent.setup();
+    render(<AdminOutboxPage />);
+    await user.click(
+      (await screen.findAllByRole("button", { name: "重放" }))[0]!,
+    );
+    await user.type(
+      screen.getByLabelText("操作原因（必填）"),
+      "消息代理恢复后重放",
+    );
+    await user.click(
+      screen.getByRole("button", { name: `确认重放 ${event.eventId}` }),
+    );
+    try {
+      expect(screen.getByRole("button", { name: "取消" })).toBeDisabled();
+      for (const button of screen.getAllByRole("button", {
+        name: "重放",
+      }))
+        expect(button).toBeDisabled();
+      expect(screen.getByLabelText("操作原因（必填）")).toBeDisabled();
+      expect(screen.getByRole("dialog")).toHaveTextContent(event.eventId);
+      expect(replay).toHaveBeenCalledTimes(1);
+    } finally {
+      finish();
+    }
+    await screen.findByRole("status");
+  });
 });

@@ -191,7 +191,8 @@ export function formatMoment(value: string | Date | null | undefined) {
 }
 
 export function statusTone(value: string) {
-  if (/SUCCESS|PAID|COMPLETED|ACTIVE|CONSISTENT/u.test(value)) return "healthy";
+  if (/^(?:SUCCESS|SUCCEEDED|PAID|COMPLETED|ACTIVE|CONSISTENT)$/u.test(value))
+    return "healthy";
   if (/FAIL|ERROR|CRITICAL|DENIED|CANCEL/u.test(value)) return "signal";
   return "warning";
 }

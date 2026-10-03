@@ -1,0 +1,212 @@
+{
+  "schemaVersion": 1,
+  "title": "Admin investigation, activity loading and Outbox replay functional audit",
+  "date": "2026-10-03",
+  "timezone": "Asia/Shanghai",
+  "baselineCommit": "3fd656254499ef217c615e980a1adeb7af21246e",
+  "implementationCommits": [
+    "91f9f3ea9a1a646d1cec2fa85d5c8bc71776299a",
+    "50761b0b39478aa229bbccd601f8aadc9d3f44ff"
+  ],
+  "scope": [
+    "Independent investigation pagination, filtering and failure recovery",
+    "Activity load consistency feedback",
+    "Pending admin mutation ownership and bounded network requests",
+    "Ambiguous outcomes after activity-load or Outbox-replay response loss"
+  ],
+  "unitTests": {
+    "newBehaviorRegressions": 13,
+    "beforeFix": [
+      {
+        "phase": "Investigation queries and pending replay",
+        "passed": 3,
+        "failed": 6,
+        "skipped": 0,
+        "files": 2
+      },
+      {
+        "phase": "Activity feedback and pending load",
+        "passed": 0,
+        "failed": 3,
+        "skipped": 0,
+        "files": 1
+      },
+      {
+        "phase": "Network deadlines and ambiguous outcomes",
+        "passed": 7,
+        "failed": 4,
+        "skipped": 0,
+        "files": 3
+      }
+    ],
+    "focusedAfterFix": {
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0,
+      "files": 4
+    },
+    "fullAfterFix": {
+      "passed": 131,
+      "failed": 0,
+      "skipped": 0,
+      "files": 28
+    }
+  },
+  "realBrowser": {
+    "sourceCommit": "50761b0b39478aa229bbccd601f8aadc9d3f44ff",
+    "workingTreeDirty": true,
+    "dirtyScope": "Documentation only; runtime, tests and browser harness committed",
+    "composeProject": "hotshop-task21-accept1002",
+    "webImage": "sha256:de244033a9e65016e06968763f5bcc78048b880ef9f6a45a72bfb27986588b52",
+    "startedAt": "2026-10-03T15:20:01.319Z",
+    "finishedAt": "2026-10-03T15:20:59.896Z",
+    "host": "Windows x64",
+    "node": "22.20.0",
+    "playwright": "1.57.0",
+    "chromium": "143.0.7499.4",
+    "devices": [
+      {
+        "name": "desktop",
+        "viewport": {
+          "width": 1440,
+          "height": 1000
+        }
+      },
+      {
+        "name": "mobile",
+        "emulation": "Pixel 7"
+      }
+    ],
+    "checksPassed": 18,
+    "results": [
+      {
+        "device": "desktop",
+        "scenario": "对账异常: signed cursor forward and back",
+        "status": "passed"
+      },
+      {
+        "device": "desktop",
+        "scenario": "待人工处理: signed cursor forward and back",
+        "status": "passed"
+      },
+      {
+        "device": "desktop",
+        "scenario": "支付状态: signed cursor forward and back",
+        "status": "passed"
+      },
+      {
+        "device": "desktop",
+        "scenario": "resolved findings remain reachable",
+        "status": "passed"
+      },
+      {
+        "device": "desktop",
+        "scenario": "late payments outside 24 hours remain reachable",
+        "status": "passed"
+      },
+      {
+        "device": "desktop",
+        "scenario": "payment outage stays local and retries with the same filters",
+        "status": "passed"
+      },
+      {
+        "device": "desktop",
+        "scenario": "successful load with inconsistent inventory remains a warning",
+        "status": "passed"
+      },
+      {
+        "device": "desktop",
+        "scenario": "committed load with withheld response ends as unconfirmed after deadline",
+        "status": "passed"
+      },
+      {
+        "device": "desktop",
+        "scenario": "no page errors or horizontal body overflow",
+        "status": "passed"
+      },
+      {
+        "device": "mobile",
+        "scenario": "对账异常: signed cursor forward and back",
+        "status": "passed"
+      },
+      {
+        "device": "mobile",
+        "scenario": "待人工处理: signed cursor forward and back",
+        "status": "passed"
+      },
+      {
+        "device": "mobile",
+        "scenario": "支付状态: signed cursor forward and back",
+        "status": "passed"
+      },
+      {
+        "device": "mobile",
+        "scenario": "resolved findings remain reachable",
+        "status": "passed"
+      },
+      {
+        "device": "mobile",
+        "scenario": "late payments outside 24 hours remain reachable",
+        "status": "passed"
+      },
+      {
+        "device": "mobile",
+        "scenario": "payment outage stays local and retries with the same filters",
+        "status": "passed"
+      },
+      {
+        "device": "mobile",
+        "scenario": "successful load with inconsistent inventory remains a warning",
+        "status": "passed"
+      },
+      {
+        "device": "mobile",
+        "scenario": "committed load with withheld response ends as unconfirmed after deadline",
+        "status": "passed"
+      },
+      {
+        "device": "mobile",
+        "scenario": "no page errors or horizontal body overflow",
+        "status": "passed"
+      }
+    ],
+    "ownedFixtureCleanupVerified": true,
+    "retainedData": "Append-only backend login and activity-load audit entries",
+    "earlierFailures": [
+      {
+        "checksPassed": 0,
+        "cause": "Login heading exceeded the default 5-second assertion timeout; HTTP status was not recorded, so the root cause is unknown. An independent login returned 200.",
+        "correction": "Assert the login HTTP response and use a 15-second assertion timeout.",
+        "ownedFixtureCleanupVerified": true
+      },
+      {
+        "checksPassed": 3,
+        "cause": "Exact getByLabel lookup did not match the select; accessibility inspection confirmed the correct combobox name.",
+        "correction": "Locate the select by its combobox role and accessible name.",
+        "ownedFixtureCleanupVerified": true
+      }
+    ]
+  },
+  "verification": {
+    "formatting": "passed (Windows: --end-of-line auto)",
+    "eslint": "passed",
+    "typescriptAndViteBuild": "passed",
+    "dockerWebBuild": "passed",
+    "browserHarnessSyntax": "passed",
+    "documentationLinks": {
+      "files": 85,
+      "localLinks": 626,
+      "anchors": 10,
+      "failures": 0
+    }
+  },
+  "limitations": [
+    "Query fixtures are inserted directly and do not establish checkout or payment lifecycle correctness.",
+    "Browser network faults are injected at the route boundary; real authentication, CSRF and backend data queries remain active.",
+    "The 15-second network deadline does not roll back a server transaction; existing authentication recovery has separate bounds.",
+    "Desktop Chromium and Pixel 7 emulation do not cover Safari or physical devices.",
+    "No production-load, reconciliation-endurance or total-memory claim is made.",
+    "Mutable sort fields do not provide a database snapshot across pagination requests.",
+    "Activity quota/version semantics and reconciliation progress under continuous writes remain separate follow-up design work."
+  ]
+}

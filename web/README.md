@@ -61,12 +61,13 @@ corepack pnpm@10.15.0 api:check
 
 浏览器验证按运行环境选择入口：
 
-| 范围                | 入口（从仓库根目录执行）                                  | 依赖                                                             |
-| ------------------- | --------------------------------------------------------- | ---------------------------------------------------------------- |
-| 快速页面/交互回归   | `corepack pnpm@10.15.0 --dir web test:e2e`                | Vite 自动启动；默认使用 mock，真实 Compose 规格未启用            |
-| 真实交易与故障路径  | `pwsh -NoProfile -File script/verify-task19-e2e.ps1`      | Docker/Compose 和 PowerShell 7；脚本创建并清理独立后端与测试资源 |
-| 构建后的 Nginx 应用 | `corepack pnpm@10.15.0 --dir web test:delivery`           | 已启动独立演示；默认 `http://127.0.0.1:18080`，覆盖桌面与手机    |
-| 跨浏览器登录恢复    | `node script/verify-auth-browsers.mjs <项目名> <Web地址>` | 已启动独立本机演示；Chromium、Firefox、WebKit 与手机尺寸 WebKit  |
+| 范围                | 入口（从仓库根目录执行）                                        | 依赖                                                                  |
+| ------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------- |
+| 快速页面/交互回归   | `corepack pnpm@10.15.0 --dir web test:e2e`                      | Vite 自动启动；默认使用 mock，真实 Compose 规格未启用                 |
+| 真实交易与故障路径  | `pwsh -NoProfile -File script/verify-task19-e2e.ps1`            | Docker/Compose 和 PowerShell 7；脚本创建并清理独立后端与测试资源      |
+| 构建后的 Nginx 应用 | `corepack pnpm@10.15.0 --dir web test:delivery`                 | 已启动独立演示；默认 `http://127.0.0.1:18080`，覆盖桌面与手机         |
+| 跨浏览器登录恢复    | `node script/verify-auth-browsers.mjs <项目名> <Web地址>`       | 已启动独立本机演示；Chromium、Firefox、WebKit 与手机尺寸 WebKit       |
+| 后台排障与活动核验  | `node script/verify-admin-investigation.mjs <项目名> <Web地址>` | 已启动独立本机演示；真实 MySQL / Redis，桌面 Chromium 与 Pixel 7 模拟 |
 
 真实交易测试通过 User Mock Checkout API 发起支付，经过 Outbox → RabbitMQ → Task → 签名回调 → timeline/SSE；不会以浏览器路由 mock 或测试侧直接回调代替交易链路。测试定义与既往结果见 [用户交易链路](../docs/architecture/user-transaction-journey.md) 和 [质量报告](../docs/quality)。
 
@@ -91,6 +92,16 @@ node script/verify-auth-browsers.mjs hotshop-task21-demo0001 http://127.0.0.1:18
 入口核对本机地址、演示项目及 Web 容器端口，连接真实认证后端，只创建测试账号和登录会话。四组浏览器各验证双标签轮换、关闭排队标签、关闭持锁标签、轮换响应丢失，以及轮换提交后关闭页面，共 20 项。测试保留原有登录限流和重放检测，串行执行且不自动重试；独立 HTTP 上下文完成故障注入，确保丢失的 `Set-Cookie` 不会提前写入浏览器。
 
 该套件与默认 mock 回归分开，结果位于忽略目录 `.local/verification/auth-browsers-*`，不录制 trace、截图或视频。手机项目采用 iPhone 13 参数模拟；Windows 上的 Playwright WebKit 结果不等于 Safari 或 iOS 真机验收。具体版本、失败记录与覆盖边界见[登录恢复验收](../docs/quality/auth-browsers-2026-10-03.md)。
+
+后台排障验收从仓库根目录执行：
+
+```powershell
+node script/verify-admin-investigation.mjs hotshop-task21-demo0001 http://127.0.0.1:18080
+```
+
+需要已安装 Playwright Chromium，演示中存在标准 `task13-admin` 测试管理员和普通用户，Task 的发现间隔使用 `ms` 或 `s` 且不超过 30 秒。脚本核对项目与端口，创建带唯一标记的 25 条异常、25 条人工队列、26 条支付记录及关联订单，另有 1 条已解决异常和 1 个临时商品 / 草稿活动。它验证真实游标分页、历史筛选、单个支付请求故障，以及临时活动的 Redis 库存差异提示和写操作响应丢失，共 18 项桌面 / 手机检查。
+
+这会写入选定的独立演示，不能作为只读巡检。脚本结束时恢复并清理自己的测试事实和 Redis 注册项，保留后端追加的审计记录；日志、摘要和截图位于忽略目录 `.local/verification/admin-investigation-*`。查询数据与活动核验使用真实后端，支付故障由浏览器拦截单个端点注入。完整结果与未覆盖范围见[后台功能审计](../docs/quality/admin-functional-audit-2026-10-03.md)。
 
 ## 身份、查询和流式边界
 

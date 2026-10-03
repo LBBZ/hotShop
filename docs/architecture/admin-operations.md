@@ -30,11 +30,23 @@ Admin cursors are URL-safe payloads authenticated with HMAC-SHA-256. The signatu
 
 Order and Payment investigation require an explicit range no larger than 31 days. All filters use parameterized SQL in the dedicated `domain.adminops` repository; existing shared business Mappers are unchanged.
 
+### Investigation page behavior
+
+`/admin/exceptions` loads the reconciliation summary, findings, human-review queue, and payments independently. A failed payment query leaves the other facts readable; its retry reloads only that panel. Each list has its own forward/back cursor history and a first-page action. An empty or failed later page still allows returning to an earlier page.
+
+Findings can be filtered by `OPEN`, `RESOLVED`, or `IGNORED`. The human-review queue contains the backend's `MANUAL_REVIEW` and `QUARANTINED` records; there is no unsupported client-side status filter. Payments expose all five backend states, including `LATE_SUCCEEDED`, and 24-hour, 7-day, or 31-day windows. The time bounds remain fixed across pages to preserve the signed cursor's filter scope. Changing filters starts that list again; **刷新全部** keeps the selected filters, advances the time window, and resets all lists to their first page. Counts in the status summary are global persisted finding counts, not the number of rows on the current page.
+
 ## Mutation and audit semantics
 
 Catalog create, replace, soft-delete, Activity load, and Outbox replay all require a 3–256 character operator reason with at least three non-whitespace characters and no line breaks. Backend validation covers exact decimal money, non-negative inventory, ID formats, activity facts, event state, and allowed state enums. Admin product replacement/deletion locks the active row before the shared mutation, so concurrent deletion cannot be reported as a false success. The append-only audit record contains Administrator identity, action/resource, accurate success/failure, request ID, trace ID, and a minimized state summary including the reason. It never stores request authorization, credentials, raw Outbox payload/error, or full product description.
 
 Outbox replay is the existing safe state transition only: a locked `FAILED` row becomes `NEW`, cumulative attempts remain, the current retry streak resets, and publication stays asynchronous in `task`. A non-FAILED or missing resource produces accurate Problem Details and a failure audit. React additionally requires a second confirmation showing event ID and likely impact, but the backend remains authoritative.
+
+While Activity load or Outbox replay is pending, the submitted resource and reason stay visible; the page disables another row's action, the reason field, and the confirmation's cancel button. If the confirmation remains open after the request settles, its cancel button becomes available again. Closing that confirmation does not cancel an already dispatched request.
+
+Both write requests use a 15-second network deadline; authentication recovery retains its own existing time bounds. Losing or timing out a response leaves the mutation result **unconfirmed**, because aborting browser fetch does not roll back a server transaction. The page unlocks after the request settles, directs the operator to check business state and audit records, and does not introduce automatic replay on timeout.
+
+Activity load distinguishes the loading result from the inventory check. HTTP 200 with `consistent=false` produces a warning with MySQL/Redis stock and reservation counts, plus a link to investigation. A rejected request shows its Problem code and request ID as an error. Only `consistent=true` produces the positive inventory notice. This presentation does not relax the loader's version or existing-reservation guards and does not prove a globally consistent snapshot under concurrent writes.
 
 ## Reconciliation truthfulness
 

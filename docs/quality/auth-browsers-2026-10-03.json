@@ -1,0 +1,246 @@
+{
+  "date": "2026-10-03",
+  "timezone": "Asia/Shanghai",
+  "runtimeSourceCommit": "904221adcde2f05e557aa165de5ff4a8d31c392b",
+  "testImplementationCommit": "6e4ccf4c60bb90d6abbe29fd43febfb6e69601e2",
+  "uncommittedTestsAtExecution": true,
+  "provenance": "The tested spec and dedicated Playwright config were committed unchanged after execution. Later edits only create the report directory recursively, clarify a default-suite comment, and add documentation.",
+  "testFiles": [
+    {
+      "file": "web/e2e/auth-browser-real.spec.ts",
+      "sha256Lf": "d6888a36e634ab2bab8f49ee2bf4b792e11293efa0f13abeab59287aff6811fc"
+    },
+    {
+      "file": "web/playwright.auth-browsers.config.ts",
+      "sha256Lf": "c057005e20b4e67d161df9f7d7c410be1b937ee2fab954a7cff828782ece0b60"
+    }
+  ],
+  "environment": {
+    "host": "Windows x64",
+    "node": "22.20.0",
+    "pnpm": "10.15.0",
+    "playwright": "1.57.0",
+    "project": "hotshop-task21-accept1002",
+    "baseUrl": "http://127.0.0.1:18082",
+    "webImage": "sha256:5d700f6d68b0dbd37f8eedfdfd5ebe7bb590ccef08a94bc433d04ad66b8b4534"
+  },
+  "firstRun": {
+    "startedAt": "2026-10-03T12:26:55.226Z",
+    "durationMs": 45848,
+    "passed": 14,
+    "failed": 6,
+    "skipped": 0,
+    "flaky": 0,
+    "failureReasons": [
+      {
+        "cases": 2,
+        "project": "webkit",
+        "status": 403,
+        "cause": "Fault forwarding lacked cookies because intercepted allHeaders() omitted the Cookie header.",
+        "correction": "Initialize the independent HTTP context with browser cookies; never copy response cookies back."
+      },
+      {
+        "cases": 4,
+        "project": "mobile-webkit",
+        "status": 429,
+        "cause": "Rapid setup logins exceeded the unchanged 20-per-minute IP limit.",
+        "correction": "Pace each case by five seconds without automatic retries or server limit changes."
+      }
+    ]
+  },
+  "finalRun": {
+    "startedAt": "2026-10-03T12:29:54.017Z",
+    "durationMs": 146855,
+    "passed": 20,
+    "failed": 0,
+    "skipped": 0,
+    "flaky": 0,
+    "retries": 0,
+    "workers": 1,
+    "cases": [
+      {
+        "scenario": "two tabs serialize refresh and remain signed in after reload",
+        "project": "chromium",
+        "browserVersion": "143.0.7499.4",
+        "status": "passed",
+        "durationMs": 7564,
+        "attempts": 1
+      },
+      {
+        "scenario": "closing a queued tab does not dispatch its refresh",
+        "project": "chromium",
+        "browserVersion": "143.0.7499.4",
+        "status": "passed",
+        "durationMs": 6019,
+        "attempts": 1
+      },
+      {
+        "scenario": "closing a lock owner releases the next tab",
+        "project": "chromium",
+        "browserVersion": "143.0.7499.4",
+        "status": "passed",
+        "durationMs": 5992,
+        "attempts": 1
+      },
+      {
+        "scenario": "a lost rotation response stops after one attempt and can sign in again",
+        "project": "chromium",
+        "browserVersion": "143.0.7499.4",
+        "status": "passed",
+        "durationMs": 5625,
+        "attempts": 1
+      },
+      {
+        "scenario": "closing after a committed rotation releases the lock and requires fresh login",
+        "project": "chromium",
+        "browserVersion": "143.0.7499.4",
+        "status": "passed",
+        "durationMs": 6540,
+        "attempts": 1
+      },
+      {
+        "scenario": "two tabs serialize refresh and remain signed in after reload",
+        "project": "firefox",
+        "browserVersion": "144.0.2",
+        "status": "passed",
+        "durationMs": 9404,
+        "attempts": 1
+      },
+      {
+        "scenario": "closing a queued tab does not dispatch its refresh",
+        "project": "firefox",
+        "browserVersion": "144.0.2",
+        "status": "passed",
+        "durationMs": 6522,
+        "attempts": 1
+      },
+      {
+        "scenario": "closing a lock owner releases the next tab",
+        "project": "firefox",
+        "browserVersion": "144.0.2",
+        "status": "passed",
+        "durationMs": 6781,
+        "attempts": 1
+      },
+      {
+        "scenario": "a lost rotation response stops after one attempt and can sign in again",
+        "project": "firefox",
+        "browserVersion": "144.0.2",
+        "status": "passed",
+        "durationMs": 5972,
+        "attempts": 1
+      },
+      {
+        "scenario": "closing after a committed rotation releases the lock and requires fresh login",
+        "project": "firefox",
+        "browserVersion": "144.0.2",
+        "status": "passed",
+        "durationMs": 7157,
+        "attempts": 1
+      },
+      {
+        "scenario": "two tabs serialize refresh and remain signed in after reload",
+        "project": "webkit",
+        "browserVersion": "26.0",
+        "status": "passed",
+        "durationMs": 8599,
+        "attempts": 1
+      },
+      {
+        "scenario": "closing a queued tab does not dispatch its refresh",
+        "project": "webkit",
+        "browserVersion": "26.0",
+        "status": "passed",
+        "durationMs": 6976,
+        "attempts": 1
+      },
+      {
+        "scenario": "closing a lock owner releases the next tab",
+        "project": "webkit",
+        "browserVersion": "26.0",
+        "status": "passed",
+        "durationMs": 6728,
+        "attempts": 1
+      },
+      {
+        "scenario": "a lost rotation response stops after one attempt and can sign in again",
+        "project": "webkit",
+        "browserVersion": "26.0",
+        "status": "passed",
+        "durationMs": 6399,
+        "attempts": 1
+      },
+      {
+        "scenario": "closing after a committed rotation releases the lock and requires fresh login",
+        "project": "webkit",
+        "browserVersion": "26.0",
+        "status": "passed",
+        "durationMs": 7924,
+        "attempts": 1
+      },
+      {
+        "scenario": "two tabs serialize refresh and remain signed in after reload",
+        "project": "mobile-webkit",
+        "browserVersion": "26.0",
+        "status": "passed",
+        "durationMs": 8757,
+        "attempts": 1
+      },
+      {
+        "scenario": "closing a queued tab does not dispatch its refresh",
+        "project": "mobile-webkit",
+        "browserVersion": "26.0",
+        "status": "passed",
+        "durationMs": 7052,
+        "attempts": 1
+      },
+      {
+        "scenario": "closing a lock owner releases the next tab",
+        "project": "mobile-webkit",
+        "browserVersion": "26.0",
+        "status": "passed",
+        "durationMs": 7021,
+        "attempts": 1
+      },
+      {
+        "scenario": "a lost rotation response stops after one attempt and can sign in again",
+        "project": "mobile-webkit",
+        "browserVersion": "26.0",
+        "status": "passed",
+        "durationMs": 6595,
+        "attempts": 1
+      },
+      {
+        "scenario": "closing after a committed rotation releases the lock and requires fresh login",
+        "project": "mobile-webkit",
+        "browserVersion": "26.0",
+        "status": "passed",
+        "durationMs": 7691,
+        "attempts": 1
+      }
+    ]
+  },
+  "additionalChecks": {
+    "frozenInstall": "passed; lockfile unchanged",
+    "format": "passed with --end-of-line auto for Windows checkout",
+    "eslint": "passed",
+    "typescriptBuild": "passed, TypeScript 6.0.3",
+    "productionBuild": "passed, Vite 8.3.1",
+    "defaultSuiteCollection": {
+      "count": 58,
+      "files": 5,
+      "authBrowserSuiteExcluded": true,
+      "executed": false
+    },
+    "scriptSyntax": "passed",
+    "diffWhitespace": "passed",
+    "documentationLinks": "passed"
+  },
+  "limitations": [
+    "User identity only",
+    "Local same-origin Web Locks environment only",
+    "Windows Playwright WebKit with mobile device parameters is not real Safari/iOS",
+    "No cross-origin, no-Web-Locks, or forced-browser-process termination coverage",
+    "No product runtime or authentication protocol change in this iteration"
+  ]
+}

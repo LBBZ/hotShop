@@ -59,13 +59,14 @@ corepack pnpm@10.15.0 api:check
 
 `check` 串联格式、lint、类型、单测、构建和客户端漂移检查；OpenAPI 生成/漂移检查还需 Java 运行时，可使用仓库的 Java 21 或下方 Docker 工具镜像。Vitest 最多使用两个 worker。
 
-浏览器验证有三个明确入口：
+浏览器验证按运行环境选择入口：
 
-| 范围                | 入口（从仓库根目录执行）                             | 依赖                                                             |
-| ------------------- | ---------------------------------------------------- | ---------------------------------------------------------------- |
-| 快速页面/交互回归   | `corepack pnpm@10.15.0 --dir web test:e2e`           | Vite 自动启动；默认使用 mock，真实 Compose 规格未启用            |
-| 真实交易与故障路径  | `pwsh -NoProfile -File script/verify-task19-e2e.ps1` | Docker/Compose 和 PowerShell 7；脚本创建并清理独立后端与测试资源 |
-| 构建后的 Nginx 应用 | `corepack pnpm@10.15.0 --dir web test:delivery`      | 已启动独立演示；默认 `http://127.0.0.1:18080`，覆盖桌面与手机    |
+| 范围                | 入口（从仓库根目录执行）                                  | 依赖                                                             |
+| ------------------- | --------------------------------------------------------- | ---------------------------------------------------------------- |
+| 快速页面/交互回归   | `corepack pnpm@10.15.0 --dir web test:e2e`                | Vite 自动启动；默认使用 mock，真实 Compose 规格未启用            |
+| 真实交易与故障路径  | `pwsh -NoProfile -File script/verify-task19-e2e.ps1`      | Docker/Compose 和 PowerShell 7；脚本创建并清理独立后端与测试资源 |
+| 构建后的 Nginx 应用 | `corepack pnpm@10.15.0 --dir web test:delivery`           | 已启动独立演示；默认 `http://127.0.0.1:18080`，覆盖桌面与手机    |
+| 跨浏览器登录恢复    | `node script/verify-auth-browsers.mjs <项目名> <Web地址>` | 已启动独立本机演示；Chromium、Firefox、WebKit 与手机尺寸 WebKit  |
 
 真实交易测试通过 User Mock Checkout API 发起支付，经过 Outbox → RabbitMQ → Task → 签名回调 → timeline/SSE；不会以浏览器路由 mock 或测试侧直接回调代替交易链路。测试定义与既往结果见 [用户交易链路](../docs/architecture/user-transaction-journey.md) 和 [质量报告](../docs/quality)。
 
@@ -79,6 +80,17 @@ pnpm test:delivery
 ```
 
 仅验证某种设备可追加 `--project chromium` 或 `--project mobile-chromium`。该套件验证常规交易、用户确认、知识引用及后台库存冲突；服务重启和基础设施故障仍由上表的故障路径脚本覆盖。
+
+跨浏览器登录恢复需要额外安装浏览器。在仓库根目录执行，项目名和端口替换为通过 `script/demo.ps1` 启动的独立演示：
+
+```powershell
+corepack pnpm@10.15.0 --dir web exec playwright install chromium firefox webkit
+node script/verify-auth-browsers.mjs hotshop-task21-demo0001 http://127.0.0.1:18080
+```
+
+入口核对本机地址、演示项目及 Web 容器端口，连接真实认证后端，只创建测试账号和登录会话。四组浏览器各验证双标签轮换、关闭排队标签、关闭持锁标签、轮换响应丢失，以及轮换提交后关闭页面，共 20 项。测试保留原有登录限流和重放检测，串行执行且不自动重试；独立 HTTP 上下文完成故障注入，确保丢失的 `Set-Cookie` 不会提前写入浏览器。
+
+该套件与默认 mock 回归分开，结果位于忽略目录 `.local/verification/auth-browsers-*`，不录制 trace、截图或视频。手机项目采用 iPhone 13 参数模拟；Windows 上的 Playwright WebKit 结果不等于 Safari 或 iOS 真机验收。具体版本、失败记录与覆盖边界见[登录恢复验收](../docs/quality/auth-browsers-2026-10-03.md)。
 
 ## 身份、查询和流式边界
 

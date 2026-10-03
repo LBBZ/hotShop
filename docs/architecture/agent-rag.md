@@ -54,6 +54,12 @@ has trusted `tenantId`, document/chunk/version/type/visibility, title, source, l
 content hash, effective window, and body. Chunk size is 200–2000 characters, overlap is at most
 200 and smaller than the chunk. UUIDv5 point IDs are deterministic.
 
+The bundled version 1.1 sources describe the current demo, including unavailable after-sales,
+password-reset and support-ticket features. Each Chinese/English document has its own ID and
+locale; both link to the maintained [product help](../product/help.md). These sources do not
+constitute a real merchant's policy. Live facts take priority over help routing; broad catalog
+verbs such as “看看” cannot turn a policy question into a product search.
+
 The content digest names a code-owned versioned collection. Rebuild validates everything before
 creating a collection, embeds and upserts deterministic points, verifies the exact point count,
 then atomically replaces the code-owned `hotshop_knowledge` alias. Readers therefore see either

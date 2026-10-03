@@ -9,6 +9,7 @@
 | 我想做什么                    | 从这里开始                                    |
 | ----------------------------- | --------------------------------------------- |
 | 启动完整商城并体验购买        | [演示指南](delivery/demo.md)                  |
+| 核对售后、登录与支持能力      | [使用说明 / Help](product/help.md)            |
 | 配置服务、端口、密钥和 Docker | [容器环境](runbooks/container-environment.md) |
 | 修改页面、路由或交互          | [Web 开发](../web/README.md)                  |
 | 运行 Agent、接入模型          | [Agent 服务](runbooks/agent-service.md)       |

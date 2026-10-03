@@ -1,0 +1,13 @@
+{
+  "tenantId": "hotshop",
+  "documentId": "campaign-general-rules-en",
+  "documentVersion": "1.1.0",
+  "documentType": "CAMPAIGN_RULE",
+  "visibility": "PUBLIC",
+  "title": "Flash sale rules",
+  "source": "https://github.com/LBBZ/hotShop/blob/master/docs/product/help.md#campaigns",
+  "locale": "en",
+  "effectiveFrom": null,
+  "effectiveUntil": null,
+  "content": "What are the flash sale rules? An accepted reservation does not mean an order has been created. Check My reservations for the final result and open the linked order. Participation conditions come from the activity information. Product availability and reservation progress require live queries, not this static guide."
+}

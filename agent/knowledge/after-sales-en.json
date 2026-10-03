@@ -1,0 +1,13 @@
+{
+  "tenantId": "hotshop",
+  "documentId": "after-sales-general-en",
+  "documentVersion": "1.1.0",
+  "documentType": "AFTER_SALES_POLICY",
+  "visibility": "PUBLIC",
+  "title": "After-sales in the demo",
+  "source": "https://github.com/LBBZ/hotShop/blob/master/docs/product/help.md#after-sales",
+  "locale": "en",
+  "effectiveFrom": null,
+  "effectiveUntil": null,
+  "content": "This demo has no return, exchange, refund or after-sales request form. How does the after-sales return policy work? You cannot request a return or request a refund here. The Order details page shows transaction status and simulated payments; no real money is charged. The project does not define a real merchant's return window or refund schedule."
+}

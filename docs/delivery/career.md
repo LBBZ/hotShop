@@ -128,7 +128,7 @@ Token Exchange 只允许有限 scope。Agent 的 USER registry 只有查询、�
 
 `route_query` 将售后/规则/FAQ 路由到静态检索，将价格、库存、本人订单/预约路由到固定工具；不明确的动态问题可拒绝。`RagRetriever` 按可信 tenant、身份可见性、文档类型和生效期过滤，低分或不可用时返回空/不可用结果，引用带 documentId/title/version/source/chunkId。确定性路由和有限评测集都有覆盖边界，不保证任意自然语言都分类正确。
 
-证据：[rag.py](../../agent/src/hotshop_agent/rag.py)、[知识评测](../../agent/evals/task17-v2.jsonl)、[eval_runner](../../agent/src/hotshop_agent/eval_runner.py)。
+证据：[rag.py](../../agent/src/hotshop_agent/rag.py)、[知识评测](../../agent/evals/task17-v3.jsonl)、[eval_runner](../../agent/src/hotshop_agent/eval_runner.py)。
 
 ### 14. CI 全绿为何不等于交付全部完成？
 

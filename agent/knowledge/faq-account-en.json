@@ -1,0 +1,13 @@
+{
+  "tenantId": "hotshop",
+  "documentId": "faq-account-security-en",
+  "documentVersion": "1.1.0",
+  "documentType": "FAQ",
+  "visibility": "PUBLIC",
+  "title": "Account and login help",
+  "source": "https://github.com/LBBZ/hotShop/blob/master/docs/product/help.md#account",
+  "locale": "en",
+  "effectiveFrom": null,
+  "effectiveUntil": null,
+  "content": "How can I secure my account? Keep passwords, tokens and cookies private. If login recovery fails, use Sign in again with your username and password to return to the original user page. The demo has no SMS login, password reset or sign-out-all-devices screen."
+}

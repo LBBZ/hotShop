@@ -1,0 +1,13 @@
+{
+  "tenantId": "hotshop",
+  "documentId": "faq-admin-operations-en",
+  "documentVersion": "1.1.0",
+  "documentType": "FAQ",
+  "visibility": "ADMIN",
+  "title": "Administrator guidance",
+  "source": "https://github.com/LBBZ/hotShop/blob/master/docs/product/help.md#administration",
+  "locale": "en",
+  "effectiveFrom": null,
+  "effectiveUntil": null,
+  "content": "Administrator guidance covers statistics, anomaly summaries and limited configuration drafts. Product, inventory and failed-event operations require the authorized back-office pages. Knowledge documents do not authorize refunds, compensation, message replay, permission changes or user bans."
+}

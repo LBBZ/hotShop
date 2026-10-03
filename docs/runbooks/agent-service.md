@@ -77,6 +77,10 @@ Agent 容器只读挂载：
 client assertion 和 Delegation 都不写入会话存储。管理会话只验证 Administrator Access，不执行
 token exchange，不获得 Agent Delegation。连续提问每个 User run 重新交换 Delegation，不复用过期授权。
 
+换票失败返回 503 时，查询 `event=agent.token_exchange.failed` 并关联 `requestId`。
+`errorType` 区分连接 / 读取超时、连接失败、传输错误、限流、HTTP 错误和响应校验错误；
+日志不包含 Token、assertion、响应正文或异常消息。请求创建失败尚未进入知识检索，不能归因于 Qdrant。
+
 ## 4. 状态与 Redis
 
 Docker 固定使用 `redis-cache` DB 0，所有键使用 `hotshop:agent:` 前缀：
@@ -104,6 +108,10 @@ Token、assertion、一次性确认值不进入状态存储。测试使用内存
 - 永久错误和已开始输出的流不重试，避免重复内容和重复费用；
 - 连续失败达到阈值后熔断；恢复窗口后只允许一个探测；
 - 全局和按 User 并发超限会立即拒绝该运行。
+
+追踪上报最多同时执行 2 个请求，每次超时 2 秒；收集器请求失败后退避 30 秒。
+达到并发上限或处于退避期时丢弃待上报 span，不积压队列。追踪是尽力交付，收集器不可用时可能缺失，
+应结合结构化日志诊断，不能把缺少 trace 当成请求未发生。
 
 SSE 和日志不得包含系统策略、隐藏推理、Authorization、JWT、API Key、Cookie、client assertion、
 私钥或完整模型请求。事件类型和字段由代码白名单限制。`StreamingSanitizer` 跨模型 chunk 保留

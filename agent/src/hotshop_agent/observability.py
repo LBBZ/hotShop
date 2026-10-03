@@ -89,6 +89,7 @@ class Telemetry:
         self._client = client or httpx.AsyncClient()
         self._owns_client = client is None
         self._pending: set[asyncio.Task[None]] = set()
+        self._retry_after = 0.0
 
     async def close(self) -> None:
         if self._pending:
@@ -143,6 +144,11 @@ class Telemetry:
             TRACE_FLAGS.reset(flags_token)
 
     def _schedule_export(self, export: Coroutine[Any, Any, None]) -> None:
+        # Best-effort tracing must not exhaust the process's shared DNS workers
+        # when an optional collector is slow or absent. Drop instead of queuing.
+        if len(self._pending) >= 2 or time.perf_counter() < self._retry_after:
+            export.close()
+            return
         task: asyncio.Task[None] = asyncio.create_task(export)
         self._pending.add(task)
         task.add_done_callback(self._pending.discard)
@@ -177,13 +183,15 @@ class Telemetry:
         if state.parent_span_id:
             span["parentId"] = state.parent_span_id
         try:
-            await self._client.post(
+            response = await self._client.post(
                 self._settings.zipkin_endpoint,
                 json=[span],
                 headers={"Content-Type": "application/json"},
                 timeout=2.0,
             )
+            response.raise_for_status()
         except Exception:
+            self._retry_after = time.perf_counter() + 30.0
             logging.getLogger(__name__).warning(
                 "trace export unavailable",
                 extra={"event": "trace.export", "outcome": "failure", "errorType": "HTTPError"},

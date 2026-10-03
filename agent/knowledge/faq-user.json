@@ -1,13 +1,13 @@
 {
   "tenantId": "hotshop",
   "documentId": "faq-user-support",
-  "documentVersion": "1.0.0",
+  "documentVersion": "1.1.0",
   "documentType": "FAQ",
   "visibility": "USER",
-  "title": "登录用户支持渠道",
-  "source": "https://docs.hotshop.local/faq/user-support",
+  "title": "问题反馈与支持入口",
+  "source": "https://github.com/LBBZ/hotShop/blob/master/docs/product/help.md#support",
   "locale": "zh-CN",
   "effectiveFrom": null,
   "effectiveUntil": null,
-  "content": "登录用户可以在帮助中心提交问题描述和相关业务编号。请只提交排查所需信息，不要上传密码、Token、Cookie 或私钥。"
+  "content": "怎么联系支持？当前没有站内帮助中心或客服工单。项目问题可以在 GitHub 仓库的 Issues 中反馈，说明版本、操作步骤和脱敏后的错误；公开内容不要包含个人资料、密码、Token、Cookie 或私钥。"
 }

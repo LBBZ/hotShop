@@ -19,11 +19,12 @@
               for (const line of lines) {
                 if (!line.startsWith("data: ")) continue;
                 const event = JSON.parse(line.slice(6));
-                if (!["rag.completed", "done"].includes(event.type)) continue;
+                if (!["rag.completed", "tool.completed", "done"].includes(event.type)) continue;
                 const records = JSON.parse(document.documentElement.dataset.deliveryRagEvents ?? "[]");
                 // No message text, credentials, exception message or other tool data retained.
                 records.push({ type: event.type, runId: event.runId,
-                  data: event.type === "rag.completed" ? event.data : {} });
+                  data: event.type === "rag.completed" ? event.data
+                    : event.type === "tool.completed" ? { tool: event.data.tool, outcome: event.data.outcome } : {} });
                 document.documentElement.dataset.deliveryRagEvents = JSON.stringify(records.slice(-32));
               }
             }

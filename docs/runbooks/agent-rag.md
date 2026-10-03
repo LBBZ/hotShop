@@ -2,15 +2,20 @@
 
 ## 区分空结果与不可用
 
-本地演示以[README](../../README.md)的隔离启动为准。默认FakeModel/deterministic、阈值0.15，
-“售后申请应从哪里发起？”有已知语料引用；原改写“售后退换申请应该怎么做？”保留为低分安全拒答案例。
-不保证任意中文语义改写命中，不降低全局阈值来修饰结果。
+本地演示以 [README](../../README.md) 的隔离启动为准。默认 FakeModel/deterministic、阈值 0.15。
+当前 1.1.0 语料共 10 份，中英文使用独立文档 ID 和 locale，引用指向维护中的[使用说明](../product/help.md)。
+“售后申请应从哪里发起？”和“售后退换申请应该怎么做？”均应引用中文售后资料；
+“Where can I request a refund?” 应引用英文资料。答案必须说明演示没有售后申请入口。
+“常见问题：火星门店在哪里？”使用真实资料库验证空结果。deterministic 是词项/字符特征检索，
+不保证任意语义改写命中；这里没有降低全局阈值，也没有验证真实模型的语言质量。
 
 运行中日志`event=agent.rag.retrieval`记录hit/empty/unavailable、requestId/traceId/runId和安全errorType。
 empty表示请求成功但无合格候选；unavailable按embedding_failure、qdrant连接/超时/传输/HTTP/响应等类别诊断。
 不输出异常消息、问题正文或密钥。独立进程检索成功或healthz正常不能证明原请求成功。
 同一运行Agent的真实Qdrant断连/恢复入口为`node script/verify-reconcile-rag.mjs <本worktree项目名> <本地WebURL>`。
-脚本要求该worktree的demo配置和唯一所属容器，只Stop/Start Qdrant，不删除卷。
+脚本要求该 worktree 的 demo 配置、唯一所属容器、匹配的 Web 端口和 FakeModel。
+它核对中英文首位引用、全部引用字段、真实回答中的功能边界、无关问题拒答及动态工具；
+只 Stop/Start 所选项目的 Qdrant，不删除卷，结束时检查 Agent 进程未重启。
 历史瞬时RetrievalError根因仍未决；[证据与限制](../quality/task-21-reconcile-01.md)保留原失败。
 
 ## Start and index
@@ -66,8 +71,13 @@ docker run --rm --entrypoint python hotshop-agent:test -m hotshop_agent.eval_run
 
 The quick suite uses in-memory vectors; its `/tmp/quick.json` exists only inside that disposable
 container. Use the Compose verification entry point for retained integration evidence. Quick and
-full evaluations use FakeModel/DeterministicEmbedding and report schema/dataset/provider,
-category rates, thresholds, and failed IDs. Security, authorization, dynamic routing, citations,
+full evaluations use FakeModel/DeterministicEmbedding. Dataset `task17-v3` contains 48 quick cases
+and 49 full cases; the full suite adds the real-Qdrant rebuild lifecycle. Reports include
+schema/dataset/provider, the dataset SHA-256, source `knowledgeVersion`, category rates, thresholds,
+and failed IDs. The source hash identifies the chunked corpus; the active collection version also
+includes embedding configuration and is a different value. Retrieval cases must pass the actual
+static router. Citation cases require the expected first document and exact source metadata;
+unrelated-question cases use the real corpus with the default threshold. Security, authorization, dynamic routing, citations,
 and refusals require 100%; quick retrieval hit@3 requires 100%; full requires at least 90%.
 These are gate thresholds, not a claim that a new environment has already passed.
 

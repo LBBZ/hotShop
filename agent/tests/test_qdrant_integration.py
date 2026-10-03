@@ -113,11 +113,12 @@ async def test_real_qdrant_rebuild_filter_atomic_update_and_delete(tmp_path: Pat
             for hit in updated_hits
         )
         assert all(
-            hit.chunk.documentVersion != "1.0.0"
+            hit.chunk.documentVersion == "2.0.0"
             for hit in updated_hits
             if hit.chunk.documentId == "faq-account-security"
         )
-        assert not campaign_hits
+        # Deleting one locale must remove its chunks without deleting the other locale.
+        assert {hit.chunk.documentId for hit in campaign_hits} == {"campaign-general-rules-en"}
 
         class FailingEmbedding:
             name = "failing"

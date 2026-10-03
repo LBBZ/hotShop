@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -14,9 +15,10 @@ from hotshop_agent.eval_runner import (
     run,
     select_suite_cases,
 )
+from hotshop_agent.rag import RagRetriever
 
 ROOT = Path(__file__).resolve().parents[1]
-DATASET = ROOT / "evals" / "task17-v2.jsonl"
+DATASET = ROOT / "evals" / "task17-v3.jsonl"
 KNOWLEDGE = ROOT / "knowledge"
 PRIVATE_QUERY = "private-query-must-not-appear-in-errors"
 
@@ -45,11 +47,11 @@ def assert_dataset_error(path: Path, expected: str) -> None:
     assert PRIVATE_QUERY not in str(caught.value)
 
 
-def test_current_task17_v2_dataset_is_valid_and_covers_both_suites() -> None:
+def test_current_task17_v3_dataset_is_valid_and_covers_both_suites() -> None:
     cases = load_eval_dataset(DATASET)
-    assert len(cases) == 29
-    assert len(select_suite_cases(cases, "quick")) == 28
-    assert len(select_suite_cases(cases, "full")) == 29
+    assert len(cases) == 49
+    assert len(select_suite_cases(cases, "quick")) == 48
+    assert len(select_suite_cases(cases, "full")) == 49
 
 
 def test_empty_dataset_is_rejected(tmp_path: Path) -> None:
@@ -168,7 +170,47 @@ async def test_one_failed_case_forces_passed_thresholds_false(tmp_path: Path) ->
 
     result = await run("quick", dataset, KNOWLEDGE)
 
-    assert result["total"] == 28
+    assert result["total"] == 48
+    assert len(result["datasetSha256"]) == 64
+    assert len(result["knowledgeVersion"]) == 64
     assert result["failedCaseIds"] == [failed_id]
     assert result["categories"]["dynamic_routing"]["met"] is False
+    assert result["passedThresholds"] is False
+
+
+@pytest.mark.asyncio
+async def test_retrieval_gate_does_not_bypass_the_application_router(tmp_path: Path) -> None:
+    cases = read_cases()
+    case = next(item for item in cases if item["id"] == "faq-hit-001")
+    # Relevant words still match the corpus, but this phrase has no static route.
+    case["query"] = "保护 HotShop 账户"
+    dataset = write_cases(tmp_path / "unrouted.jsonl", cases)
+    result = await run("quick", dataset, KNOWLEDGE)
+    assert "faq-hit-001" in result["failedCaseIds"]
+    assert result["passedThresholds"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("corrupt_only_last", [False, True])
+async def test_citation_gate_rejects_a_source_that_does_not_match_the_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+    corrupt_only_last: bool,
+) -> None:
+    retrieve = RagRetriever.retrieve
+
+    async def wrong_citations(self: RagRetriever, *args: Any, **kwargs: Any) -> Any:
+        result = await retrieve(self, *args, **kwargs)
+        return replace(
+            result,
+            citations=tuple(
+                citation.model_copy(update={"source": "https://example.invalid/wrong-source"})
+                if not corrupt_only_last or index == len(result.citations) - 1
+                else citation
+                for index, citation in enumerate(result.citations)
+            ),
+        )
+
+    monkeypatch.setattr(RagRetriever, "retrieve", wrong_citations)
+    result = await run("quick", DATASET, KNOWLEDGE)
+    assert result["categories"]["citation"]["passed"] == 0
     assert result["passedThresholds"] is False

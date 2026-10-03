@@ -1,13 +1,13 @@
 {
   "tenantId": "hotshop",
   "documentId": "faq-admin-operations",
-  "documentVersion": "1.0.0",
+  "documentVersion": "1.1.0",
   "documentType": "FAQ",
   "visibility": "ADMIN",
   "title": "管理员静态运营说明",
-  "source": "https://docs.hotshop.local/admin/operations",
+  "source": "https://github.com/LBBZ/hotShop/blob/master/docs/product/help.md#administration",
   "locale": "zh-CN",
   "effectiveFrom": null,
   "effectiveUntil": null,
-  "content": "管理员查看静态运营说明时仍需遵循最小权限原则。检索文档不能授权退款、补偿、消息重放、权限修改或用户封禁。"
+  "content": "管理员助手提供统计、异常摘要和有限的配置草稿。商品、库存和失败事件的处理需要在有权限的后台页面操作；检索文档不能赋予退款、补偿、消息重放、权限修改或用户封禁能力。"
 }

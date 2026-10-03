@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 
@@ -11,6 +12,7 @@ from hotshop_agent.config import Settings
 from hotshop_agent.observability import (
     TRACE_ID,
     JsonFormatter,
+    Telemetry,
     parse_remote_parent,
     sanitize,
 )
@@ -74,3 +76,58 @@ async def test_http_context_preserves_request_and_trace_ids() -> None:
     assert response.headers["X-Request-ID"] == "browser-request-11"
     assert response.headers["X-Trace-ID"] == "4bf92f3577b34da6a3ce929d0e0e4736"
     assert TRACE_ID.get() == ""
+
+
+@pytest.mark.asyncio
+async def test_slow_trace_collector_cannot_fan_out_unbounded_requests() -> None:
+    release = asyncio.Event()
+    calls = 0
+
+    async def collect(_request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        await release.wait()
+        return httpx.Response(202)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(collect)) as client:
+        telemetry = Telemetry(Settings(trace_sample_ratio=1), client)
+        try:
+            async with asyncio.timeout(1):
+                for _ in range(100):
+                    async with telemetry.span("catalog.read"):
+                        pass
+                    await asyncio.sleep(0)
+            assert calls == 2
+        finally:
+            release.set()
+            await telemetry.close()
+
+
+@pytest.mark.asyncio
+async def test_failed_trace_collector_backs_off_then_resumes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = 100.0
+    monkeypatch.setattr("hotshop_agent.observability.time.perf_counter", lambda: clock)
+    calls = 0
+
+    def collect(_request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(503 if calls == 1 else 202)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(collect)) as client:
+        telemetry = Telemetry(Settings(trace_sample_ratio=1), client)
+        async with telemetry.span("first"):
+            pass
+        await telemetry.close()
+        for _ in range(20):
+            async with telemetry.span("collector.unavailable"):
+                pass
+        await telemetry.close()
+        assert calls == 1
+        clock += 31
+        async with telemetry.span("collector.recovered"):
+            pass
+        await telemetry.close()
+        assert calls == 2

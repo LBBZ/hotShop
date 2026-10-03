@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import shutil
 import sys
@@ -24,6 +25,7 @@ from hotshop_agent.knowledge import (
     KnowledgeDocument,
     Visibility,
     chunk_documents,
+    knowledge_version,
     load_documents,
 )
 from hotshop_agent.metrics import AgentMetrics
@@ -41,7 +43,7 @@ from hotshop_agent.rag import (
 from hotshop_agent.registry import ADMIN_TOOLS, USER_TOOLS
 
 SCHEMA_VERSION = "1.0"
-DATASET_VERSION = "task17-v2"
+DATASET_VERSION = "task17-v3"
 SuiteName = Literal["quick", "full"]
 CategoryName = Literal[
     "retrieval",
@@ -57,6 +59,7 @@ ActionName = Literal[
     "citation",
     "refusal_empty",
     "refusal_low",
+    "refusal_unrelated",
     "document_injection",
     "user_injection",
     "visibility",
@@ -83,6 +86,7 @@ ACTION_CATEGORIES: dict[str, str] = {
     "citation": "citation",
     "refusal_empty": "refusal",
     "refusal_low": "refusal",
+    "refusal_unrelated": "refusal",
     "document_injection": "security",
     "user_injection": "security",
     "visibility": "authorization",
@@ -150,7 +154,7 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run deterministic TASK-17 evaluations")
     parser.add_argument("--suite", choices=("quick", "full"), required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--dataset", type=Path, default=Path("evals/task17-v2.jsonl"))
+    parser.add_argument("--dataset", type=Path, default=Path("evals/task17-v3.jsonl"))
     parser.add_argument("--knowledge", type=Path, default=Path("knowledge"))
     return parser
 
@@ -380,6 +384,11 @@ async def _evaluate(case: dict[str, Any], runtime: Runtime, knowledge: Path) -> 
     if action == "lifecycle":
         return await _lifecycle(runtime, knowledge)
 
+    if (
+        action in {"retrieval", "citation", "refusal_unrelated"}
+        and route.kind is not RouteKind.STATIC
+    ):
+        return False
     document_types = route.document_types or (DocumentType.FAQ,)
     selected_retriever = runtime.retriever
     if action == "tenant":
@@ -396,6 +405,8 @@ async def _evaluate(case: dict[str, Any], runtime: Runtime, knowledge: Path) -> 
         identity=identity,
         document_types=document_types,
     )
+    if action == "refusal_unrelated":
+        return result.outcome == "empty" and not result.citations
     if action == "visibility":
         forbidden = case["forbiddenDocumentId"]
         return all(hit.chunk.documentId != forbidden for hit in result.hits)
@@ -407,9 +418,18 @@ async def _evaluate(case: dict[str, Any], runtime: Runtime, knowledge: Path) -> 
     if not any(hit.chunk.documentId == expected for hit in result.hits[:3]):
         return False
     if action == "citation":
-        citation = next(item for item in result.citations if item.documentId == expected)
-        payload = citation.model_dump()
-        return set(payload) == {"documentId", "title", "version", "source", "chunkId"}
+        if result.hits[0].chunk.documentId != expected:
+            return False
+        return [citation.model_dump() for citation in result.citations] == [
+            {
+                "documentId": hit.chunk.documentId,
+                "title": hit.chunk.title,
+                "version": hit.chunk.documentVersion,
+                "source": hit.chunk.source,
+                "chunkId": hit.chunk.chunkId,
+            }
+            for hit in result.hits
+        ]
     return True
 
 
@@ -459,11 +479,11 @@ async def _lifecycle(runtime: Runtime, knowledge: Path) -> bool:
                 for hit in hits
             )
             and all(
-                hit.chunk.documentVersion != "1.0.0"
+                hit.chunk.documentVersion == "2.0.0"
                 for hit in hits
                 if hit.chunk.documentId == "faq-account-security"
             )
-            and not campaign_hits
+            and {hit.chunk.documentId for hit in campaign_hits} == {"campaign-general-rules-en"}
         )
     await runtime.indexer.rebuild(knowledge)
     return valid
@@ -518,6 +538,14 @@ async def run(suite: str, dataset: Path, knowledge: Path) -> dict[str, Any]:
     return {
         "schemaVersion": SCHEMA_VERSION,
         "datasetVersion": DATASET_VERSION,
+        "datasetSha256": hashlib.sha256(dataset.read_bytes()).hexdigest(),
+        "knowledgeVersion": knowledge_version(
+            chunk_documents(
+                load_documents(knowledge, trusted_tenant=runtime.settings.knowledge_tenant_id),
+                chunk_size=runtime.settings.knowledge_chunk_size,
+                overlap=runtime.settings.knowledge_chunk_overlap,
+            )
+        ),
         "suite": suite,
         "provider": {
             "model": "fake",

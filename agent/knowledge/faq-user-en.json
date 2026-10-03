@@ -1,0 +1,13 @@
+{
+  "tenantId": "hotshop",
+  "documentId": "faq-user-support-en",
+  "documentVersion": "1.1.0",
+  "documentType": "FAQ",
+  "visibility": "USER",
+  "title": "Support and issue reports",
+  "source": "https://github.com/LBBZ/hotShop/blob/master/docs/product/help.md#support",
+  "locale": "en",
+  "effectiveFrom": null,
+  "effectiveUntil": null,
+  "content": "Where is the help center? This demo has no built-in help center or customer support tickets. Contact project support through GitHub Issues with the version, reproduction steps and sanitized errors. Never publish personal data, passwords, tokens, cookies or private keys."
+}

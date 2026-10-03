@@ -35,6 +35,13 @@ Use both keys when investigating:
 4. Use low-sensitive `event`, `outcome`, and business summary fields to confirm MySQL/Outbox/final
    state. Never paste credentials into Explore queries.
 
+Agent tracing is best effort: at most two exports run concurrently, with a two-second request
+timeout and a 30-second backoff after collector failure. Spans produced while saturated or in
+backoff are dropped. This bounds work when the optional collector is absent. Use structured
+request logs alongside traces; a missing span does not establish that a request never ran.
+`agent.token_exchange.failed` distinguishes failures before run creation from
+`agent.rag.retrieval` failures after the static route starts.
+
 ## Repeatable verification
 
 The verification script uses health/readiness polling with bounded exponential backoff. It loads

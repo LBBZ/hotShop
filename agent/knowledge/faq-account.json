@@ -1,13 +1,13 @@
 {
   "tenantId": "hotshop",
   "documentId": "faq-account-security",
-  "documentVersion": "1.0.0",
+  "documentVersion": "1.1.0",
   "documentType": "FAQ",
   "visibility": "PUBLIC",
   "title": "账户与登录常见问题",
-  "source": "https://docs.hotshop.local/faq/account-security",
+  "source": "https://github.com/LBBZ/hotShop/blob/master/docs/product/help.md#account",
   "locale": "zh-CN",
   "effectiveFrom": null,
   "effectiveUntil": null,
-  "content": "如何保护 HotShop 账户？请勿向他人透露访问令牌、短信验证码或密码。遇到登录异常时，应退出其他设备并通过官方入口重新登录。客服不会索要密码、完整令牌或私钥。"
+  "content": "如何保护 HotShop 账户？请勿透露密码、Token 或 Cookie。登录失败、登录状态未能恢复时应该怎么办？点击「重新登录」并输入用户名和密码，成功后返回原用户页面。当前没有短信登录、密码找回或退出所有设备的界面。"
 }

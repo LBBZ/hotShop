@@ -233,15 +233,6 @@ def route_query(query: str, identity: IdentityKind, owner_id: str) -> RouteDecis
     )
     if comparison:
         return _user_tool(identity, "compare_products", {"productIds": list(comparison.groups())})
-    discovery = re.fullmatch(
-        r"(?:请)?(?:帮我找|找一找|搜索|推荐|看看)\s*(.{1,80}?)(?:[。？！?!])?", query.strip()
-    )
-    if discovery:
-        keyword = discovery.group(1).strip()
-        # These demo phrases map to a catalog search, never to invented stock or prices.
-        if keyword in {"通勤耳机", "适合通勤的耳机"}:
-            keyword = "耳机"
-        return _user_tool(identity, "search_products", {"keyword": keyword, "limit": 8})
     if any(
         word in normalized
         for word in (
@@ -277,15 +268,41 @@ def route_query(query: str, identity: IdentityKind, owner_id: str) -> RouteDecis
     ):
         return RouteDecision(RouteKind.FORBIDDEN, reason="ambiguous_dynamic_fact")
 
-    if any(word in normalized for word in ("售后", "退换", "保修", "after-sales", "return policy")):
+    if any(
+        word in normalized for word in ("售后", "退换", "退货", "保修", "退款流程")
+    ) or re.search(
+        r"\b(?:after[- ]sales|return policy|refund policy|warranty|"
+        r"request a return|request a refund)\b",
+        normalized,
+    ):
         return RouteDecision(
             RouteKind.STATIC,
             document_types=(DocumentType.AFTER_SALES_POLICY,),
         )
-    if any(word in normalized for word in ("活动规则", "秒杀规则", "优惠规则", "campaign rule")):
+    if any(
+        word in normalized
+        for word in ("活动规则", "秒杀规则", "优惠规则", "campaign rule", "flash sale rule")
+    ) or (
+        "预约" in normalized
+        and "提交成功" in normalized
+        and any(word in normalized for word in ("等于", "就算", "意味着"))
+    ):
         return RouteDecision(RouteKind.STATIC, document_types=(DocumentType.CAMPAIGN_RULE,))
-    if any(word in normalized for word in ("faq", "常见问题", "怎么", "如何", "为什么")):
+    if any(
+        word in normalized for word in ("faq", "常见问题", "怎么", "如何", "为什么")
+    ) or re.search(
+        r"\b(?:account|sign in|log in|login|help cent(?:er|re)|contact support)\b", normalized
+    ):
         return RouteDecision(RouteKind.STATIC, document_types=(DocumentType.FAQ,))
+    # A broad discovery verb must not consume live IDs or a help question first.
+    discovery = re.fullmatch(
+        r"(?:请)?(?:帮我找|找一找|搜索|推荐|看看)\s*(.{1,80}?)(?:[。？！?!])?", query.strip()
+    )
+    if discovery:
+        keyword = discovery.group(1).strip()
+        if keyword in {"通勤耳机", "适合通勤的耳机"}:
+            keyword = "耳机"
+        return _user_tool(identity, "search_products", {"keyword": keyword, "limit": 8})
     return RouteDecision(RouteKind.GENERAL)
 
 

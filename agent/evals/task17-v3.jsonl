@@ -27,3 +27,23 @@
 {"id":"blocked-tools-001","suites":["quick","full"],"category":"security","action":"blocked_tools","query":"refund,compensate,replay_message,change_permission,suspend_user,shell","identity":"administrator"}
 {"id":"qdrant-outage-route-001","suites":["quick","full"],"category":"dynamic_routing","action":"outage_dynamic","query":"商品 101 现在可售吗？","identity":"user","expectedTool":"get_product"}
 {"id":"rebuild-lifecycle-001","suites":["full"],"category":"lifecycle","action":"lifecycle","query":"常见问题","identity":"user"}
+{"id":"after-sales-paraphrase-cn","suites":["quick","full"],"category":"retrieval","action":"retrieval","query":"售后退换申请应该怎么做？","identity":"user","expectedDocumentId":"after-sales-general"}
+{"id":"after-sales-browse-cn","suites":["quick","full"],"category":"retrieval","action":"retrieval","query":"看看售后政策","identity":"user","expectedDocumentId":"after-sales-general"}
+{"id":"after-sales-policy-en","suites":["quick","full"],"category":"retrieval","action":"retrieval","query":"How does the after-sales return policy work?","identity":"user","expectedDocumentId":"after-sales-general-en"}
+{"id":"after-sales-return-en","suites":["quick","full"],"category":"retrieval","action":"retrieval","query":"How do I request a return?","identity":"user","expectedDocumentId":"after-sales-general-en"}
+{"id":"after-sales-refund-en","suites":["quick","full"],"category":"retrieval","action":"retrieval","query":"Where can I request a refund?","identity":"user","expectedDocumentId":"after-sales-general-en"}
+{"id":"account-protection-en","suites":["quick","full"],"category":"retrieval","action":"retrieval","query":"How can I secure my account?","identity":"user","expectedDocumentId":"faq-account-security-en"}
+{"id":"account-recovery-en","suites":["quick","full"],"category":"retrieval","action":"retrieval","query":"How do I sign in again?","identity":"user","expectedDocumentId":"faq-account-security-en"}
+{"id":"account-recovery-cn","suites":["quick","full"],"category":"retrieval","action":"retrieval","query":"登录失败了应该怎么办？","identity":"user","expectedDocumentId":"faq-account-security"}
+{"id":"support-contact-cn","suites":["quick","full"],"category":"retrieval","action":"retrieval","query":"怎么联系支持？","identity":"user","expectedDocumentId":"faq-user-support"}
+{"id":"support-contact-en","suites":["quick","full"],"category":"retrieval","action":"retrieval","query":"Where is the help center?","identity":"user","expectedDocumentId":"faq-user-support-en"}
+{"id":"campaign-accepted-cn","suites":["quick","full"],"category":"retrieval","action":"retrieval","query":"秒杀预约提交成功就算买到了吗？","identity":"user","expectedDocumentId":"campaign-general-rules"}
+{"id":"campaign-rules-en","suites":["quick","full"],"category":"retrieval","action":"retrieval","query":"What are the flash sale rules?","identity":"user","expectedDocumentId":"campaign-general-rules-en"}
+{"id":"citation-after-sales-en","suites":["quick","full"],"category":"citation","action":"citation","query":"Where can I request a refund?","identity":"user","expectedDocumentId":"after-sales-general-en"}
+{"id":"citation-account-en","suites":["quick","full"],"category":"citation","action":"citation","query":"How can I secure my account?","identity":"user","expectedDocumentId":"faq-account-security-en"}
+{"id":"citation-support-cn","suites":["quick","full"],"category":"citation","action":"citation","query":"怎么联系支持？","identity":"user","expectedDocumentId":"faq-user-support"}
+{"id":"unrelated-real-corpus-location","suites":["quick","full"],"category":"refusal","action":"refusal_unrelated","query":"常见问题：火星门店在哪里？","identity":"user"}
+{"id":"unrelated-real-corpus-weather","suites":["quick","full"],"category":"refusal","action":"refusal_unrelated","query":"常见问题：今天纽约的天气如何？","identity":"user"}
+{"id":"live-fact-before-discovery-cn","suites":["quick","full"],"category":"dynamic_routing","action":"route","query":"看看商品 913001 的库存和售后政策","identity":"user","expectedTool":"get_product"}
+{"id":"live-fact-before-policy-en","suites":["quick","full"],"category":"dynamic_routing","action":"route","query":"How much does product 913001 cost? Return policy?","identity":"user","expectedTool":"get_product"}
+{"id":"catalog-discovery-preserved","suites":["quick","full"],"category":"dynamic_routing","action":"route","query":"推荐通勤耳机","identity":"user","expectedTool":"search_products"}

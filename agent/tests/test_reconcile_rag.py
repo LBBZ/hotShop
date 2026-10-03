@@ -18,16 +18,16 @@ from hotshop_agent.rag import InMemoryVectorSearch, RagRetriever
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("question", "outcome"),
+    ("question", "document"),
     [
-        ("售后申请应从哪里发起？", "hit"),
-        ("How does the after-sales return policy work?", "hit"),
-        # Original TASK-21 failure retained: feature hashing is not semantic paraphrase search.
-        ("售后退换申请应该怎么做？", "empty"),
+        ("售后申请应从哪里发起？", "after-sales-general"),
+        ("How does the after-sales return policy work?", "after-sales-general-en"),
+        # Version 1.1 sources explicitly cover the original TASK-21 paraphrase.
+        ("售后退换申请应该怎么做？", "after-sales-general"),
     ],
 )
 async def test_default_corpus_direct_questions_and_original_paraphrase(
-    question: str, outcome: str
+    question: str, document: str
 ) -> None:
     embedding = DeterministicEmbedding(128)
     chunks = chunk_documents(
@@ -45,17 +45,16 @@ async def test_default_corpus_direct_questions_and_original_paraphrase(
     result = await retriever.retrieve(
         question, identity=IdentityKind.USER, document_types=(DocumentType.AFTER_SALES_POLICY,)
     )
-    assert result.outcome == outcome
-    if outcome == "hit":
-        assert result.citations
-        for citation, hit in zip(result.citations, result.hits, strict=True):
-            assert citation.documentId == "after-sales-general"
-            assert citation.version == "1.0.0"
-            assert citation.chunkId == hit.chunk.chunkId
-            assert citation.source == "https://docs.hotshop.local/policies/after-sales"
-            assert "售后申请应从订单详情页发起" in hit.chunk.content
-    else:
-        assert not result.hits and not result.citations
+    assert result.outcome == "hit"
+    assert result.hits[0].chunk.documentId == document
+    assert result.citations[0].documentId == document
+    for citation, hit in zip(result.citations, result.hits, strict=True):
+        assert citation.version == "1.1.0"
+        assert citation.chunkId == hit.chunk.chunkId
+        assert citation.source.endswith("docs/product/help.md#after-sales")
+        assert "暂未提供退换货、退款或售后申请入口" in hit.chunk.content or (
+            "no return, exchange, refund or after-sales request form" in hit.chunk.content
+        )
 
 
 @pytest.mark.asyncio

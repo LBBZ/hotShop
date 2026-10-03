@@ -1,13 +1,13 @@
 {
   "tenantId": "hotshop",
   "documentId": "campaign-general-rules",
-  "documentVersion": "1.0.0",
+  "documentVersion": "1.1.0",
   "documentType": "CAMPAIGN_RULE",
   "visibility": "PUBLIC",
   "title": "秒杀活动通用规则",
-  "source": "https://docs.hotshop.local/campaigns/general-rules",
+  "source": "https://github.com/LBBZ/hotShop/blob/master/docs/product/help.md#campaigns",
   "locale": "zh-CN",
   "effectiveFrom": null,
   "effectiveUntil": null,
-  "content": "秒杀活动采用一人一单限制，提交成功仅表示获得处理资格，不等于订单已经创建。活动说明属于静态规则；具体商品是否可售、实时库存和预约处理结果必须以系统实时查询为准。"
+  "content": "秒杀活动规则里，预约提交成功就算买到了吗？活动预约被接受不等于订单已经创建。请在「我的预约」等待最终处理结果，再进入对应订单。具体参与条件以活动信息为准，商品是否可售、剩余数量和预约结果需要实时查询。"
 }

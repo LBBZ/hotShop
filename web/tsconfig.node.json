@@ -18,6 +18,7 @@
     "playwright.config.ts",
     "playwright.delivery.config.ts",
     "playwright.recovery.config.ts",
+    "playwright.auth-browsers.config.ts",
     "eslint.config.js",
     "e2e/**/*.ts"
   ]

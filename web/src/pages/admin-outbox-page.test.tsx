@@ -145,4 +145,25 @@ describe("AdminOutboxPage", () => {
     }
     await screen.findByRole("status");
   });
+
+  it("does not describe a lost replay response as a confirmed failure", async () => {
+    vi.spyOn(adminApi, "failedOutbox").mockResolvedValue({
+      items: [event],
+      hasMore: false,
+    });
+    const replay = vi
+      .spyOn(adminApi, "replayOutbox")
+      .mockRejectedValue(new DOMException("Deadline reached", "TimeoutError"));
+    const user = userEvent.setup();
+    render(<AdminOutboxPage />);
+    await user.click(await screen.findByRole("button", { name: "重放" }));
+    await user.type(screen.getByLabelText("操作原因（必填）"), "等待重放结果");
+    await user.click(
+      screen.getByRole("button", { name: `确认重放 ${event.eventId}` }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("尚未确认");
+    expect(screen.getByRole("alert")).toHaveTextContent("审计记录");
+    expect(screen.getByRole("button", { name: "取消" })).toBeEnabled();
+    expect(replay).toHaveBeenCalledTimes(1);
+  });
 });

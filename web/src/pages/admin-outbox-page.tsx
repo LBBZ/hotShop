@@ -47,9 +47,7 @@ export function AdminOutboxPage() {
         kind: "error",
         text: problem
           ? `${problem.detail}（代码 ${problem.code}，请求 ID ${problem.requestId}）`
-          : caught instanceof Error
-            ? caught.message
-            : "重放请求没有完成。",
+          : "重放结果尚未确认。请先刷新事件列表并核对审计记录，再决定是否重试。",
       });
     } finally {
       setBusy(false);

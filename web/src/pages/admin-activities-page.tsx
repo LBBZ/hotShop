@@ -58,7 +58,7 @@ export function AdminActivitiesPage() {
         kind: "error",
         text: problem
           ? `${problem.detail}（代码 ${problem.code}，请求 ID ${problem.requestId}）`
-          : "活动加载没有完成。",
+          : "加载结果尚未确认。请先核对活动状态与审计记录，再决定是否重试。",
       });
     } finally {
       setBusy(false);

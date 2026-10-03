@@ -169,6 +169,32 @@ try {
         await page.screenshot({ path: path.join(destination, `${device}-activity-warning.png`) });
         record("successful load with inconsistent inventory remains a warning");
       } finally { redisCommand("SET", `${prefix}:activity:${activityId}:stock`, "20", "KEEPTTL"); }
+      const loadPath = `**/admin/api/v1/flash-sales/${activityId}/load`;
+      let releaseResponse;
+      const withheld = new Promise(resolve => { releaseResponse = resolve; });
+      let upstreamCompleted = false;
+      let loadAttempts = 0;
+      await page.route(loadPath, async route => {
+        loadAttempts++;
+        const response = await route.fetch({ timeout: 10_000 });
+        assert.equal(response.status(), 200);
+        upstreamCompleted = true;
+        await withheld;
+        await route.abort("connectionreset").catch(() => undefined);
+      });
+      try {
+        await load();
+        await expect(page.getByRole("button", { name: "取消", exact: true })).toBeDisabled();
+        await expect(page.getByRole("alert")).toContainText("尚未确认", { timeout: 20_000 });
+        await expect(page.getByRole("alert")).toContainText("审计记录");
+        await expect(page.getByRole("button", { name: "取消", exact: true })).toBeEnabled();
+        assert.ok(upstreamCompleted, "The server completed even though the browser lost its response");
+        assert.equal(loadAttempts, 1, "No automatic replay after an ambiguous outcome");
+        record("committed load with withheld response ends as unconfirmed after deadline");
+      } finally {
+        releaseResponse();
+        await page.unroute(loadPath);
+      }
       assert.deepEqual(pageErrors, []);
       record("no page errors or horizontal body overflow");
     } finally { await context.close(); }

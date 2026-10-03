@@ -255,6 +255,7 @@ export const adminApi = {
         method: "POST",
         headers: jsonHeaders,
         body: JSON.stringify({ reason }),
+        signal: AbortSignal.timeout(15_000),
       },
     ),
   orders: async (
@@ -306,6 +307,7 @@ export const adminApi = {
       method: "POST",
       headers: jsonHeaders,
       body: JSON.stringify({ reason }),
+      signal: AbortSignal.timeout(15_000),
     }),
   auditLogs: (
     cursor?: string,

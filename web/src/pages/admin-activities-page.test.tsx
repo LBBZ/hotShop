@@ -113,4 +113,16 @@ describe("AdminActivitiesPage load outcome", () => {
       "本次库存核验一致",
     );
   });
+
+  it("treats a lost response as unconfirmed and asks for audit verification", async () => {
+    vi.spyOn(adminApi, "loadActivity").mockRejectedValue(
+      new DOMException("Deadline reached", "TimeoutError"),
+    );
+    await confirmLoad();
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("尚未确认");
+    expect(alert).toHaveTextContent("审计记录");
+    expect(screen.getByRole("button", { name: "取消" })).toBeEnabled();
+    expect(screen.getByRole("dialog")).toHaveTextContent("901");
+  });
 });

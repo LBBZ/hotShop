@@ -80,6 +80,8 @@ node script/check-docs.mjs
 
 活动重装仍是下一项需要先设计业务规则的工作：
 
+以下是本报告受测版本的判断；相同配置重载与库存核验已在后续[2026-10-04 验证](activity-reload-2026-10-04.md)中修正，已使用活动的运营变更仍待设计。
+
 - [装载器](../../domain/src/main/java/com/real/domain/service/seckill/FlashSaleActivityLoader.java)在写 Redis 前验证 `totalStock <= catalogStock`；已销售后的总配额与当前商品余量并不总能满足这个初次装载条件。
 - 订单创建和超时回库会推进活动 `version`，而 [装载 Lua](../../domain/src/main/resources/redis/load-flash-sale-activity-v2.lua)在已有 Stream 事件时拒绝更新版本。这保住了预约事实，却也限制正常运营更新。
 - 应先明确“配置版本、已承诺数量、可新增配额”各自的含义，再验证“售出一件 → 超时回库 → 重复装载”、同商品多个活动、普通购买及部分补偿等场景。直接放宽条件或用数据库当前库存覆盖 Redis，都不能证明库存守恒。

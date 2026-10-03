@@ -43,7 +43,7 @@ SHA-256；User 使用稳定数值 ID。
 | 幂等结果 | `...:idempotency:user:{userId}:{sha256(key)}` | Hash | 24h |
 | Reservation | `...:activity:{activityId}:reservation:{reservationNo}` | Hash | 接受时计算 `endsAt + 7d` |
 | 活动 Stream | `...:activity:{activityId}:reservations` | Stream | 无 TTL、无 `MAXLEN`；消费 ACK 不删除原始记录，目前无自动截断/归档 |
-| Stream Registry | `...:registry:reservation-streams` | Set | 无 TTL；由装载 Lua v2 原子登记，消费者不使用 `KEYS` |
+| Stream Registry | `...:registry:reservation-streams` | Set | 无 TTL；由装载 Lua v3 原子登记，消费者不使用 `KEYS` |
 | 装载 staging | `...:activity:{activityId}:load:{loadId}:{meta\|stock}` | 临时 Hash/String | 同一 Lua 内 rename 或删除，不跨请求保留 |
 
 预约 Lua 只按计算好的 Key 做 O(1) 访问，不使用 `KEYS` 或 `SCAN`。对账的 `XRANGE` 出现在

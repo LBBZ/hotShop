@@ -1,0 +1,255 @@
+{
+  "schemaVersion": 1,
+  "title": "Preserve loaded offers across inventory changes",
+  "date": "2026-10-04",
+  "timezone": "Asia/Shanghai",
+  "baselineCommit": "48b87c1645cdc464acd8588629831b7499a8b2ee",
+  "implementationCommit": "9fc68d6e520d2823825612b12a4a1b32ba601de0",
+  "scope": [
+    "Inventory-preserving reload of unchanged offers",
+    "Separate historical reservations from effective and committed inventory",
+    "Bounded atomic Redis observation",
+    "Honest incomplete-verification feedback"
+  ],
+  "javaTests": {
+    "newBehaviorRegressions": 8,
+    "newJointScenarios": 3,
+    "newPortalBoundaries": 5,
+    "baselineObserved": {
+      "tests": 3,
+      "failures": 3,
+      "errors": 0,
+      "skipped": 0,
+      "suite": "InventoryReconciliationJointContainerTest",
+      "portalNewTestsRunOnBaseline": false
+    },
+    "final": {
+      "tests": 25,
+      "passed": 25,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "suites": [
+        {
+          "suite": "com.real.portal.FlashSaleReservationIntegrationTest",
+          "tests": 17,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "suite": "com.real.admin.InventoryReconciliationJointContainerTest",
+          "tests": 6,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "suite": "com.real.admin.AdminFlashSaleActivityLoadServiceTest",
+          "tests": 2,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        }
+      ]
+    },
+    "environment": {
+      "jdk": "21.0.11",
+      "maven": "3.9.16",
+      "mysql": "8.4.11",
+      "redis": "8.8.3-alpine",
+      "runner": "eclipse-temurin:21-jdk",
+      "containerMemoryGiB": 2,
+      "javaOptions": "-Xmx512m -XX:ActiveProcessorCount=4",
+      "testcontainersHostOverride": "host.docker.internal"
+    },
+    "finishedAt": "2026-10-03T16:41:53Z",
+    "boundaries": [
+      "Real MySQL and Redis with production transaction services",
+      "MockMvc identity binding is not browser JWT authentication",
+      "Durable-history guard uses a directly constructed compensated row"
+    ]
+  },
+  "frontendChecks": {
+    "focusedActivityTestsPassed": 4,
+    "eslint": "passed",
+    "prettier": "passed with --end-of-line auto on Windows",
+    "browserScriptSyntax": "passed",
+    "typescriptAndViteProductionBuild": "passed in Web image build",
+    "adminImageBuild": "passed"
+  },
+  "realBrowser": {
+    "sourceCommit": "9fc68d6e520d2823825612b12a4a1b32ba601de0",
+    "workingTreeDirty": false,
+    "composeProject": "hotshop-task21-accept1002",
+    "startedAt": "2026-10-03T16:53:57.977Z",
+    "finishedAt": "2026-10-03T16:54:58.425Z",
+    "host": "Windows x64",
+    "node": "22.20.0",
+    "playwright": "1.57.0",
+    "chromium": "143.0.7499.4",
+    "devices": [
+      {
+        "name": "desktop",
+        "viewport": {
+          "width": 1440,
+          "height": 1000
+        }
+      },
+      {
+        "name": "mobile",
+        "emulation": "Pixel 7"
+      }
+    ],
+    "checksPassed": 18,
+    "results": [
+      {
+        "device": "desktop",
+        "scenario": "对账异常: signed cursor forward and back",
+        "status": "passed"
+      },
+      {
+        "device": "desktop",
+        "scenario": "待人工处理: signed cursor forward and back",
+        "status": "passed"
+      },
+      {
+        "device": "desktop",
+        "scenario": "支付状态: signed cursor forward and back",
+        "status": "passed"
+      },
+      {
+        "device": "desktop",
+        "scenario": "resolved findings remain reachable",
+        "status": "passed"
+      },
+      {
+        "device": "desktop",
+        "scenario": "late payments outside 24 hours remain reachable",
+        "status": "passed"
+      },
+      {
+        "device": "desktop",
+        "scenario": "payment outage stays local and retries with the same filters",
+        "status": "passed"
+      },
+      {
+        "device": "desktop",
+        "scenario": "successful load with inconsistent inventory remains a warning",
+        "status": "passed"
+      },
+      {
+        "device": "desktop",
+        "scenario": "committed load with withheld response ends as unconfirmed after deadline",
+        "status": "passed"
+      },
+      {
+        "device": "desktop",
+        "scenario": "no page errors or horizontal body overflow",
+        "status": "passed"
+      },
+      {
+        "device": "mobile",
+        "scenario": "对账异常: signed cursor forward and back",
+        "status": "passed"
+      },
+      {
+        "device": "mobile",
+        "scenario": "待人工处理: signed cursor forward and back",
+        "status": "passed"
+      },
+      {
+        "device": "mobile",
+        "scenario": "支付状态: signed cursor forward and back",
+        "status": "passed"
+      },
+      {
+        "device": "mobile",
+        "scenario": "resolved findings remain reachable",
+        "status": "passed"
+      },
+      {
+        "device": "mobile",
+        "scenario": "late payments outside 24 hours remain reachable",
+        "status": "passed"
+      },
+      {
+        "device": "mobile",
+        "scenario": "payment outage stays local and retries with the same filters",
+        "status": "passed"
+      },
+      {
+        "device": "mobile",
+        "scenario": "successful load with inconsistent inventory remains a warning",
+        "status": "passed"
+      },
+      {
+        "device": "mobile",
+        "scenario": "committed load with withheld response ends as unconfirmed after deadline",
+        "status": "passed"
+      },
+      {
+        "device": "mobile",
+        "scenario": "no page errors or horizontal body overflow",
+        "status": "passed"
+      }
+    ],
+    "cleanupVerified": true,
+    "auditRecordsRetained": true,
+    "screenshotReview": "Desktop and mobile activity warnings wrap and remain readable",
+    "boundary": "Real authentication and admin APIs with isolated query fixtures; lifecycle transactions are covered separately by Java tests"
+  },
+  "deployment": {
+    "sourceCommit": "9fc68d6e520d2823825612b12a4a1b32ba601de0",
+    "imageBuildWorkingTreeDirty": false,
+    "containers": [
+      {
+        "name": "hotshop-task21-accept1002-admin-service-1",
+        "image": "sha256:2e95ac4f790731d43f9a2fe94991364b52466a65fd11bc49a4b49b1cf63e0d63",
+        "status": "running",
+        "startedAt": "2026-10-03T16:53:20.591908354Z"
+      },
+      {
+        "name": "hotshop-task21-accept1002-web-demo-1",
+        "image": "sha256:4ae74a4ba92ce3bdb703996f1866a95ce1e68c0370b769003edd5c8dea2e2993",
+        "status": "running",
+        "startedAt": "2026-10-03T16:53:20.851841303Z"
+      },
+      {
+        "name": "hotshop-task21-shop1002-admin-service-1",
+        "image": "sha256:2e95ac4f790731d43f9a2fe94991364b52466a65fd11bc49a4b49b1cf63e0d63",
+        "status": "running",
+        "startedAt": "2026-10-03T16:55:41.34047398Z"
+      },
+      {
+        "name": "hotshop-task21-shop1002-web-demo-1",
+        "image": "sha256:4ae74a4ba92ce3bdb703996f1866a95ce1e68c0370b769003edd5c8dea2e2993",
+        "status": "running",
+        "startedAt": "2026-10-03T16:55:41.536740952Z"
+      }
+    ],
+    "mainDemoHttpStatus": 200,
+    "mainAdminStartup": "confirmed",
+    "databaseReset": false,
+    "olderEnvironmentsPaused": [
+      "hotshop-modernize-0930",
+      "hotshop-task21-accept0916r01"
+    ],
+    "volumesRetained": true
+  },
+  "retainedFailures": [
+    "Native Maven stopped during dependency resolution before business test results",
+    "Initial Docker run failed with engine 500/EOF; cause not established",
+    "Bridge gateway Testcontainers override failed to connect to Ryuk",
+    "Initial baseline compensation fixture asserted before retry completion; bounded waiting fixed the fixture",
+    "Initial implementation rejected existing total=2/available=1 initialization; original contract restored without rewriting its assertion"
+  ],
+  "limits": [
+    "Redis inspection is capped at 1000 Stream events; larger histories return incomplete verification",
+    "MySQL committed-quantity aggregation remains dependent on activity history size",
+    "Balance agreement is neither an atomic cross-store snapshot nor proof of completed order projection",
+    "Used-offer quota changes, pause/resume and lost-fact recovery remain separate work",
+    "No production capacity, Safari or physical-phone claim from this run",
+    "Hosted CI must be evaluated for the exact merged commit separately"
+  ]
+}

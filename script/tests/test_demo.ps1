@@ -7,6 +7,7 @@ $global:DemoImages = @{}
 $global:DemoMigrationExit = '0'
 $global:DemoMigratorMode = 'one'
 $global:DemoUnusedImages = @()
+$global:DemoBuildOption = 'v1'
 function docker {
     $global:LASTEXITCODE = 0
     $call = $args -join ' '
@@ -23,6 +24,7 @@ function docker {
             foreach ($name in @('admin-service','portal-service','task-service','agent-service','rabbitmq','web-demo')) {
                 $services[$name] = @{build=@{context=$name}}
             }
+            $services['agent-service'].build.args = @{option=$global:DemoBuildOption}
             @{services=$services} | ConvertTo-Json -Depth 5 -Compress
             return
         }
@@ -40,16 +42,17 @@ function docker {
     if ($args[0] -eq 'ps') { return }
     throw "Unexpected Docker operation: $call"
 }
-function git { $global:LASTEXITCODE = 0; 'agent/source.py'; 'portal/source.java' }
+function git { $global:LASTEXITCODE = 0; 'agent/source.py'; 'portal/source.java'; 'infrastructure/source.java' }
 function Invoke-WebRequest { }
 $savedProvider = $env:AGENT_MODEL_PROVIDER
 try {
-    New-Item -ItemType Directory -Force "$sandbox/script","$sandbox/agent","$sandbox/portal","$sandbox/.local/keys/hotshop" | Out-Null
+    New-Item -ItemType Directory -Force "$sandbox/script","$sandbox/agent","$sandbox/portal","$sandbox/infrastructure","$sandbox/.local/keys/hotshop" | Out-Null
     Copy-Item -LiteralPath "$root/script/demo.ps1" -Destination "$sandbox/script/demo.ps1"
     '${COMPOSE_PROJECT_NAME} ${AGENT_MODEL_PROVIDER}' | Set-Content "$sandbox/docker-compose.yml"
     '' | Set-Content "$sandbox/docker-compose.demo.yml"
     'agent-v1' | Set-Content "$sandbox/agent/source.py"
     'java-v1' | Set-Content "$sandbox/portal/source.java"
+    'shared-v1' | Set-Content "$sandbox/infrastructure/source.java"
     @'
 COMPOSE_PROJECT_NAME=hotshop
 ADMIN_IMAGE=hotshop-admin:local
@@ -75,6 +78,16 @@ AGENT_MODEL_PROVIDER=fake
     & "$sandbox/script/demo.ps1" -Action Start | Out-Null
     $builds = @($global:DemoCalls | Where-Object { $_ -match ' build ' })
     if ($builds.Count -ne 1 -or $builds[0] -notlike '*build agent-service') { throw 'Agent input change must build only Agent.' }
+    $global:DemoBuildOption = 'v2'
+    $global:DemoCalls.Clear()
+    & "$sandbox/script/demo.ps1" -Action Start | Out-Null
+    $builds = @($global:DemoCalls | Where-Object { $_ -match ' build ' })
+    if ($builds.Count -ne 1 -or $builds[0] -notlike '*build agent-service') { throw 'Resolved build argument change must build Agent.' }
+    'shared-v2' | Set-Content "$sandbox/infrastructure/source.java"
+    $global:DemoCalls.Clear()
+    & "$sandbox/script/demo.ps1" -Action Start | Out-Null
+    $builds = @($global:DemoCalls | Where-Object { $_ -match ' build ' })
+    if ($builds.Count -ne 3 -or @($builds | Where-Object { $_ -match 'build (agent-service|rabbitmq|web-demo)$' }).Count) { throw 'Shared Java inputs must rebuild the three Java services.' }
     $global:DemoMigrationExit = '7'
     $failed = $false
     try { & "$sandbox/script/demo.ps1" -Action Start | Out-Null } catch {

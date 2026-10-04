@@ -61,13 +61,13 @@ corepack pnpm@10.15.0 api:check
 
 浏览器验证按运行环境选择入口：
 
-| 范围                | 入口（从仓库根目录执行）                                        | 依赖                                                                  |
-| ------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------- |
-| 快速页面/交互回归   | `corepack pnpm@10.15.0 --dir web test:e2e`                      | Vite 自动启动；默认使用 mock，真实 Compose 规格未启用                 |
-| 真实交易与故障路径  | `pwsh -NoProfile -File script/ci/verify-task19-e2e.ps1`            | Docker/Compose 和 PowerShell 7；仅在 GitHub 托管 CI 上创建并清理测试资源      |
-| 构建后的 Nginx 应用 | `corepack pnpm@10.15.0 --dir web test:delivery`                 | 已启动本地演示；默认 `http://127.0.0.1:18080`，覆盖桌面与手机         |
-| 跨浏览器登录恢复    | `node script/verify-auth-browsers.mjs <项目名> <Web地址>`       | 已启动本机演示；Chromium、Firefox、WebKit 与手机尺寸 WebKit       |
-| 后台排障与活动核验  | `node script/verify-admin-investigation.mjs <项目名> <Web地址>` | 已启动本机演示；真实 MySQL / Redis，桌面 Chromium 与 Pixel 7 模拟 |
+| 范围                | 入口（从仓库根目录执行）                                        | 依赖                                                                     |
+| ------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| 快速页面/交互回归   | `corepack pnpm@10.15.0 --dir web test:e2e`                      | Vite 自动启动；默认使用 mock，真实 Compose 规格未启用                    |
+| 真实交易与故障路径  | `pwsh -NoProfile -File script/ci/verify-task19-e2e.ps1`         | Docker/Compose 和 PowerShell 7；仅在 GitHub 托管 CI 上创建并清理测试资源 |
+| 构建后的 Nginx 应用 | `corepack pnpm@10.15.0 --dir web test:delivery`                 | 已启动本地演示；默认 `http://127.0.0.1:18080`，覆盖桌面与手机            |
+| 跨浏览器登录恢复    | `node script/verify-auth-browsers.mjs <项目名> <Web地址>`       | 已启动本机演示；Chromium、Firefox、WebKit 与手机尺寸 WebKit              |
+| 后台排障与活动核验  | `node script/verify-admin-investigation.mjs <项目名> <Web地址>` | 已启动本机演示；真实 MySQL / Redis，桌面 Chromium 与 Pixel 7 模拟        |
 
 真实交易测试通过 User Mock Checkout API 发起支付，经过 Outbox → RabbitMQ → Task → 签名回调 → timeline/SSE；不会以浏览器路由 mock 或测试侧直接回调代替交易链路。测试定义与既往结果见 [用户交易链路](../docs/architecture/user-transaction-journey.md) 和 [质量报告](../docs/quality)。
 

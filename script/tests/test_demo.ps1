@@ -104,7 +104,7 @@ AGENT_MODEL_PROVIDER=fake
     $savedState | Set-Content $stateFile
     $envFile = "$sandbox/.local/keys/hotshop/.env.demo"
     $savedConfig = Get-Content -Raw $envFile
-    Remove-Item $envFile
+    Remove-Item -LiteralPath $envFile -Force
     $global:DemoCalls.Clear()
     try { & "$sandbox/script/demo.ps1" -Action Start | Out-Null; throw 'Missing configuration accepted.' }
     catch { if ($_.Exception.Message -notlike '*local state remains*') { throw } }

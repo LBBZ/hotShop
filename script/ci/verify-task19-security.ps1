@@ -5,9 +5,11 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+. (Join-Path $PSScriptRoot 'hosted-runner.ps1')
+Assert-HotShopHostedRunner
+$root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "../.."))
 $script:Task19Root = $root
-. (Join-Path $PSScriptRoot "task19-common.ps1")
+. (Join-Path $PSScriptRoot "../task19-common.ps1")
 $suffix = [Guid]::NewGuid().ToString("N").Substring(0, 12)
 $project = "hotshop-task19-$suffix"
 if (-not $EvidenceDirectory) {

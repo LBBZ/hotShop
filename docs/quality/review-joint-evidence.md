@@ -21,9 +21,7 @@
 
 在基线 `a3e7a6c55040bbebc8760750af4b5cfcfd0406aa` 上先执行新正式回归，再合入功能代码：
 
-```powershell
-docker run --rm --name hotshop-review-joint-red --mount type=bind,source=D:/Codex/Projects/hotShop-review-joint,target=/workspace --mount type=volume,source=hotshop-task04-m2,target=/root/.m2 --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal -w /workspace eclipse-temurin:21-jdk sh ./mvnw -B -ntp -pl admin -am '-Dtest=InventoryReconciliationJointContainerTest#staleHttpFormCannotUndoRealOrdinaryOrder' '-Dsurefire.failIfNoSpecifiedTests=false' test
-```
+[本地运行入口](../delivery/demo.md)
 
 **Tests run: 1, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 55.31 s**；断言 `JSON path "stock" expected:<99> but was:<100>`。此处保存实际输出摘录，不提交完整 Maven 构建日志。这比原诊断 SQL 多覆盖了真实 HTTP DTO、事务、MyBatis 与订单业务服务。
 

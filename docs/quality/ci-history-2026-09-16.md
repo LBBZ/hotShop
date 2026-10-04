@@ -81,36 +81,7 @@ Java/Agent/Web/OpenAPI/Docker job 单独设为 required，否则纯文档 PR 的
 
 仓库的工具链验证可完全通过 Docker 执行：
 
-```bash
-docker run --rm -v "$PWD:/repo" -v /var/run/docker.sock:/var/run/docker.sock \
-  -w /repo eclipse-temurin:21-jdk-alpine@sha256:1ff763083f2993d57d0bf374ab10bb3e2cb873af6c13a04458ebbd3e0337dc76 \
-  ./mvnw -B -ntp clean verify
-
-docker build --target test -t hotshop-agent:ci-test -f agent/Dockerfile agent
-docker run --rm --network none --entrypoint python hotshop-agent:ci-test -m ruff check .
-docker run --rm --network none --entrypoint python hotshop-agent:ci-test -m ruff format --check .
-docker run --rm --network none --entrypoint python hotshop-agent:ci-test -m mypy --no-incremental src tests
-docker run --rm --network none -e PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
-  -e AGENT_MODEL_PROVIDER=fake -e AGENT_EMBEDDING_PROVIDER=deterministic \
-  --entrypoint python hotshop-agent:ci-test -m pytest -m 'not qdrant' \
-  -p pytest_asyncio.plugin -p no:cacheprovider
-
-# coverage 命令在上述显式 asyncio 插件之外只增加 pytest-cov：
-# -p pytest_cov.plugin --cov=hotshop_agent --cov-report=xml --cov-report=html
-# quick/full eval 同样设置 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1；full 只连接 internal Qdrant network。
-
-docker run --rm -v "$PWD:/repo" -w /repo/web \
-  mcr.microsoft.com/playwright:v1.57.0-noble@sha256:3bed4b1a12f2338642f3d8cba28e291deef3c66bd4a964bbeb3e57bbff511dbd \
-  bash -lc \
-  'corepack enable && corepack prepare pnpm@10.15.0 --activate && pnpm install --frozen-lockfile && pnpm check && CI=true pnpm exec playwright test e2e/smoke.spec.ts'
-
-docker compose --env-file .env.example config --quiet
-docker run --rm -v "$PWD:/repo" -w /repo \
-  rhysd/actionlint@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9
-docker run --rm -v "$PWD:/repo" -w /repo \
-  zricethezav/gitleaks@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854 \
-  git --redact --config .gitleaks.toml --log-opts=HEAD --no-banner
-```
+[本地运行入口](../delivery/demo.md)
 
 Windows PowerShell 用 `${PWD}` 替换 `$PWD`，Docker Desktop 的嵌套 Testcontainers 验证还需要挂载
 `/var/run/docker.sock`；必要时设置 `TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal`。

@@ -2,11 +2,13 @@
 param()
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot '../hosted-runner.ps1')
+Assert-HotShopHostedRunner
 $root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\.."))
 $script:Task19Root = $root
 . (Join-Path $root "script\task19-common.ps1")
-$verification = Join-Path $root "script\verify-task19-e2e.ps1"
-$agentOpenApi = Join-Path $root "script\generate-agent-openapi.ps1"
+$verification = Join-Path $root "script\ci\verify-task19-e2e.ps1"
+$agentOpenApi = Join-Path $root "script\ci\generate-agent-openapi.ps1"
 $probeImage = "alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce"
 $runId = [Guid]::NewGuid().ToString("N").Substring(0, 12)
 $evidenceRoot = Join-Path $root "target\task19-ownership-regression\$runId"

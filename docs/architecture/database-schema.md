@@ -191,8 +191,8 @@ V1.3 将 actor、delegated actor、action、resource、result 和 source 的调�
 首次启动：
 
 ```powershell
-docker compose --env-file .env.example up -d --wait
-$migrationIds = @(docker compose --env-file .env.example ps -a -q database-migrator)
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent up -d --wait
+$migrationIds = @(docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent ps -a -q database-migrator)
 if ($LASTEXITCODE -ne 0 -or $migrationIds.Count -ne 1) { throw 'Cannot identify the migrator' }
 $migrationExit = docker wait $migrationIds[0]
 if ($LASTEXITCODE -ne 0 -or $migrationExit -ne '0') { throw 'Database migration failed' }
@@ -204,14 +204,14 @@ app profile 也通过 `service_completed_successfully` 阻止三个 Java 进程�
 同一数据库再次启动或显式执行：
 
 ```powershell
-docker compose --env-file .env.example run --rm database-migrator migrate
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent run --rm database-migrator migrate
 ```
 
 应显示 schema 已是最新，新增迁移数为 0。checksum 与历史校验：
 
 ```powershell
-docker compose --env-file .env.example run --rm database-migrator validate
-docker compose --env-file .env.example run --rm database-migrator info
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent run --rm database-migrator validate
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent run --rm database-migrator info
 ```
 
 若 validate 失败，不得编辑历史表、手改结构或用 `repair` 掩盖原因；应恢复版本文件或追加纠正迁移。
@@ -229,9 +229,9 @@ docker compose --env-file .env.example run --rm database-migrator info
 默认 `baselineOnMigrate=false` 会让非空未知 schema 的普通 `migrate` 失败，防止误接管。确认预检后显式：
 
 ```powershell
-docker compose --env-file .env.example run --rm database-migrator -baselineVersion=0 baseline
-docker compose --env-file .env.example run --rm database-migrator migrate
-docker compose --env-file .env.example run --rm database-migrator validate
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent run --rm database-migrator -baselineVersion=0 baseline
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent run --rm database-migrator migrate
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent run --rm database-migrator validate
 ```
 
 版本 `1.0` 创建新结构，`1.1` 复制旧数据并按依赖顺序移除旧四表和旧
@@ -245,13 +245,13 @@ docker compose --env-file .env.example run --rm database-migrator validate
 确定性开发数据：
 
 ```powershell
-docker compose --env-file .env.example exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql --user=root --database="$MYSQL_DATABASE" < /opt/hotshop/data/dev-data.sql'
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql --user=root --database="$MYSQL_DATABASE" < /opt/hotshop/data/dev-data.sql'
 ```
 
 确定性压测数据默认 seed=42、10,000 用户、1,000 商品：
 
 ```powershell
-docker compose --env-file .env.example exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql --user=root --database="$MYSQL_DATABASE" < /opt/hotshop/data/load-data.sql'
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql --user=root --database="$MYSQL_DATABASE" < /opt/hotshop/data/load-data.sql'
 ```
 
 需要其他规模时，把 `load-data.sql` 复制到仓库外并只调整开头的 seed/count 默认值，再显式输入 MySQL；

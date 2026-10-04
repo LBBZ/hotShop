@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const [project, baseURL] = process.argv.slice(2);
-assert.match(project ?? "", /^hotshop-task21-[a-z0-9]{8,24}$/);
+assert.match(project ?? "", /^hotshop$/);
 assert.ok(existsSync(path.join(root, ".local/keys", project, ".env.demo")));
 const url = new URL(baseURL);
 assert.ok(["http:", "https:"].includes(url.protocol));

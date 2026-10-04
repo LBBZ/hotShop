@@ -85,8 +85,8 @@ actor/result/source仍是与数据库CHECK一致的封闭枚举。新增这些�
 ## 6. 验证命令
 
 ```powershell
-docker compose --env-file .env.example run --rm database-migrator migrate
-docker compose --env-file .env.example run --rm database-migrator validate
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent run --rm database-migrator migrate
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent run --rm database-migrator validate
 python .\script\check_openapi_compatibility.py
 ```
 

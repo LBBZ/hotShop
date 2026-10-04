@@ -217,7 +217,7 @@ def repository_dockerfiles(root: Path) -> list[Path]:
 def check_cleanup_powershell(root: Path) -> list[str]:
     """Protect the cross-version native invocation and final cleanup boundary."""
     errors: list[str] = []
-    verification = root / "script" / "verify-task16-compose.ps1"
+    verification = root / "script" / "ci" / "verify-task16-compose.ps1"
     native_test = root / "script" / "ci" / "tests" / "test_native_cleanup.ps1"
     ownership_test = (
         root / "script" / "ci" / "tests" / "test_compose_cleanup_ownership.ps1"

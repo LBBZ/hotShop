@@ -89,14 +89,12 @@ Redis 以本次活动装载的 `initialAvailableStock` 为基准，减去尚未�
 | Agent 质量 | Ruff lint通过；严格mypy：54文件通过；两个变更Python文件格式通过。全量format退出1，仅原基线既有的 `tests/test_registry.py`，原文件未修改，同镜像基线复验也失败。 |
 | 前端：Node22.20.0、corepack pnpm@10.15.0 | **86 tests／19 files通过**；format:check、lint、typecheck、build均退出0。 |
 | 真实索引升级 PowerShell 入口 | `script/tests/test_reconciliation_index_upgrade.ps1` 退出0：第一步只处理一页，恢复后完整覆盖160成员，逐个验证ZSET成员且原SET完整。 |
-| 运行时 OpenAPI | `script/generate-openapi.ps1 -UseExistingPackages` 退出0，从最终verify生成的应用包导出；public/user/admin文档与baseline相同。 |
+| 运行时 OpenAPI | `script/ci/generate-openapi.ps1 -UseExistingPackages` 退出0，从最终verify生成的应用包导出；public/user/admin文档与baseline相同。 |
 | 契约及生成客户端门禁 | `script/check_openapi_compatibility.py` 四域通过；pnpm `api:check`、`api:check:admin`、`api:check:agent` 全部退出0，使用项目固定OpenAPI Generator7.14.0。 |
 
 Java 最终实际入口：
 
-```powershell
-docker run --rm --name hotshop-review-final-java --mount type=bind,source=D:/Codex/Projects/hotShop-review-integration,target=/workspace --mount type=volume,source=hotshop-task04-m2,target=/root/.m2 --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal -w /workspace eclipse-temurin:21-jdk sh ./mvnw -B -ntp -fae verify
-```
+[本地运行入口](../delivery/demo.md)
 
 最终通过前的失败及重跑原因均保留：第一次在 `d9494398` 因3处既有迁移数量／版本断言过期失败；精确更新为11条及1.10，并加强旧数据和索引核验。第二次在 `d534c86` 出现1次种子数据初始化 TCP/JDBC Connect timed out，20项对账通过、该项未进入业务断言；无先前pause残留证据，具体网络原因未确定，同代码重跑不再出现。第三次同代码对账21项通过，但暴露2处Portal迁移夹具过期以及联合测试的2个旧缓存响应断言失败。缓存修复后定向运行2项通过，完整业务测试继续发现 NOGROUP；为其另写红测再修复，最终上述313项全通过。详细摘要见 [前两轮](review-fixes-2026-09-15/integration-first-attempts.txt)、[联合失败](review-fixes-2026-09-15/integration-joint-before.txt) 及 [联合证据](review-joint-evidence.md)。
 
@@ -135,30 +133,7 @@ docker run --rm --name hotshop-review-final-java --mount type=bind,source=D:/Cod
 
 以下命令在集成 worktree 执行；重型 Java 测试与 OpenAPI 导出串行运行。Docker 必须可用；使用现有本地测试镜像与缓存。命令不执行 clean、部署或用户数据库 SQL。
 
-```powershell
-Set-Location D:/Codex/Projects/hotShop-review-integration
-git branch --show-current
-git rev-parse HEAD
-git diff --check a3e7a6c55040bbebc8760750af4b5cfcfd0406aa HEAD
-
-docker run --rm --mount type=bind,source=D:/Codex/Projects/hotShop-review-integration,target=/workspace --mount type=volume,source=hotshop-task04-m2,target=/root/.m2 --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal -w /workspace eclipse-temurin:21-jdk sh ./mvnw -B -ntp '-Dtest=InventoryEditContainerTest,AdminInventoryApiTest,InventoryReconciliationJointContainerTest,SeckillOrderReliabilityContainerTest,SeckillPaymentExpiredDeliveryContainerTest,SchemaConstraintTest,V15ToV16MigrationTest,LegacyTakeoverTest' '-Dsurefire.failIfNoSpecifiedTests=false' verify
-
-docker run --rm --network none --mount type=bind,source=D:/Codex/Projects/hotShop-review-integration,target=/review,readonly -w /review/agent -e PYTHONPATH=/review/agent/src -e PYTHONDONTWRITEBYTECODE=1 --entrypoint python hotshop-agent:task20-test -m pytest -o addopts= -p no:cacheprovider -p pytest_asyncio.plugin tests/test_circuit_lifecycle.py tests/test_reliability.py tests/test_cancellation.py --tb=short -q
-
-corepack pnpm@10.15.0 --dir web install --frozen-lockfile
-corepack pnpm@10.15.0 --dir web test src/pages/admin-products-page.test.tsx
-corepack pnpm@10.15.0 --dir web typecheck
-& ./script/tests/test_reconciliation_index_upgrade.ps1
-
-# 上面的 verify 已构建当前 HEAD 的应用包。
-& ./script/generate-openapi.ps1 -UseExistingPackages
-docker run --rm --network none --mount type=bind,source=D:/Codex/Projects/hotShop-review-integration,target=/review,readonly -w /review --entrypoint python hotshop-agent:task20-test script/check_openapi_compatibility.py
-$env:HOTSHOP_OPENAPI_GENERATOR_DOCKER='1'
-corepack pnpm@10.15.0 --dir web api:check
-corepack pnpm@10.15.0 --dir web api:check:admin
-corepack pnpm@10.15.0 --dir web api:check:agent
-git status --short
-```
+[本地运行入口](../delivery/demo.md)
 
 运行时导出脚本会创建隔离 MySQL/network 并回收容器/network；其现有清理流程可能遗留 MySQL 匿名卷。复验时记录该次容器 Mounts，仅回收经确认属于该次调用且无容器引用的卷，不能全局 prune。主 agent 本次的归属核验和清理结果见集成结果。
 
@@ -183,11 +158,7 @@ git status --short
 
 在 `D:/Codex/Projects/hotShop-review-integration` 执行；Maven Wrapper 3.9.16 / Temurin 21，真实隔离 MySQL、Redis、RabbitMQ Testcontainers。主机 Asia/Shanghai、容器 UTC，未改变测试环境或时区。
 
-```powershell
-docker run --rm --name hotshop-review-dedup-integration --mount type=bind,source=D:/Codex/Projects/hotShop-review-integration,target=/workspace --mount type=volume,source=hotshop-task04-m2,target=/root/.m2 --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal -w /workspace eclipse-temurin:21-jdk sh ./mvnw -B -ntp '-Dtest=SeckillOrderReliabilityContainerTest,InventoryReconciliationJointContainerTest,InventoryEditContainerTest,SeckillPaymentExpiredDeliveryContainerTest' '-Dsurefire.failIfNoSpecifiedTests=false' verify
-git diff --check ff7e65ff6c1a1a03f70b5b6d0f6906b3d849397a HEAD
-git status --short
-```
+[本地运行入口](../delivery/demo.md)
 
 上述命令也是原验收对话的最小独立复验入口（必须在当前集成分支执行）。本次未重跑前端、Agent、OpenAPI 全链门禁，也未运行完整故障矩阵、Qdrant、浏览器或长时压测；这些代码/契约本次无变更，不将此前执行结果冒称为本次结果。没有全项目终验声明。
 

@@ -10,9 +10,7 @@
 
 从仓库根目录启动：
 
-```powershell
-pwsh -NoProfile -File ./script/demo.ps1 -Action Start -ProjectName hotshop-task21-accept1002 -WebPort 18082 -TimeoutSeconds 600
-```
+[本地运行入口](../delivery/demo.md)
 
 界面修正后重新构建 `web-demo`，再从 `web/` 执行最终验收：
 

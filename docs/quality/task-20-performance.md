@@ -40,7 +40,7 @@ new-intent 键仍包含 RunId、activityId、scenario、iteration；replay 专�
 在提交 A 的干净工作树上执行以下命令，退出码 0：
 
 ```powershell
-pwsh -NoProfile -File .\script\verify-task20-performance.ps1 -Profile target-5k -RunId run-reconcile02-default-0915-01
+pwsh -NoProfile -File .\script\ci\verify-task20-performance.ps1 -Profile target-5k -RunId run-reconcile02-default-0915-01
 ```
 
 这是默认 target-5k 命令，仅显式指定 RunId；没有传 Rate、VUs、Duration、Warmup、SkipBuild
@@ -58,7 +58,7 @@ pwsh -NoProfile -File .\script\verify-task20-performance.ps1 -Profile target-5k 
 再次复现时可原样执行自动生成全新 RunId 的默认命令：
 
 ```powershell
-pwsh -NoProfile -File .\script\verify-task20-performance.ps1 -Profile target-5k
+pwsh -NoProfile -File .\script\ci\verify-task20-performance.ps1 -Profile target-5k
 ```
 
 固定证据 RunId 已非空，再次使用会被拒绝。正式 summary：
@@ -116,7 +116,7 @@ Prometheus 必需查询 request-count / new-intent P99 / scrape-up 样本数为 
 ```powershell
 pwsh -NoProfile -File script/ci/tests/test_task20_planning.ps1
 pwsh -NoProfile -File script/ci/tests/test_task20_policy.ps1
-pwsh -NoProfile -File script/verify-task20-static.ps1
+pwsh -NoProfile -File script/ci/verify-task20-static.ps1
 pwsh -NoProfile -File script/ci/tests/test_task20_cleanup.ps1
 ```
 

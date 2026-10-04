@@ -76,17 +76,20 @@ pnpm exec playwright test e2e/smoke.spec.ts e2e/storefront.spec.ts
 
 `pnpm check` 包含格式、lint、类型检查、单元测试、构建和 public/user/admin/Agent 四组客户端漂移检查。`pnpm api:check:admin`、`pnpm api:check:agent` 可用于定向检查。上面的 Playwright 套件验证桌面和移动页面，真实服务验证见 [CI 说明](docs/quality/ci.md)。
 
-Agent 可以直接复用固定测试镜像，避免本机 Python 与插件污染：
+Agent 本地检查使用 Python 3.12 虚拟环境：
 
 ```powershell
-docker build --target test -t hotshop-agent:local-test -f agent/Dockerfile agent
-docker run --rm --network none --entrypoint python hotshop-agent:local-test -m ruff check .
-docker run --rm --network none --entrypoint python hotshop-agent:local-test -m ruff format --check .
-docker run --rm --network none --entrypoint python hotshop-agent:local-test -m mypy --no-incremental src tests
-docker run --rm --network none -e AGENT_MODEL_PROVIDER=fake -e AGENT_EMBEDDING_PROVIDER=deterministic --entrypoint python hotshop-agent:local-test -m pytest -m 'not qdrant' -p pytest_asyncio.plugin -p no:cacheprovider
+cd agent
+python -m venv .venv
+# Windows: .venv/Scripts/Activate.ps1; Linux/macOS: source .venv/bin/activate
+python -m pip install -r requirements.lock -r requirements-dev.lock -e . --no-deps
+python -m ruff check .
+python -m ruff format --check .
+python -m mypy --no-incremental src tests
+python -m pytest -m 'not qdrant and not redis' -p no:cacheprovider
 ```
 
-真实 Qdrant 集成测试和 full eval 需要独立的内部 Docker 网络，步骤见[Agent 运维](docs/runbooks/agent-service.md)与[完整工作流](.github/workflows/full-verification.yml)。默认测试使用 FakeModel / deterministic embedding，不依赖付费模型。
+真实 Qdrant 集成与完整隔离验证由 GitHub 托管 CI 执行，见 [CI 说明](docs/quality/ci.md)。
 
 ## 变更约定
 

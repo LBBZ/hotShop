@@ -9,8 +9,10 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$script:Task19Root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
-. (Join-Path $PSScriptRoot "task19-common.ps1")
+. (Join-Path $PSScriptRoot 'hosted-runner.ps1')
+Assert-HotShopHostedRunner
+$script:Task19Root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "../.."))
+. (Join-Path $PSScriptRoot "../task19-common.ps1")
 $suffix = [Guid]::NewGuid().ToString("N").Substring(0, 12)
 if (-not $ProjectName) { $ProjectName = "hotshop-task19-$suffix" }
 if (-not $EvidenceDirectory) {
@@ -208,7 +210,7 @@ try {
     }
 
     if (-not $OwnershipTestMode) {
-    & (Join-Path $PSScriptRoot "generate-auth-keys.ps1") -OutputDirectory $keyDirectory `
+    & (Join-Path $PSScriptRoot "../generate-auth-keys.ps1") -OutputDirectory $keyDirectory `
         -DockerOutputDirectory $dockerKeyDirectory
     if ($LASTEXITCODE -ne 0) { throw "TASK-19 key generation failed" }
     [void](Invoke-Compose --profile app --profile agent config --quiet)

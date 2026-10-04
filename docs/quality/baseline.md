@@ -77,13 +77,7 @@ java -version
 
 为绕过宿主机 Java 异常，实际使用固定 Maven/JDK 17 容器：
 
-```powershell
-docker run --name hotshop-task00-baseline-test `
-  --mount "type=bind,source=$PWD,target=/workspace" `
-  --mount "type=volume,source=hotshop-task00-m2,target=/root/.m2" `
-  --workdir /workspace `
-  maven:3.9.9-eclipse-temurin-17 mvn -B -ntp test
-```
+[本地运行入口](../delivery/demo.md)
 
 结果：失败，退出码 1，总耗时 4 分 03 秒。
 
@@ -127,14 +121,7 @@ docker run --name hotshop-task00-baseline-test `
 
 命令：
 
-```powershell
-docker run --rm `
-  --mount "type=bind,source=$PWD,target=/workspace" `
-  --mount "type=volume,source=hotshop-task00-m2,target=/root/.m2" `
-  --workdir /workspace `
-  maven:3.9.9-eclipse-temurin-17 `
-  mvn -B -ntp -pl task -am test
-```
+[本地运行入口](../delivery/demo.md)
 
 结果：BUILD FAILURE，总耗时 52.563 秒。
 
@@ -163,26 +150,11 @@ mvn -B -ntp test
 
 ### 4.2 固定容器环境
 
-```powershell
-docker run --rm `
-  --mount "type=bind,source=$PWD,target=/workspace" `
-  --workdir /workspace `
-  maven:3.9.9-eclipse-temurin-17 `
-  mvn -B -ntp test
-```
+[本地运行入口](../delivery/demo.md)
 
 ### 4.3 只运行 TASK-00 特征测试
 
-```powershell
-docker run --rm `
-  --mount "type=bind,source=$PWD,target=/workspace" `
-  --workdir /workspace `
-  maven:3.9.9-eclipse-temurin-17 `
-  mvn -B -ntp -pl common,domain,task -am `
-  "-Dsurefire.failIfNoSpecifiedTests=false" `
-  "-Dtest=OrderStatusCharacterizationTest,ReliableRabbitTopologyTest,OutboxPublisherTest" `
-  test
-```
+[本地运行入口](../delivery/demo.md)
 
 Linux/macOS 使用相同 Docker 参数，将 PowerShell 续行符反引号改为反斜杠。首次执行需要从 Maven
 仓库下载依赖；网络/TLS 失败必须保留为失败，不应通过 `-DskipTests` 伪造绿色结果。

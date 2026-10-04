@@ -64,14 +64,14 @@ corepack pnpm@10.15.0 api:check
 | 范围                | 入口（从仓库根目录执行）                                        | 依赖                                                                  |
 | ------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------- |
 | 快速页面/交互回归   | `corepack pnpm@10.15.0 --dir web test:e2e`                      | Vite 自动启动；默认使用 mock，真实 Compose 规格未启用                 |
-| 真实交易与故障路径  | `pwsh -NoProfile -File script/verify-task19-e2e.ps1`            | Docker/Compose 和 PowerShell 7；脚本创建并清理独立后端与测试资源      |
-| 构建后的 Nginx 应用 | `corepack pnpm@10.15.0 --dir web test:delivery`                 | 已启动独立演示；默认 `http://127.0.0.1:18080`，覆盖桌面与手机         |
-| 跨浏览器登录恢复    | `node script/verify-auth-browsers.mjs <项目名> <Web地址>`       | 已启动独立本机演示；Chromium、Firefox、WebKit 与手机尺寸 WebKit       |
-| 后台排障与活动核验  | `node script/verify-admin-investigation.mjs <项目名> <Web地址>` | 已启动独立本机演示；真实 MySQL / Redis，桌面 Chromium 与 Pixel 7 模拟 |
+| 真实交易与故障路径  | `pwsh -NoProfile -File script/ci/verify-task19-e2e.ps1`            | Docker/Compose 和 PowerShell 7；仅在 GitHub 托管 CI 上创建并清理测试资源      |
+| 构建后的 Nginx 应用 | `corepack pnpm@10.15.0 --dir web test:delivery`                 | 已启动本地演示；默认 `http://127.0.0.1:18080`，覆盖桌面与手机         |
+| 跨浏览器登录恢复    | `node script/verify-auth-browsers.mjs <项目名> <Web地址>`       | 已启动本机演示；Chromium、Firefox、WebKit 与手机尺寸 WebKit       |
+| 后台排障与活动核验  | `node script/verify-admin-investigation.mjs <项目名> <Web地址>` | 已启动本机演示；真实 MySQL / Redis，桌面 Chromium 与 Pixel 7 模拟 |
 
 真实交易测试通过 User Mock Checkout API 发起支付，经过 Outbox → RabbitMQ → Task → 签名回调 → timeline/SSE；不会以浏览器路由 mock 或测试侧直接回调代替交易链路。测试定义与既往结果见 [用户交易链路](../docs/architecture/user-transaction-journey.md) 和 [质量报告](../docs/quality)。
 
-`test:delivery` 在桌面 Chromium 与 Pixel 7 两种设备上运行 7 条流程，共 14 个用例，串行执行。它会注册测试账号、购买商品、修改商品描述和调整库存，只能指向可变更的独立演示环境。管理员登录若遇到 HTTP 429，会按服务器的 `Retry-After` 等待并重试一次，不修改限流配置。
+`test:delivery` 在桌面 Chromium 与 Pixel 7 两种设备上运行 7 条流程，共 14 个用例，串行执行。它会注册测试账号、购买商品、修改商品描述和调整库存，只能指向可变更的本地演示环境。管理员登录若遇到 HTTP 429，会按服务器的 `Retry-After` 等待并重试一次，不修改限流配置。
 
 使用其他演示端口时，在 `web/` 目录设置地址后运行：
 
@@ -82,11 +82,11 @@ pnpm test:delivery
 
 仅验证某种设备可追加 `--project chromium` 或 `--project mobile-chromium`。该套件验证常规交易、用户确认、知识引用及后台库存冲突；服务重启和基础设施故障仍由上表的故障路径脚本覆盖。
 
-跨浏览器登录恢复需要额外安装浏览器。在仓库根目录执行，项目名和端口替换为通过 `script/demo.ps1` 启动的独立演示：
+跨浏览器登录恢复需要额外安装浏览器。在仓库根目录执行，项目名和端口替换为通过 `script/demo.ps1` 启动的本地演示：
 
 ```powershell
 corepack pnpm@10.15.0 --dir web exec playwright install chromium firefox webkit
-node script/verify-auth-browsers.mjs hotshop-task21-demo0001 http://127.0.0.1:18080
+node script/verify-auth-browsers.mjs hotshop http://127.0.0.1:18080
 ```
 
 入口核对本机地址、演示项目及 Web 容器端口，连接真实认证后端，只创建测试账号和登录会话。四组浏览器各验证双标签轮换、关闭排队标签、关闭持锁标签、轮换响应丢失，以及轮换提交后关闭页面，共 20 项。测试保留原有登录限流和重放检测，串行执行且不自动重试；独立 HTTP 上下文完成故障注入，确保丢失的 `Set-Cookie` 不会提前写入浏览器。
@@ -96,12 +96,12 @@ node script/verify-auth-browsers.mjs hotshop-task21-demo0001 http://127.0.0.1:18
 后台排障验收从仓库根目录执行：
 
 ```powershell
-node script/verify-admin-investigation.mjs hotshop-task21-demo0001 http://127.0.0.1:18080
+node script/verify-admin-investigation.mjs hotshop http://127.0.0.1:18080
 ```
 
 需要已安装 Playwright Chromium，演示中存在标准 `task13-admin` 测试管理员和普通用户，Task 的发现间隔使用 `ms` 或 `s` 且不超过 30 秒。脚本核对项目与端口，创建带唯一标记的 25 条异常、25 条人工队列、26 条支付记录及关联订单，另有 1 条已解决异常和 1 个临时商品 / 草稿活动。它验证真实游标分页、历史筛选、单个支付请求故障，以及临时活动的 Redis 库存差异提示和写操作响应丢失，共 18 项桌面 / 手机检查。
 
-这会写入选定的独立演示，不能作为只读巡检。脚本结束时恢复并清理自己的测试事实和 Redis 注册项，保留后端追加的审计记录；日志、摘要和截图位于忽略目录 `.local/verification/admin-investigation-*`。查询数据与活动核验使用真实后端，支付故障由浏览器拦截单个端点注入。完整结果与未覆盖范围见[后台功能审计](../docs/quality/admin-functional-audit-2026-10-03.md)。
+这会写入本地演示，不能作为只读巡检。脚本结束时恢复并清理自己的测试事实和 Redis 注册项，保留后端追加的审计记录；日志、摘要和截图位于忽略目录 `.local/verification/admin-investigation-*`。查询数据与活动核验使用真实后端，支付故障由浏览器拦截单个端点注入。完整结果与未覆盖范围见[后台功能审计](../docs/quality/admin-functional-audit-2026-10-03.md)。
 
 ## 身份、查询和流式边界
 
@@ -125,14 +125,8 @@ corepack pnpm@10.15.0 api:check
 
 修改 API 时先从运行时导出并评审基线差异，再重新生成客户端；流程见 [API 契约](../docs/api/api-contract.md#7-openapi客户端与兼容门禁)。SSE 帧协议由独立解析器处理，不伪装为普通 OpenAPI JSON 响应。
 
-## Docker 工具与运行镜像
+## Docker 运行镜像
 
-从仓库根目录执行：
+本地运行使用仓库根目录的 `script/demo.ps1`，Web 与其他服务属于同一 `hotshop` 项目，运行镜像固定为 `hotshop-web:local`。前端检查使用上面的原生 pnpm 命令；完整隔离测试由 GitHub 托管 CI 执行。
 
-```powershell
-docker compose -f web/compose.yaml build
-docker compose -f web/compose.yaml run --rm web pnpm check
-docker compose -f web/compose.yaml run --rm web pnpm test:e2e
-```
-
-`web/compose.yaml` 使用 `test` target，内置固定 Playwright Chromium、Node、pnpm 和 Java；`web/Dockerfile` 的 `runtime` target 使用 Nginx 提供静态产物和代理。Nginx 对带 hash 的 assets 使用一年 immutable 缓存并压缩文本资源，HTML 重新验证，API 缓存策略由后端控制。
+`web/Dockerfile` 的 `runtime` target 使用 Nginx 提供静态产物和代理。带 hash 的 assets 使用一年 immutable 缓存，HTML 重新验证，API 缓存策略由后端控制。

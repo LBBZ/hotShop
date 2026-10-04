@@ -313,8 +313,7 @@ scope。消费、ACK 和最终一致性设计见
 .\script\generate-api-client.ps1
 ```
 
-脚本用 Docker 中的 Java 21 和仓库 Maven Wrapper 打包（跳过测试，Java 验证由独立门禁执行），启动真实
-portal/admin jar，导出 public/user/admin/mock-provider-callback JSON，同时导出 Python Agent 契约，
+本地脚本从已经运行的 `hotshop` 服务导出 public/user/admin/mock-provider-callback JSON，同时导出 Python Agent 契约；不会构建镜像或启动另一套后端。先用 `script/demo.ps1 -Action Start` 启动项目，再
 写入 `target/openapi/`。运行时 JSON 仅做稳定 key 排序和空白规范化。Java 客户端生成入口使用
 OpenAPI Generator 7.14.0，输出：
 

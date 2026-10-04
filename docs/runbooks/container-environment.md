@@ -1,108 +1,29 @@
 # HotShop 容器环境运行手册
 
-## 隔离演示入口（推荐）
+## 本地入口
 
-在仓库根目录使用 **PowerShell 7+**、Docker Desktop Linux containers 和 **Compose 2.24.4+**
-（覆盖端口依赖 `!override`）。不需要宿主 Java/Node/Python；Dockerfile 会安装锁定的构建依赖。
-首次拉取与构建需要网络，成本应与缓存后的日常启动分别记录。实际验证状态见
-[桌面与手机验收](../quality/product-acceptance-2026-10-02.md)，不代表另一台新机器已验证。
+准备 PowerShell 7+、Docker Linux 容器和 Compose 2.24.4+，在仓库根目录执行：
 
 ```powershell
-# 从你的 hotShop 仓库根目录执行
-pwsh -NoProfile -File .\script\demo.ps1 -Action Start -ProjectName hotshop-task21-demo0001
-# 浏览器打开 http://127.0.0.1:18080
-pwsh -NoProfile -File .\script\demo.ps1 -Action Status -ProjectName hotshop-task21-demo0001
-pwsh -NoProfile -File .\script\demo.ps1 -Action Stop -ProjectName hotshop-task21-demo0001
-pwsh -NoProfile -File .\script\demo.ps1 -Action Restart -ProjectName hotshop-task21-demo0001
+pwsh -NoProfile -File ./script/demo.ps1 -Action Start
+pwsh -NoProfile -File ./script/demo.ps1 -Action Status
+pwsh -NoProfile -File ./script/demo.ps1 -Action Logs
+pwsh -NoProfile -File ./script/demo.ps1 -Action Stop
 ```
 
-`demo0001` 必须未被使用；省略 `-ProjectName` 会生成随机名，记下输出供后续操作。
-`-WebPort 18081` 可避开前端端口冲突。所有映射仅绑定 loopback，其余端口随机分配，`Status`
-显示实际端口。脚本拒绝已有目录、项目资源和镜像标签；创建项目专有镜像标签、命名卷、随机基础设施
-密码、模拟支付 Secret 与四组 RSA 密钥。配置存于 Git 忽略的 `.local/keys/<project>/.env.demo`，
-不读取根 `.env`，清除并恢复 Compose 变量的继承覆盖。不要打印或提交该配置文件。
+本地只运行一个 `hotshop` Compose 项目，每个子服务使用自己的容器。固定镜像为 `hotshop-{admin,portal,task,agent,web,rabbitmq}:local`，构建替换同一标签。Start 仅构建缺失或构建输入变化的服务；日常启动复用既有镜像。源码指纹与镜像 ID 保存在 `.local/keys/hotshop/build-state.json`。
 
-启动顺序：生成密钥 → 构建真实 Java/Agent/nginx runtime 与依赖 → Flyway 成功 → HTTP 就绪 →
-首次测试 seed → Qdrant 知识索引 rebuild → 管理员装载秒杀活动。固定 `FakeModel` 和
-`deterministic` Embedding，不调用付费 Provider。Mock payment 只用于本机模拟，HTTP 本机演示
-将 Secure cookie 设为 false；时间统一 UTC。默认不启动 observability profile。
+凭据和认证密钥保存在 `.local/keys/hotshop/`，不读取根 `.env` 或公开占位凭据。脚本临时加载配置，执行后恢复 shell 环境。首次启动生成密钥并等待 Flyway 成功、应用就绪，只有业务数据库为空才写入演示目录、知识索引和活动。已有用户、商品、库存和订单始终保留。
 
-- 管理员：`task13-admin` / `Task13Admin!2026`，公开的一次性本机演示账号。
-- 用户：浏览器注册页创建自己的用户名和密码，注册成功后自动登录。不会写入既有用户数据。
-- 8 件演示商品 `913001`–`913008`，包含图片、规格与售罄示例；活动 `913001` 正常、`913002` 售罄、`913003` 已结束。
-- seed 复用 `web/scripts/task-13-e2e-seed.sql`，只在全新项目执行一次，将其 30 分钟活动窗口延至
-  首次初始化后一日。`Restart` 不重置库存/版本/窗口；过期后用新的独立项目演示。
-- `Stop` 只停止这个项目，保留数据、容器、网络和镜像。失败时也保留资源供排障；不存在自动删除流程。
-- 启动失败先用 `Status`；日志用同一 project/env/两个 compose 文件，避免误查默认项目：
+默认提供 FakeModel、deterministic embedding 与本地模拟支付，不需要模型 API Key。首页为 http://127.0.0.1:18080，管理员账号及体验流程见 [演示指南](../delivery/demo.md)。所有服务端口只绑定 loopback；后端端口由 Docker 分配，Status 显示实际绑定。
 
-```powershell
-$demoProject = 'hotshop-task21-demo0001'
-docker compose -p $demoProject --env-file ".local/keys/$demoProject/.env.demo" `
-  -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent logs --tail 100
-```
+`app` profile 包含三个 Java 服务，`agent` 包含 Agent 与 Qdrant。观测组件使用同一项目的 `observability` profile，默认不开启。隔离集成验证由 GitHub 托管 CI 执行。
 
-以下为基础设施及各组件的手工操作参考。默认 Compose 集合启动 MySQL、一次性迁移、双 Redis 和
-RabbitMQ；`app` 为三个 Java 进程，`agent` 为 Agent + Qdrant，`observability` 为观测组件。
+## 凭据与持久卷
 
-## 1. 前置条件与凭据
+复用现有配置和卷，不重复生成密钥或重置数据。`HOTSHOP_DATA_PROJECT` 可以指定已有业务卷的名称前缀，容器仍属于固定的 `hotshop` 项目；默认卷前缀为当前 Compose 项目名。迁移已有数据时，该值与数据库密码必须匹配实际卷。
 
-- Docker Engine 及 Docker Compose 可用。
-- 启动 `app` profile 前先按
-  [`authentication-operations.md`](authentication-operations.md) 运行
-  `.\script\generate-auth-keys.ps1`；生成目录被 Git/Docker 忽略，私钥不得写入 env 或镜像。
-- 不要把真实密码写入 `.env.example`。
-- `.gitignore` 已忽略 `.env` 和 `.env.*`，并显式保留 `.env.example`。可以使用仓库根目录下被
-  忽略的本机 env 文件；更严格隔离凭据时，仍建议复制到仓库外并通过 `--env-file` 指定。
-- 直接使用 `.env.example` 仅适合一次性的本机验证，其中的 `change-me-*` 都是公开占位值。
-- MySQL 的 `MYSQL_ROOT_PASSWORD` 只在空数据卷首次初始化时生效。若复用已经初始化的
-  `mysql_data`，外部 env 文件必须填写该数据卷原有的 root 密码；修改 env 不会轮换数据库密码。
-
-PowerShell 示例：
-
-```powershell
-$hotShopEnv = Join-Path $env:LOCALAPPDATA 'HotShop\compose.env'
-New-Item -ItemType Directory -Force (Split-Path $hotShopEnv) | Out-Null
-Copy-Item .env.example $hotShopEnv
-# 编辑 $hotShopEnv，替换所有 change-me-* 值
-docker compose --env-file $hotShopEnv config --quiet
-```
-
-Linux/macOS 可把文件保存到 `~/.config/hotshop/compose.env`，并使用相同的 `--env-file` 参数。
-`.dockerignore` 会排除 `.env` 和 `.env.*`（保留 `.env.example`），避免凭据意外进入应用镜像上下文。
-
-## 2. 启动方式
-
-使用公开占位凭据的一条基础设施启动命令：
-
-```powershell
-docker compose --env-file .env.example up -d --build --wait
-$migratorIds = @(docker compose --env-file .env.example ps -a -q database-migrator)
-if ($LASTEXITCODE -ne 0 -or $migratorIds.Count -ne 1) { throw 'Cannot identify the migrator container' }
-$migrationExit = docker wait $migratorIds[0]
-if ($LASTEXITCODE -ne 0 -or "$migrationExit".Trim() -ne '0') { throw 'Database migration failed' }
-```
-
-使用仓库外真实本机凭据时，将 `.env.example` 替换为上一节的 `$hotShopEnv`。默认集合不构建 Java
-应用镜像，因此不会被并行中的 Maven 改动阻塞。必须核对 `docker wait` 输出的容器退出码为 0（其命令进程返回 0 不代表迁移成功）；Compose 的 `up --wait`
-可能在一次性 migrator 尚未结束时返回，不能省略显式退出码检查。Compose 某些版本的 `compose wait` 不包含已退出的一次性服务，因此使用 `ps -a` 找到容器后调用 `docker wait`。
-
-完整应用采用显式 `app` profile：
-
-```powershell
-docker compose --env-file .env.example --profile app up -d --build
-```
-
-系统使用官方 RabbitMQ management 镜像支持的 TTL 队列 + DLX，不安装第三方插件。portal
-不加载 RabbitMQ 自动配置，也不依赖 RabbitMQ 健康状态；task 独占消息发布与消费职责。这里的
-`app` profile 用于清晰隔离构建与启动范围。Java 应用使用两个启动期
-固定、仅 DB 0 的具名连接：缓存/认证限流只注入 `redis-cache`，秒杀装载与 Reservation 只注入
-`redis-seckill`；请求期间不创建连接工厂，也不按 dbIndex 选择逻辑库。
-
-Redis Stream 消费者位于 `task` 容器。它依赖 MySQL 完成当前全部迁移（至 V1.12）和
-`redis-seckill` 健康；转单事务不等待 RabbitMQ 发布，已提交的 Outbox 由独立发布器投递。消费开关默认开启，对账默认 dry-run 且
-自动修复关闭。
-
-观测组件已提供独立 `observability` profile；测试入口见交付验收报告。
+Stop 不删除资源。清理前逐项核对项目标签、镜像 ID 和容器引用，只移除确认属于 HotShop 的容器、项目镜像和闲置网络，保留业务卷、密钥、备份及其他项目。不要执行全局 prune 或本地 `down -v`。
 
 ## 3. 服务用途与端口
 
@@ -134,15 +55,13 @@ MySQL 不再挂载 `/docker-entrypoint-initdb.d` 结构脚本。`database-migrat
 再由数据所有者选择经过核对的一次性历史值转换；纯本地开发数据也可在确认无需保留后，由数据所有者
 自行重建本地卷。脚本和任务不会删除、转换或重建现有 `hotshop` 数据卷。
 
-可重复 UTC 验证会创建随机命名的隔离 Compose project/volume，只启动 MySQL，检查
-`@@global.time_zone`、`@@session.time_zone` 以及 `NOW(6)` 与 `UTC_TIMESTAMP(6)` 的差值，随后仅删除
-该随机隔离资源：
+检查现有数据库的时区：
 
 ```powershell
-.\script\verify-compose-utc.ps1
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo exec -T mysql sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot -e "SELECT @@global.time_zone, @@session.time_zone, UTC_TIMESTAMP()"'
 ```
 
-预期输出包含 `global=+00:00 session=+00:00 deltaSeconds=0`。
+预期 global/session time zone 均为 `+00:00`。
 
 ### 3.2 Stream 消费配置
 
@@ -186,16 +105,16 @@ consumer。只有同时把 dry-run 设为 `false` 且 auto-repair 设为 `true` 
 静态解析和运行状态：
 
 ```powershell
-docker compose --env-file .env.example config --quiet
-docker compose --env-file .env.example ps
-docker compose --env-file .env.example run --rm database-migrator validate
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent config --quiet
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent ps
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent run --rm database-migrator validate
 ```
 
 确认两个 Redis 只开放 DB 0，且策略不同：
 
 ```powershell
-docker compose --env-file .env.example exec -T redis-cache redis-cli CONFIG GET databases maxmemory-policy appendonly save
-docker compose --env-file .env.example exec -T redis-seckill redis-cli CONFIG GET databases maxmemory-policy appendonly appendfsync aof-use-rdb-preamble save
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent exec -T redis-cache redis-cli CONFIG GET databases maxmemory-policy appendonly save
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent exec -T redis-seckill redis-cli CONFIG GET databases maxmemory-policy appendonly appendfsync aof-use-rdb-preamble save
 ```
 
 容器已设置 `REDISCLI_AUTH`，所以以上命令不需要把密码放在命令行。预期两者 `databases` 都是
@@ -211,10 +130,10 @@ Stream，反之亦然。
 
 ```powershell
 $stream = 'hotshop:seckill:v1:{hotshop-seckill-v1}:activity:7001:reservations'
-docker compose --env-file .env.example exec -T redis-seckill redis-cli `
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent exec -T redis-seckill redis-cli `
   SMEMBERS 'hotshop:seckill:v1:{hotshop-seckill-v1}:registry:reservation-streams'
-docker compose --env-file .env.example exec -T redis-seckill redis-cli XINFO GROUPS $stream
-docker compose --env-file .env.example exec -T redis-seckill redis-cli `
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent exec -T redis-seckill redis-cli XINFO GROUPS $stream
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent exec -T redis-seckill redis-cli `
   XPENDING $stream hotshop-order-v1 - + 100
 ```
 
@@ -225,8 +144,8 @@ docker compose --env-file .env.example exec -T redis-seckill redis-cli `
 确认 RabbitMQ 运行且没有 delayed-message 插件：
 
 ```powershell
-docker compose --env-file .env.example exec -T rabbitmq rabbitmq-diagnostics -q ping
-docker compose --env-file .env.example exec -T rabbitmq rabbitmq-plugins list --enabled --minimal
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent exec -T rabbitmq rabbitmq-diagnostics -q ping
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent exec -T rabbitmq rabbitmq-plugins list --enabled --minimal
 ```
 
 启用列表应包含官方 management 和 prometheus 相关插件，不应出现第三方延迟交换机插件。
@@ -236,8 +155,8 @@ docker compose --env-file .env.example exec -T rabbitmq rabbitmq-plugins list --
 普通停止与恢复不会删除持久卷：
 
 ```powershell
-docker compose --env-file .env.example stop
-docker compose --env-file .env.example up -d --wait
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent stop
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent up -d --wait
 ```
 
 持久性与隔离验证优先运行版本化脚本，并查看对应报告；不要对共享数据卷直接运行初始化或重置命令。
@@ -264,9 +183,9 @@ publisher confirm、mandatory publish 和 publisher returns。
 常用诊断：
 
 ```powershell
-docker compose --env-file .env.example ps
-docker compose --env-file .env.example logs task-service rabbitmq
-docker compose --env-file .env.example exec -T rabbitmq rabbitmqctl list_queues name messages_ready messages_unacknowledged
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent ps
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent logs task-service rabbitmq
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent exec -T rabbitmq rabbitmqctl list_queues name messages_ready messages_unacknowledged
 ```
 
 Outbox 自动重试最多 8 次，退避从 1 秒指数增长到最多 5 分钟。租约默认 30 秒；实例退出后不要手工

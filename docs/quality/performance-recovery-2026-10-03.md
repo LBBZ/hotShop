@@ -53,7 +53,7 @@
 恢复脚本需要已有本机演示、Web 依赖及 Playwright Chromium：
 
 ```powershell
-pwsh -NoProfile -File .\script\verify-browser-recovery.ps1 `
+pwsh -NoProfile -File .\script\ci\verify-browser-recovery.ps1 `
   -DemoProject hotshop-task21-shop1002 -DemoUrl http://127.0.0.1:18083
 ```
 

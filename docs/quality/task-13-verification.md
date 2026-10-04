@@ -167,7 +167,7 @@ The browser run initially exposed two real test-environment/client defects befor
 
 ## TASK-11 observability and final smoke
 
-The final RECONCILE-03 run of `script/verify-observability.ps1` passed against the independent app, agent, and observability stack. It verified seven metric families, one matching Loki stream, four dashboards, Tempo continuity across Portal, Task, and Agent, observability-stack restart recovery, and absence of the sentinel secret.
+The final RECONCILE-03 run of `script/ci/verify-observability.ps1` passed against the independent app, agent, and observability stack. It verified seven metric families, one matching Loki stream, four dashboards, Tempo continuity across Portal, Task, and Agent, observability-stack restart recovery, and absence of the sentinel secret.
 
 The real final smoke produced:
 

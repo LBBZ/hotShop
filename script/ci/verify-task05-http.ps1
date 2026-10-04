@@ -2,7 +2,9 @@
 param()
 
 $ErrorActionPreference = 'Stop'
-$repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+. (Join-Path $PSScriptRoot 'hosted-runner.ps1')
+Assert-HotShopHostedRunner
+$repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $suffix = ([guid]::NewGuid().ToString('N')).Substring(0, 10)
 $network = "hotshop-task05-http-$suffix"
 $mysql = "hotshop-task05-mysql-$suffix"

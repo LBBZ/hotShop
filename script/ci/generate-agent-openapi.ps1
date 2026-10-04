@@ -8,9 +8,11 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+. (Join-Path $PSScriptRoot 'hosted-runner.ps1')
+Assert-HotShopHostedRunner
+$root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "../.."))
 $script:Task19Root = $root
-. (Join-Path $PSScriptRoot "task19-common.ps1")
+. (Join-Path $PSScriptRoot "../task19-common.ps1")
 if ($OwnershipTestMode -and
         [Environment]::GetEnvironmentVariable("HOTSHOP_CI_OWNERSHIP_TEST", "Process") -cne "1") {
     throw "Agent OpenAPI ownership test mode is restricted to CI regression probes"

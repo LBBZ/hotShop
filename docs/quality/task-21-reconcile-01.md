@@ -68,20 +68,7 @@ Docker Desktop Linux、Node22.20.0、pnpm10.15.0。依赖镜像/包缓存复用�
 
 PowerShell7，工作目录为本任务worktree；Java命令要求`JAVA_HOME`指向本机Java21（本次为`D:/Env/JDK/MicrosoftOpenJDK21`）。
 
-```powershell
-Set-Location D:/Codex/Projects/hotShop-task21-reconcile-01
-$env:JAVA_HOME='D:/Env/JDK/MicrosoftOpenJDK21' # 换成自己的Java21安装路径
-$env:PATH="$env:JAVA_HOME/bin;$env:PATH"
-$env:JAVA_TOOL_OPTIONS='-Duser.timezone=UTC'
-./mvnw.cmd -B -ntp verify
-corepack pnpm@10.15.0 --dir web install --frozen-lockfile
-corepack pnpm@10.15.0 --dir web exec playwright install chromium
-$demoProject = 'hotshop-task21-' + [Guid]::NewGuid().ToString('N').Substring(0,12)
-pwsh -NoProfile -File script/task21-demo.ps1 -Action Start -ProjectName $demoProject
-corepack pnpm@10.15.0 --dir web exec playwright test --config playwright.delivery.config.ts
-node script/verify-reconcile-rag.mjs $demoProject http://127.0.0.1:18080
-pwsh -NoProfile -File script/task21-demo.ps1 -Action Stop -ProjectName $demoProject
-```
+[本地运行入口](../delivery/demo.md)
 
 断连脚本核对本worktree的env目录、Compose project/service及唯一容器ID；只停止/恢复所属Qdrant，
 finally尝试恢复，不删除数据，验证Agent进程没有重启。仅在专用测试数据上运行，不能指向共享服务。
@@ -116,7 +103,7 @@ TASK-20的5000 requested RPS目标未达，原窗口、完成量、dropped、延
 运行时契约与客户端复验（PowerShell7、仓库根目录，需先package产生jar）：
 
 ```powershell
-pwsh -NoProfile -File script/generate-openapi.ps1 -UseExistingPackages
+pwsh -NoProfile -File script/ci/generate-openapi.ps1 -UseExistingPackages
 python script/check_openapi_compatibility.py
 $env:HOTSHOP_OPENAPI_GENERATOR_DOCKER='1'
 # Windows只规范本worktree的生成文件换行；Git内容不应因此改变。
@@ -162,25 +149,11 @@ corepack pnpm@10.15.0 --dir web api:check
 
 以下均在仓库根目录PowerShell7执行，Docker可用；测试镜像无需付费模型凭据：
 
-```powershell
-docker build --target test -t hotshop-reconcile01-agent-tests-final:local agent
-docker run --rm hotshop-reconcile01-agent-tests-final:local python -m pytest -p pytest_asyncio.plugin -p no:cacheprovider -m 'not qdrant'
-docker run --rm hotshop-reconcile01-agent-tests-final:local python -m ruff check src tests
-docker run --rm hotshop-reconcile01-agent-tests-final:local python -m ruff format --check src tests
-docker run --rm hotshop-reconcile01-agent-tests-final:local python -m mypy src
-corepack pnpm@10.15.0 --dir web test
-corepack pnpm@10.15.0 --dir web lint
-corepack pnpm@10.15.0 --dir web typecheck
-```
+[本地运行入口](../delivery/demo.md)
 
 本次真实Qdrant测试实际使用专用network和容器，命令为：
 
-```powershell
-# 这些名称属于本轮已保留的资源；复验时先确认名称归属，不指向用户共享服务。
-docker start hotshop-reconcile01-qdrant0916
-docker run --rm --network hotshop-reconcile01-ragtests0916 -e AGENT_QDRANT_URL=http://hotshop-reconcile01-qdrant0916:6333 hotshop-reconcile01-agent-tests-final:local python -m pytest -p pytest_asyncio.plugin -p no:cacheprovider -m qdrant
-docker stop hotshop-reconcile01-qdrant0916
-```
+[本地运行入口](../delivery/demo.md)
 
 该入口依赖本机保留的专用测试资源；独立新环境优先用上文Start、完整浏览器和断连脚本，自动建立自己的Qdrant与空业务卷。
 

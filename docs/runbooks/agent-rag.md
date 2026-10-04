@@ -27,10 +27,10 @@ after preparing the local auth keys described in [Agent setup](agent-service.md)
 [demo entry point](container-environment.md) handles keys, startup and the initial index automatically.
 
 ```powershell
-docker compose --env-file .env.example --profile agent up -d --build redis-cache qdrant agent-service
-docker compose --env-file .env.example --profile agent exec -T agent-service python -m hotshop_agent.index_cli validate
-docker compose --env-file .env.example --profile agent exec -T agent-service python -m hotshop_agent.index_cli rebuild
-docker compose --env-file .env.example --profile agent exec -T agent-service python -m hotshop_agent.index_cli status
+pwsh -NoProfile -File ./script/demo.ps1 -Action Start
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent --profile agent exec -T agent-service python -m hotshop_agent.index_cli validate
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent --profile agent exec -T agent-service python -m hotshop_agent.index_cli rebuild
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent --profile agent exec -T agent-service python -m hotshop_agent.index_cli status
 ```
 
 `validate` needs no Qdrant call. `rebuild` is idempotent and switches the alias only after exact
@@ -51,26 +51,15 @@ separate settings.
 
 ## Evaluation and tests
 
-The supported full integration entry point creates a unique Compose project, indexes knowledge,
-checks Agent/Qdrant outage and restart behavior, captures evidence, and cleans its owned resources:
+Full integration checks run only on GitHub-hosted CI, using disposable resources and automatic cleanup. See [CI verification](../quality/ci.md).
+
+For a local offline evaluation, activate the Python 3.12 environment described in [CONTRIBUTING](../../CONTRIBUTING.md) and run from `agent/`:
 
 ```powershell
-pwsh -NoProfile -File .\script\verify-task17-compose.ps1
+python -m hotshop_agent.eval_runner --suite quick --output ../target/agent-quick.json
 ```
 
-Evidence is written to ignored `target/task17-compose-evidence`. The script uses temporary local
-keys and random host ports. Cleanup is scoped to the resources it created; do not substitute a
-shared project name or manually remove a pre-existing volume.
-
-For a standalone offline quick evaluation, build the test image and execute:
-
-```powershell
-docker build --target test -t hotshop-agent:test -f agent/Dockerfile agent
-docker run --rm --entrypoint python hotshop-agent:test -m hotshop_agent.eval_runner --suite quick --output /tmp/quick.json
-```
-
-The quick suite uses in-memory vectors; its `/tmp/quick.json` exists only inside that disposable
-container. Use the Compose verification entry point for retained integration evidence. Quick and
+Quick and
 full evaluations use FakeModel/DeterministicEmbedding. Dataset `task17-v3` contains 48 quick cases
 and 49 full cases; the full suite adds the real-Qdrant rebuild lifecycle. Reports include
 schema/dataset/provider, the dataset SHA-256, source `knowledgeVersion`, category rates, thresholds,

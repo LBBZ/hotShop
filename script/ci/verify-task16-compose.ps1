@@ -8,9 +8,11 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+. (Join-Path $PSScriptRoot 'hosted-runner.ps1')
+Assert-HotShopHostedRunner
+$repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "../.."))
 Set-Location $repositoryRoot
-. (Join-Path $PSScriptRoot "ci\native_cleanup.ps1")
+. (Join-Path $PSScriptRoot "native_cleanup.ps1")
 
 $suffix = ([Guid]::NewGuid().ToString("N")).Substring(0, 10)
 if ([string]::IsNullOrWhiteSpace($ProjectName)) {
@@ -891,7 +893,7 @@ try {
     # The exact key path was absent during preflight. Authorize only this invocation to
     # remove a partially or fully created directory immediately before key generation.
     $resourceOwnership.keyDirectory = $true
-    & "$PSScriptRoot\generate-auth-keys.ps1" -OutputDirectory $keyRoot
+    & "$PSScriptRoot/../generate-auth-keys.ps1" -OutputDirectory $keyRoot
     if ($LASTEXITCODE -ne 0) {
         throw "Authentication key generation failed"
     }

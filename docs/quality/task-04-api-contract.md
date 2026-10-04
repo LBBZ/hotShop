@@ -20,14 +20,7 @@
 
 ### 定向契约测试和打包
 
-```powershell
-docker run --rm `
-  --mount "type=bind,source=$PWD,target=/workspace" `
-  --mount "type=volume,source=hotshop-task04-m2,target=/root/.m2" `
-  --workdir /workspace `
-  eclipse-temurin:21-jdk `
-  ./mvnw -B -pl portal,admin -am package
-```
+[本地运行入口](../delivery/demo.md)
 
 结果：`BUILD SUCCESS`。本次命令实际执行 common 5、domain 6、portal 11、admin 5，共 27 tests，
 0 failures、0 errors、0 skipped。
@@ -62,16 +55,7 @@ python script/check_openapi_compatibility.py `
 
 ## 最终验收
 
-```powershell
-docker run --name hotshop-task04-clean-verify `
-  -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal `
-  --mount "type=bind,source=$PWD,target=/workspace" `
-  --mount "type=volume,source=hotshop-task04-m2,target=/root/.m2" `
-  --mount "type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock" `
-  --workdir /workspace `
-  eclipse-temurin:21-jdk `
-  ./mvnw -B clean verify
-```
+[本地运行入口](../delivery/demo.md)
 
 结果：`BUILD SUCCESS`，9 个 reactor 模块全部成功，总耗时 2:04。实际执行 common 5、domain 6、
 database 20、portal 11、admin 5、task 3，共 50 tests；0 failures、0 errors、0 skipped。
@@ -166,16 +150,7 @@ HotShop URL ID 不变量检查，能阻止它们回退为 `integer/int64` 或无
 
 ### 收口命令结果
 
-```powershell
-docker run --name hotshop-task04-reconcile-final-verify `
-  -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal `
-  --mount "type=bind,source=$PWD,target=/workspace" `
-  --mount "type=volume,source=hotshop-task04-m2,target=/root/.m2" `
-  --mount "type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock" `
-  --workdir /workspace `
-  eclipse-temurin:21-jdk `
-  ./mvnw -B clean verify
-```
+[本地运行入口](../delivery/demo.md)
 
 结果：`BUILD SUCCESS`，9 个 reactor 模块全部成功，总耗时 2:10。实际执行 common 5、domain 6、
 database 21、portal 14、admin 6、task 4，共 56 tests；0 failures、0 errors、0 skipped。
@@ -188,7 +163,7 @@ python script/check_openapi_compatibility.py `
   --baseline docs/api/openapi-baseline `
   --current target/openapi
 .\script\generate-api-client.ps1 -UseExistingPackages
-.\script\verify-compose-utc.ps1
+.\script\ci\verify-compose-utc.ps1
 docker compose --env-file .env.example config --quiet
 git diff --check
 ```

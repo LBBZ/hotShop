@@ -88,9 +88,7 @@
 
 Agent 使用现有测试镜像作为 Python 依赖环境，但只读挂载并导入当前工作树源码；禁用网络，未调用付费模型。
 
-```powershell
-docker run --rm --network none --mount type=bind,source=D:/Codex/Projects/hotShop,target=/review,readonly -w /review/agent -e PYTHONPATH=/review/agent/src -e PYTHONDONTWRITEBYTECODE=1 --entrypoint python hotshop-agent:task20-test -m pytest -o addopts= -p no:cacheprovider -p pytest_asyncio.plugin -m 'not qdrant' --tb=short -q
-```
+[本地运行入口](../delivery/demo.md)
 
 结果：**250 passed, 6 skipped, 8 deselected in 28.43s**。6 项容器运行时测试因未配置镜像参数而跳过；8 项真实 Qdrant 测试主动排除。另一次 security / registry / model provider contracts / embeddings 定向运行：86 passed in 9.62s。
 

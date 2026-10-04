@@ -1,19 +1,17 @@
 # Local observability runbook
 
-Performance runs use `script/verify-task20-performance.ps1`. The k6 dashboard requires
-Run ID, Profile, and Scenario filters; formal evidence is the ignored
-`target/task20-performance/<run-id>/` artifact, not a dashboard screenshot. Prometheus Remote
-Write is enabled only on this local observability stack. Metric definitions and safe cleanup are
-documented in `docs/quality/task-20-performance.md`.
+The optional observability services belong to the same local `hotshop` Compose project. They are disabled by default. No load tests are needed to inspect ordinary application telemetry.
 
 ## Start and inspect
 
-Generate local auth keys once, then start the application and telemetry profiles:
+Start the canonical application, then enable telemetry using its existing credentials and keys:
 
 ```powershell
-.\script\generate-auth-keys.ps1
-docker compose --env-file .env.example --profile app --profile agent --profile observability up -d --build
+pwsh -NoProfile -File ./script/demo.ps1 -Action Start
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent --profile observability up -d --no-build prometheus loki tempo alloy grafana
 ```
+
+Use the same project and profile when stopping or inspecting these optional services. The default application Start retires optional services if they are not selected.
 
 Endpoints:
 
@@ -50,13 +48,13 @@ the asynchronous order, schedules a duplicate successful Mock Payment callback, 
 state, queries Prometheus/Loki/Tempo/Grafana, restarts all observability containers, and checks again.
 
 ```powershell
-.\script\verify-observability.ps1
+.\script\ci\verify-observability.ps1
 ```
 
 If the stack is already built and running:
 
 ```powershell
-.\script\verify-observability.ps1 -SkipStartup
+.\script\ci\verify-observability.ps1 -SkipStartup
 ```
 
 The script injects a known non-production sentinel as the Mock Payment secret and fails if that
@@ -90,7 +88,7 @@ and reuses provisioning. Recreate is also deterministic because configs live und
 `docker/observability`; named volumes contain only runtime data. If a config check fails, first run:
 
 ```powershell
-docker compose --env-file .env.example --profile observability config --quiet
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent --profile observability config --quiet
 ```
 
 Do not put Authorization, cookies, keys, full bodies, or full model prompts into diagnostic logs or

@@ -1,12 +1,10 @@
 [CmdletBinding()]
-param(
-    [switch]$UseExistingPackages
-)
+param()
 
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 
-& (Join-Path $PSScriptRoot 'generate-openapi.ps1') -UseExistingPackages:$UseExistingPackages
+& (Join-Path $PSScriptRoot 'generate-openapi.ps1')
 if ($LASTEXITCODE -ne 0) {
     throw 'Runtime OpenAPI generation failed'
 }
@@ -15,7 +13,7 @@ Push-Location $repositoryRoot
 try {
     docker run --rm `
         --mount "type=bind,source=$repositoryRoot,target=/workspace" `
-        --mount "type=volume,source=hotshop-task04-m2,target=/root/.m2" `
+        --mount "type=volume,source=hotshop-maven-cache,target=/root/.m2" `
         --workdir /workspace `
         eclipse-temurin:21-jdk `
         ./mvnw -B -N -Pgenerate-api-client generate-sources

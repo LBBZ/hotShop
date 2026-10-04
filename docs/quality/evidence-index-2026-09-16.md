@@ -92,37 +92,22 @@ RECONCILE-01 的短窗口探索和更早已作废 RunId 不用于证明上述默
 | 身份与委托 | [IdentitySecurityTest](../../portal/src/test/java/com/real/portal/IdentitySecurityTest.java)、[AdminIdentitySecurityTest](../../admin/src/test/java/com/real/admin/AdminIdentitySecurityTest.java)、[Agent确认集成测试](../../portal/src/test/java/com/real/portal/agenttools/AgentToolsAndPurchaseConfirmationIntegrationTest.java)、[Agent registry测试](../../agent/tests/test_registry.py) | issuer/audience/scope、owner、确认重放、高风险工具缺席；不是通用渗透结论。 |
 | Agent 取消与恢复 | [test_circuit_lifecycle.py](../../agent/tests/test_circuit_lifecycle.py)、[test_reliability.py](../../agent/tests/test_reliability.py)、[test_cancellation.py](../../agent/tests/test_cancellation.py) | 半开探测租约、取消和资源释放，Fake/替身场景不证明远端模型可用性。 |
 | RAG/模型契约/评测 | [eval_runner.py](../../agent/src/hotshop_agent/eval_runner.py)、[历史 task17-v2.jsonl](https://github.com/LBBZ/hotShop/blob/b78b0fceb20181258ae1221d314882dcd174ee09/agent/evals/task17-v2.jsonl)、[Provider契约](../../agent/tests/test_model_provider_contracts.py)、[RAG runbook](../runbooks/agent-rag.md) | quick为内存向量库，full为真实Qdrant；有限用例中的路由、引用、拒绝、安全、授权与生命周期。 |
-| 真实浏览器与故障矩阵 | [verify-task19-e2e.ps1](../../script/verify-task19-e2e.ps1)、[verify-task19-faults.ps1](../../script/verify-task19-faults.ps1)、[full workflow](../../.github/workflows/full-verification.yml) | 真实隔离后端；本基线的当次执行状态见 TASK-21 报告，历史成功不自动继承。 |
-| 契约与前端 | [ci.yml](../../.github/workflows/ci.yml)、[generate-openapi.ps1](../../script/generate-openapi.ps1)、[web/package.json](../../web/package.json) | 类型、兼容性、客户端漂移与单元/Mock测试；不可替代真实浏览器。 |
+| 真实浏览器与故障矩阵 | [verify-task19-e2e.ps1](../../script/ci/verify-task19-e2e.ps1)、[verify-task19-faults.ps1](../../script/ci/verify-task19-faults.ps1)、[full workflow](../../.github/workflows/full-verification.yml) | 真实隔离后端；本基线的当次执行状态见 TASK-21 报告，历史成功不自动继承。 |
+| 契约与前端 | [ci.yml](../../.github/workflows/ci.yml)、[generate-openapi.ps1](../../script/ci/generate-openapi.ps1)、[web/package.json](../../web/package.json) | 类型、兼容性、客户端漂移与单元/Mock测试；不可替代真实浏览器。 |
 
 ## 5. 独立复验命令与结果登记
 
 **PowerShell 7，仓库根目录**（以下路径是本次独立 worktree）。依赖 Docker Desktop Linux containers；本机 Java 命令另需 JDK21，Web 需 Node22/Corepack/pnpm10.15.0。首次下载依赖与构建镜像时间不算日常运行耗时。命令是复验入口，除上节 CI 核验外，本文件不声称已执行。
 
-```powershell
-Set-Location D:/Codex/Projects/hotShop-task21
-git rev-parse HEAD
-git diff --check
-# JDK21 + Docker，保留已有 target 性能证据，不执行 clean。
-./mvnw.cmd -B -ntp -fae verify
-# Node22；在 web 下运行 frozen install、测试和类型检查。
-corepack pnpm@10.15.0 --dir web install --frozen-lockfile
-corepack pnpm@10.15.0 --dir web test
-corepack pnpm@10.15.0 --dir web typecheck
-# 从当前源码构建独立 FakeModel 测试镜像，无需已存在的本机镜像。
-docker build --target test -t hotshop-agent:task21-evidence -f agent/Dockerfile agent
-docker run --rm --network none -e AGENT_MODEL_PROVIDER=fake -e AGENT_EMBEDDING_PROVIDER=deterministic --entrypoint python hotshop-agent:task21-evidence -m pytest -m 'not qdrant' -p pytest_asyncio.plugin -p no:cacheprovider
-New-Item -ItemType Directory -Force target/task21-evidence | Out-Null
-docker run --rm --network none -e AGENT_MODEL_PROVIDER=fake -e AGENT_EMBEDDING_PROVIDER=deterministic --mount "type=bind,source=${PWD}/target/task21-evidence,target=/reports" --entrypoint python hotshop-agent:task21-evidence -m hotshop_agent.eval_runner --suite quick --output /reports/quick-eval.json
-```
+[本地运行入口](../delivery/demo.md)
 
 需要完整旅程时，在同一根目录串行运行以下入口（会构建/启动各自隔离资源，可能较久；不与其他重型演练同时跑）：
 
 ```powershell
-pwsh -NoProfile -File script/verify-task19-e2e.ps1 -TimeoutSeconds 1200
-pwsh -NoProfile -File script/verify-task19-faults.ps1 -TimeoutSeconds 1200
+pwsh -NoProfile -File script/ci/verify-task19-e2e.ps1 -TimeoutSeconds 1200
+pwsh -NoProfile -File script/ci/verify-task19-faults.ps1 -TimeoutSeconds 1200
 # 性能为可选独立复验，会产生新 RunId，不能覆盖历史报告。
-pwsh -NoProfile -File script/verify-task20-performance.ps1 -Profile target-5k
+pwsh -NoProfile -File script/ci/verify-task20-performance.ps1 -Profile target-5k
 ```
 
 新运行需登记：HEAD、dirty状态、时间、操作系统/Docker版本、project和数据初始化、精确参数、退出码、机器报告、跳过项、失败尝试与仅归属于本轮的资源回收结果。未下载的 CI artifact、未运行的 full workflow、真实 Provider、长时稳态和另一台新机器均保持未核验，不由文档推断为通过。

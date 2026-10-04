@@ -35,6 +35,8 @@ cd hotShop
 pwsh -NoProfile -File ./script/demo.ps1 -Action Start
 ```
 
+The local project is always `hotshop`, with one container per service and fixed image tags. Repeated Start reuses configuration and business data, building only missing images or services whose build inputs changed.
+
 The first run downloads dependencies, builds images, migrates the database, and seeds the demo. After the script reports a successful start, open **http://127.0.0.1:18080** and register to enter your personal workspace.
 
 No model API key is needed: the default demo uses **FakeModel** with predefined responses and a **Mock Provider** for payments. To use a live model, configure DeepSeek or Qwen. The seed contains eight fictional products across audio, electronics, home, and travel, plus three campaigns: available, sold out, and expired.

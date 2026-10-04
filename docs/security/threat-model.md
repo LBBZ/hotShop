@@ -42,7 +42,7 @@ Trace、审计和 SSE 都不是 Secret 存储位置。
 
 ## 安全扫描与处置规则
 
-`script/verify-task19-security.ps1` 固定 Gitleaks 8.28.0、OSV-Scanner 2.2.2、Trivy 0.66.0、
+`script/ci/verify-task19-security.ps1` 固定 Gitleaks 8.28.0、OSV-Scanner 2.2.2、Trivy 0.66.0、
 Semgrep 1.136.0 和 ZAP 2.16.1 的镜像 digest。扫描器基础设施错误、缺失/空白/非法 JSON 报告或规则
 FAIL 均记为失败，不能解释成“零发现”；ZAP baseline 的标准 exit 2 只表示已审计 WARN，exit 1/3 或报告
 缺失仍失败。文件系统和最终镜像的未处理 High/Critical 为失败；不允许按整个 CVE 类别、目录或生产源码

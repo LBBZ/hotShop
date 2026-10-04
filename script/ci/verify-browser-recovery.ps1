@@ -8,7 +8,9 @@ param(
     [ValidatePattern('^[a-z0-9-]{6,32}$')][string]$RunId = ('recovery-' + [Guid]::NewGuid().ToString('N').Substring(0,12))
 )
 $ErrorActionPreference = 'Stop'
-$root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+. (Join-Path $PSScriptRoot 'hosted-runner.ps1')
+Assert-HotShopHostedRunner
+$root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $destination = Join-Path $root ".local/verification/$RunId"
 if (Test-Path -LiteralPath $destination) { throw 'Use a fresh RunId; existing evidence is never overwritten.' }
 $uri = [Uri]$DemoUrl

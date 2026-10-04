@@ -17,9 +17,7 @@
 
 在纯回归提交上使用下列入口运行，结果 **2 tests, 0 failures, 1 error, 0 skipped**：启动边界用例抛出实际 NOGROUP，WRONGTYPE 传播用例通过。失败摘录：[ir03-startup-before.txt](review-fixes-2026-09-15/ir03-startup-before.txt)。
 
-```powershell
-docker run --rm --name hotshop-review03-startup-red -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal --mount type=bind,source=D:/Codex/Projects/hotShop-review-03,target=/workspace --mount type=volume,source=hotshop-task04-m2,target=/root/.m2 --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock -w /workspace eclipse-temurin:21-jdk sh ./mvnw -B -pl task -am '-Dtest=SeckillOrderReliabilityContainerTest#review04LoadedActivitiesWithoutConsumerGroupStillAdvanceBoundedAudit+review04PendingWrongTypeStillPropagatesRedisFailure' '-Dsurefire.failIfNoSpecifiedTests=false' test
-```
+[本地运行入口](../delivery/demo.md)
 
 红测期间 MySQL 初始化后的宿主转发连接等待持续约 76.57 秒，然后自行恢复。MySQL 日志已 ready，后续 Windows localhost 与 runner 内 host.docker.internal 连通性只读核对通过；未修改代码、超时或网络配置。该启动延迟不是业务失败证据，真正红测是随后执行的 NOGROUP。
 

@@ -2,6 +2,8 @@
 param()
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot '../hosted-runner.ps1')
+Assert-HotShopHostedRunner
 $PSNativeCommandUseErrorActionPreference = $true
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 Set-Location $root
@@ -19,7 +21,7 @@ try {
 
     $oldNativePreference = $PSNativeCommandUseErrorActionPreference
     $PSNativeCommandUseErrorActionPreference = $false
-    & pwsh -NoProfile -File .\script\verify-task20-performance.ps1 -Profile smoke -RunId $runId -SkipBuild -ControlledStartupFailure
+    & pwsh -NoProfile -File .\script\ci\verify-task20-performance.ps1 -Profile smoke -RunId $runId -SkipBuild -ControlledStartupFailure
     $failureExit = $LASTEXITCODE
     $PSNativeCommandUseErrorActionPreference = $oldNativePreference
     if ($failureExit -eq 0) { throw 'Controlled partial startup did not exit nonzero' }
@@ -32,7 +34,7 @@ try {
     if ($sentinel.Count -ne 1) { throw 'Cleanup removed another Docker project resource' }
 
     $PSNativeCommandUseErrorActionPreference = $false
-    & pwsh -NoProfile -File .\script\verify-task20-performance.ps1 -Profile smoke -RunId $runId -SkipBuild -ControlledStartupFailure
+    & pwsh -NoProfile -File .\script\ci\verify-task20-performance.ps1 -Profile smoke -RunId $runId -SkipBuild -ControlledStartupFailure
     $reuseExit = $LASTEXITCODE
     $PSNativeCommandUseErrorActionPreference = $oldNativePreference
     if ($reuseExit -eq 0) { throw 'Non-empty RunId evidence directory was reused' }

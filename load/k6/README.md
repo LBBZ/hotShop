@@ -1,7 +1,7 @@
 # HotShop local performance harness
 
 This directory contains the Docker-only k6 harness. The supported entry point is
-`script/verify-task20-performance.ps1`; do not run the scenario directly for a formal result,
+`script/ci/verify-task20-performance.ps1`; do not run the scenario directly for a formal result,
 because the orchestrator owns data sizing, Run ID isolation, evidence capture, reconciliation,
 and cleanup. Run the commands below from the repository root with PowerShell 7, Docker and
 Compose. The load generator and application runtime execute in containers.
@@ -29,11 +29,11 @@ Qwen and says nothing about real-model latency. k6 receives SSE as one HTTP resp
 ## Invocation
 
 ```powershell
-pwsh -NoProfile -File .\script\verify-task20-performance.ps1 -Profile smoke
-pwsh -NoProfile -File .\script\verify-task20-performance.ps1 -Profile baseline
-pwsh -NoProfile -File .\script\verify-task20-performance.ps1 -Profile target-5k
-pwsh -NoProfile -File .\script\verify-task20-performance.ps1 -Profile agent-isolation
-pwsh -NoProfile -File .\script\verify-task20-performance.ps1 -Profile journey-baseline -Rate 20 -VUs 32 -Duration 60s
+pwsh -NoProfile -File .\script\ci\verify-task20-performance.ps1 -Profile smoke
+pwsh -NoProfile -File .\script\ci\verify-task20-performance.ps1 -Profile baseline
+pwsh -NoProfile -File .\script\ci\verify-task20-performance.ps1 -Profile target-5k
+pwsh -NoProfile -File .\script\ci\verify-task20-performance.ps1 -Profile agent-isolation
+pwsh -NoProfile -File .\script\ci\verify-task20-performance.ps1 -Profile journey-baseline -Rate 20 -VUs 32 -Duration 60s
 ```
 
 Use `-Rates 100,250,500,1000`, `-Rate`, `-VUs`, `-Warmup`, `-Duration`, `-DataSeed`,
@@ -82,9 +82,9 @@ $env:RABBITMQ_MEMORY_LIMIT = '256m'
 $env:PROMETHEUS_MEMORY_LIMIT = '256m'
 $env:TASK20_K6_MEMORY_LIMIT = '512m'
 $env:TASK20_PORTAL_CPU_LIMIT = '2.0'
-pwsh -NoProfile -File .\script\verify-task20-performance.ps1 -Profile journey-baseline -Rate 20 -VUs 32 -Duration 60s -RunId run-journey-2cpu
+pwsh -NoProfile -File .\script\ci\verify-task20-performance.ps1 -Profile journey-baseline -Rate 20 -VUs 32 -Duration 60s -RunId run-journey-2cpu
 $env:TASK20_PORTAL_CPU_LIMIT = '4.0'
-pwsh -NoProfile -File .\script\verify-task20-performance.ps1 -Profile journey-baseline -Rate 20 -VUs 32 -Duration 60s -RunId run-journey-4cpu -SkipBuild
+pwsh -NoProfile -File .\script\ci\verify-task20-performance.ps1 -Profile journey-baseline -Rate 20 -VUs 32 -Duration 60s -RunId run-journey-4cpu -SkipBuild
 ```
 
 Use fresh Run IDs. The variables set above remain in the parent shell; remove them or close

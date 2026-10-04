@@ -92,16 +92,7 @@ Testcontainers RabbitMQ 与有业务断言的正式可靠性套件，不再依�
 
 命令：
 
-```powershell
-docker run --rm `
-  --mount "type=bind,source=$PWD,target=/workspace" `
-  --mount "type=volume,source=hotshop-task01-m2,target=/root/.m2" `
-  --workdir /workspace `
-  maven:3.9.9-eclipse-temurin-17 `
-  mvn -B -ntp -N org.apache.maven.plugins:maven-wrapper-plugin:3.3.4:wrapper `
-  "-Dmaven=3.9.16" "-Dtype=bin" `
-  "-DdistributionSha256Sum=5af3b743dd8b876b5c45da33b676251e5f1687712644abb4ee519ca56e1d89ce"
-```
+[本地运行入口](../delivery/demo.md)
 
 结果：`BUILD SUCCESS`，总耗时 1.413 秒。随后为提交的 Wrapper JAR 增加
 `wrapperSha256Sum=4e2fbf6554bc8a4702cdfdd3bef464f423393d784ddbb037216320ce55d5e4e1`。
@@ -110,13 +101,7 @@ docker run --rm `
 
 命令：
 
-```powershell
-docker run --rm `
-  --mount "type=bind,source=$PWD,target=/workspace" `
-  --mount "type=volume,source=hotshop-task01-m2,target=/root/.m2" `
-  --workdir /workspace `
-  eclipse-temurin:21-jdk ./mvnw --version
-```
+[本地运行入口](../delivery/demo.md)
 
 结果：退出码 0。实际输出 Maven 3.9.16、Java 21.0.11、Linux amd64、平台编码 UTF-8。基础镜像未预装
 `unzip`，`bin` Wrapper 仍成功完成校验、下载和启动。
@@ -125,13 +110,7 @@ docker run --rm `
 
 首次使用新 Maven 缓存的命令：
 
-```powershell
-docker run --rm `
-  --mount "type=bind,source=$PWD,target=/workspace" `
-  --mount "type=volume,source=hotshop-task01-m2,target=/root/.m2" `
-  --workdir /workspace `
-  eclipse-temurin:21-jdk ./mvnw -B clean verify
-```
+[本地运行入口](../delivery/demo.md)
 
 结果：`BUILD SUCCESS`；8 个 reactor 模块全部成功；总耗时 2 分 23 秒。实际执行 12 个单元测试：
 
@@ -163,13 +142,7 @@ cmd /c mvnw.cmd -B clean verify
 
 命令：
 
-```powershell
-docker run --rm --network none `
-  --mount "type=bind,source=$PWD,target=/workspace" `
-  --mount "type=volume,source=hotshop-task01-m2,target=/root/.m2" `
-  --workdir /workspace `
-  eclipse-temurin:21-jdk ./mvnw -B -o clean verify
-```
+[本地运行入口](../delivery/demo.md)
 
 结果：`BUILD SUCCESS`；8 个模块全部成功；总耗时 35.662 秒；12 passed，0 failures，0 errors，
 0 skipped。该结果只证明已解析并校验过的依赖缓存可离线复用，不宣称空缓存可以离线构建。
@@ -178,14 +151,7 @@ docker run --rm --network none `
 
 命令：
 
-```powershell
-docker run --rm `
-  --mount "type=bind,source=$PWD,target=/workspace" `
-  --mount "type=volume,source=hotshop-task01-m2,target=/root/.m2" `
-  --workdir /workspace `
-  eclipse-temurin:21-jdk `
-  ./mvnw -B -pl task -am -Pintegration-tests verify
-```
+[本地运行入口](../delivery/demo.md)
 
 结果：`BUILD FAILURE`，总耗时 36.776 秒。
 

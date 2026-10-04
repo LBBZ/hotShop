@@ -2,7 +2,9 @@
 param()
 
 $ErrorActionPreference = "Stop"
-$root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+. (Join-Path $PSScriptRoot 'hosted-runner.ps1')
+Assert-HotShopHostedRunner
+$root = (Resolve-Path (Join-Path $PSScriptRoot "../..")).Path
 $suffix = [Guid]::NewGuid().ToString("N").Substring(0, 10)
 $project = "hotshop-task17-$suffix"
 $runtimeImage = "hotshop-agent:task17-$suffix"

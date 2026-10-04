@@ -9,9 +9,7 @@
 
 先仅添加两项正式 JUnit 回归，然后用基线生产源码运行（MySQL 8.0.46、Redis 8.8.1 Testcontainers，隔离临时容器）：
 
-```powershell
-docker run --rm --name hotshop-review03-red -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal --mount type=bind,source=D:/Codex/Projects/hotShop-review-03,target=/workspace --mount type=volume,source=hotshop-task04-m2,target=/root/.m2 --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock -w /workspace eclipse-temurin:21-jdk sh ./mvnw -B -pl task -am '-Dtest=SeckillOrderReliabilityContainerTest#review03*+review04*' '-Dsurefire.failIfNoSpecifiedTests=false' test
-```
+[本地运行入口](../delivery/demo.md)
 
 结果：2 tests, **2 failures, 0 errors, 0 skipped**，退出码 1。原始失败摘录：[ir03-ir04-before.txt](review-fixes-2026-09-15/ir03-ir04-before.txt)。另提供可在报告基线应用的[仅回归测试补丁](review-fixes-2026-09-15/ir03-ir04-regression-before.patch)，对基线原文件执行 `git apply --check` 已通过；可在隔离基线 worktree 应用后使用上列命令重现，不能把该红测退出码当修复通过。
 
@@ -62,9 +60,7 @@ Redis checkpoint 持久化 cursor、累计数量、fence、state、重启次数�
 
 生产与测试实现 SHA：`9247ae4223b4cdbb95e7337bcb644d075258f38e`。该 HEAD 在本功能分支实际执行完整受影响类：
 
-```powershell
-docker run --rm --name hotshop-review03-green -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal --mount type=bind,source=D:/Codex/Projects/hotShop-review-03,target=/workspace --mount type=volume,source=hotshop-task04-m2,target=/root/.m2 --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock -w /workspace eclipse-temurin:21-jdk sh ./mvnw -B -pl task -am '-Dtest=SeckillOrderReliabilityContainerTest' '-Dsurefire.failIfNoSpecifiedTests=false' test
-```
+[本地运行入口](../delivery/demo.md)
 
 **21 tests, 0 failures, 0 errors, 0 skipped；BUILD SUCCESS，退出码 0**。2026-09-15 14:52:20 UTC，Maven 总耗时 02:35，测试耗时 120.9 秒。包括原有 15 项和新增 6 项。MySQL 实际成功迁移全部 11 条（含 V1_9/V1_10），LATERAL LIMIT 和有界索引查询均真实执行成功。摘录：[ir03-ir04-after.txt](review-fixes-2026-09-15/ir03-ir04-after.txt)。
 

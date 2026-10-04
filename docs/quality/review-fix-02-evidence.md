@@ -19,17 +19,13 @@
 
 ### 原附件诊断（退出 0 仅代表复现旧 bug）
 
-```powershell
-docker run --rm --network none --mount type=bind,source=D:/Codex/Projects/hotShop,target=/review,readonly -w /review/agent -e PYTHONPATH=/review/agent/src -e PYTHONDONTWRITEBYTECODE=1 --entrypoint python hotshop-agent:task20-test /review/docs/quality/review-2026-09-15/probe_circuit_cancel.py
-```
+[本地运行入口](../delivery/demo.md)
 
 输出：`after_cancel: half_open True 0`；随后三次均为 `CircuitOpenError model circuit is probing`。未将该退出码当成修复通过。
 
 ### 先写正式测试、再改实现
 
-```powershell
-docker run --rm --network none --mount type=bind,source=D:/Codex/Projects/hotShop-review-02,target=/review,readonly -w /review/agent -e PYTHONPATH=/review/agent/src -e PYTHONDONTWRITEBYTECODE=1 --entrypoint python hotshop-agent:task20-test -m pytest -o addopts= -p no:cacheprovider -p pytest_asyncio.plugin tests/test_circuit_lifecycle.py -k 'cancelled_half or closed_half' --tb=short -q
-```
+[本地运行入口](../delivery/demo.md)
 
 基线实现结果：`2 failed, 3 deselected in 0.26s`（当时测试文件尚未补充其余场景）。
 
@@ -50,19 +46,13 @@ docker run --rm --network none --mount type=bind,source=D:/Codex/Projects/hotSho
 
 事件同步使用 `asyncio.Event`；熔断时钟替换为局部可控时钟，不修改事件循环时钟；超时用 0 秒触发下一事件循环轮次，不依赖长时间 sleep。全部可控本地 provider，不调用付费模型。
 
-```powershell
-docker run --rm --network none --mount type=bind,source=D:/Codex/Projects/hotShop-review-02,target=/review,readonly -w /review/agent -e PYTHONPATH=/review/agent/src -e PYTHONDONTWRITEBYTECODE=1 --entrypoint python hotshop-agent:task20-test -m pytest -o addopts= -p no:cacheprovider -p pytest_asyncio.plugin -m 'not qdrant' --tb=short -q
-```
+[本地运行入口](../delivery/demo.md)
 
 最终源码结果：**267 passed, 6 skipped, 8 deselected in 30.53s**，退出 0。6 项容器权限/运行时测试未提供镜像配置而跳过，8 项真实 Qdrant 测试排除；不声称通过这些边界。最小独立复验可在同一命令中将 `-m 'not qdrant'` 替换为 `tests/test_circuit_lifecycle.py tests/test_reliability.py tests/test_cancellation.py`；集成验收时挂载集成 worktree。
 
 同样的只读挂载环境执行：
 
-```powershell
-docker run --rm --network none --mount type=bind,source=D:/Codex/Projects/hotShop-review-02,target=/review,readonly -w /review/agent --entrypoint python hotshop-agent:task20-test -m ruff check --no-cache .
-docker run --rm --network none --mount type=bind,source=D:/Codex/Projects/hotShop-review-02,target=/review,readonly -w /review/agent --entrypoint python hotshop-agent:task20-test -m ruff format --check --no-cache .
-docker run --rm --network none --mount type=bind,source=D:/Codex/Projects/hotShop-review-02,target=/review,readonly -w /review/agent -e PYTHONPATH=/review/agent/src -e PYTHONDONTWRITEBYTECODE=1 --entrypoint python hotshop-agent:task20-test -m mypy --no-incremental --cache-dir=/tmp/hotshop-mypy src tests
-```
+[本地运行入口](../delivery/demo.md)
 
 - Ruff check：`All checks passed!`。
 - 严格 mypy：`Success: no issues found in 54 source files`。
@@ -71,10 +61,7 @@ docker run --rm --network none --mount type=bind,source=D:/Codex/Projects/hotSho
 
 对原基线 worktree 复跑同镜像证明 format 失败为既有问题：
 
-```powershell
-docker run --rm --network none --mount type=bind,source=D:/Codex/Projects/hotShop,target=/review,readonly -w /review/agent --entrypoint python hotshop-agent:task20-test -m ruff format --check --no-cache tests/test_registry.py
-git diff --exit-code a3e7a6c55040bbebc8760750af4b5cfcfd0406aa -- agent/tests/test_registry.py
-```
+[本地运行入口](../delivery/demo.md)
 
 前者同样退出 1，报告 `Would reformat: tests/test_registry.py`；后者退出 0。未修改该无关文件，未关闭格式门禁。
 

@@ -75,19 +75,7 @@ User Access、Administrator Access 与 Agent Delegation 不能互换。购买确
 
 ### Python Agent
 
-```text
-docker build --target test -t hotshop-agent:task16-reconcile-test agent
-docker run --rm hotshop-agent:task16-reconcile-test python -m pytest
-docker run --rm hotshop-agent:task16-reconcile-test python -m ruff check src tests
-docker run --rm hotshop-agent:task16-reconcile-test python -m mypy --strict src/hotshop_agent
-
-docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-  -v "${PWD}/agent:/workspace:ro" -e AGENT_CONTAINER_IMAGE=hotshop-agent:task16-reconcile \
-  docker:29-cli sh -lc \
-  "apk add --no-cache python3 py3-pytest >/dev/null && \
-   cp /workspace/tests/test_container_security.py /tmp/test_container_security.py && \
-   cd /tmp && python3 -m pytest test_container_security.py"
-```
+[本地运行入口](../delivery/demo.md)
 
 结果：`171 passed, 6 skipped`；6 项 skip 仅是主 pytest 容器没有宿主 Docker socket，随后以
 独立 Docker CLI runner 执行同一 `test_container_security.py`，结果 `6 passed`。Ruff
@@ -143,7 +131,7 @@ $env:JAVA_HOME='D:\Env\JDK\MicrosoftOpenJDK21'
 
 ## 真实 Docker Compose 部署验证
 
-执行 `script/verify-task16-compose.ps1 -TimeoutSeconds 600`，脚本每次生成随机 project 名、
+执行 `script/ci/verify-task16-compose.ps1 -TimeoutSeconds 600`，脚本每次生成随机 project 名、
 独立 volume、临时镜像标签和临时 RSA keys。本轮最终成功 project 为
 `hotshop-task16-f4bf526cd4`，provider 为 `fake`；验证结束后该 project 的 containers、network、
 volumes、三张临时业务镜像和临时 key 目录均已删除。脱敏证据保存在

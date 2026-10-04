@@ -5,7 +5,7 @@
 ## Machine gates
 
 All Python commands run inside the pinned Agent container; no host JDK or host Python environment
-is required. The authoritative reusable journey is `script/verify-task17-compose.ps1`.
+is required. The authoritative reusable journey is `script/ci/verify-task17-compose.ps1`.
 
 Required thresholds are encoded in `agent/src/hotshop_agent/eval_runner.py` and results use
 `schemaVersion=1.0`, `datasetVersion=task17-v2`. A failed safety case always makes its 100%
@@ -35,21 +35,7 @@ cancellation, Key privacy, reasoning suppression, registry immutability, and unc
 
 ## Verification commands
 
-```powershell
-docker compose --env-file .env.example config --quiet
-docker build --target test -t hotshop-agent:task17-test -f agent/Dockerfile agent
-docker run --rm --entrypoint python hotshop-agent:task17-test -m ruff check .
-docker run --rm --entrypoint python hotshop-agent:task17-test -m ruff format --check .
-docker run --rm --entrypoint python hotshop-agent:task17-test -m mypy --no-incremental src tests
-docker run --rm --entrypoint python hotshop-agent:task17-test -m pytest `
-  tests/test_model_provider_contracts.py tests/test_qwen.py -p no:cacheprovider
-docker run --rm --network <task17-network> -e AGENT_QDRANT_URL=http://qdrant:6333 `
-  --entrypoint python hotshop-agent:task17-test -m pytest -p no:cacheprovider
-docker build --target security-test -t hotshop-agent:task17-security -f agent/Dockerfile agent
-docker run --rm --user 0:0 -e AGENT_CONTAINER_IMAGE=<runtime-image> `
-  -v /var/run/docker.sock:/var/run/docker.sock --entrypoint python `
-  hotshop-agent:task17-security -m pytest tests/test_container_security.py -p no:cacheprovider
-```
+[本地运行入口](../delivery/demo.md)
 
 Quick/full JSON results and Compose evidence are runtime artifacts under ignored `target/`; they are
 not committed. The delivery report records the actual totals and raw command outcomes. This file

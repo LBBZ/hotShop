@@ -26,7 +26,7 @@ TASK-21交付记录；不是全项目终验声明。起始基线为 `10d82528aab
 | 七项关键ADR | [ADR-002](../architecture/adr/ADR-002-modular-processes.md)至[ADR-008](../architecture/adr/ADR-008-fake-model-ci.md) | ADR-001保留；记录当前实现取舍与局限。 |
 | 库存基线/版本/对账与至少一次边界 | [数据库](../architecture/database-schema.md)、[Stream](../architecture/stream-order-processing.md)、[后台](../architecture/admin-operations.md) | V1.9 expected基线、合法同步SQL、fence/seen有界扫描；不宣称无限写入一定完成。 |
 | 测试/故障/Agent/权限/CI证据 | [证据索引](evidence-index.md) | 分SHA、分命令、区分实际/历史/未跑，不相加测试数。 |
-| 可复现启动及5～8分钟演示 | [启动脚本](../../script/task21-demo.ps1)、[overlay](../../docker-compose.demo.yml)、[7分钟脚本](../delivery/demo.md) | 本机空卷隔离启动与直接Nginx浏览器验证，具体结果见下文。 |
+| 可复现启动及5～8分钟演示 | [启动脚本](../../script/demo.ps1)、[overlay](../../docker-compose.demo.yml)、[7分钟脚本](../delivery/demo.md) | 本机空卷隔离启动与直接Nginx浏览器验证，具体结果见下文。 |
 | 两套简历及面试问答 | [职业材料](../delivery/career.md) | 每条主张对应源码/报告，禁用线上规模、收益、真实支付、微服务、稳定高QPS。 |
 | 下一轮问题清单 | [优化清单](../delivery/next-iteration.md) | 按风险收益记录范围与验收，本轮不实施业务/性能扩展。 |
 | 新机器可复现 | README与实际命令 | 本机全新Compose project验证，未在另一台新机器执行；严格的新机器验收项未满足。 |
@@ -57,7 +57,7 @@ PowerShell7，工作目录均为本任务根目录，除另行注明。完整本
 | `corepack pnpm@10.15.0 --dir web install --frozen-lockfile` | 退出0 | 新worktree安装，17.6s；已有包缓存，不是零缓存下载。 |
 | `corepack pnpm@10.15.0 --dir web test` | 86 tests /19 files通过，退出0 | `web-tests.log`；31.79s，单元测试，不是E2E。 |
 | `corepack pnpm@10.15.0 --dir web typecheck` | 退出0 | `typecheck.log`。 |
-| `pwsh -NoProfile -File script/tests/test_task21_demo.ps1` | 全部安全/迁移等待场景PASS | 已有资源拒绝、native查询失败关闭、环境恢复、容器退出7不能被docker退出0掩盖、missing/ambiguous拒绝。 |
+| `pwsh -NoProfile -File script/tests/test_demo.ps1` | 全部安全/迁移等待场景PASS | 已有资源拒绝、native查询失败关闭、环境恢复、容器退出7不能被docker退出0掩盖、missing/ambiguous拒绝。 |
 
 TASK19探针诊断：在本轮Nginx镜像使用含CRLF的 `set -eu` 多行字符串执行 `sh -lc`，实际返回
 `sh: set: line 0: illegal option -`；源码PowerShell here-string按仓库CRLF检出。
@@ -69,7 +69,7 @@ TASK19探针诊断：在本轮Nginx镜像使用含CRLF的 `set -eu` 多行字符
 只增加本地演示与验证入口，没有修改Java/Python交易实现、迁移或授权：
 
 - `docker-compose.demo.yml`：引入现有Web runtime，独立tag/项目、loopback端口覆盖。
-- `script/task21-demo.ps1`：生成本项目随机env/keys，空项目首次seed，默认Fake/deterministic、显式Mock payment。
+- `script/demo.ps1`：生成本项目随机env/keys，空项目首次seed，默认Fake/deterministic、显式Mock payment。
   复用现有task13测试seed，唯一数据调整为活动窗口30分钟改1天。Restart不重seed，Stop不删除数据。
 - 最小启动修正：根据本机Compose5.3.1真实失败，使用 `compose ps -a -q` 找到唯一migrator，
   `docker wait`并验证其输出的容器退出码0；不跳过迁移。
@@ -78,21 +78,9 @@ TASK19探针诊断：在本轮Nginx镜像使用含CRLF的 `set -eu` 多行字符
 
 ## 复验命令
 
-参照README开始一个新project，项目名必须全新；演示测试会写入该隔离数据。
+当前启动方式见[本地演示指南](../delivery/demo.md)。
 
-```powershell
-Set-Location D:/Codex/Projects/hotShop-task21
-pwsh -NoProfile -File script/tests/test_task21_demo.ps1
-pwsh -NoProfile -File script/task21-demo.ps1 -Action Start
-# 上一条打印project名；默认前端18080。记录该名字用于Stop/Restart。
-corepack pnpm@10.15.0 --dir web install --frozen-lockfile
-corepack pnpm@10.15.0 --dir web exec playwright install chromium
-corepack pnpm@10.15.0 --dir web exec playwright test --config playwright.delivery.config.ts
-# 文档语法与实际SVG渲染，临时QA依赖不修改web依赖。
-npm install --prefix target/task21/doc-tools --no-audit --no-fund mermaid@11.12.0 jsdom@26.1.0
-node script/verify-task21-docs.mjs
-git diff --check
-```
+[本地运行入口](../delivery/demo.md)
 
 ## 未运行与局限
 
@@ -165,7 +153,6 @@ task-service停止后记录退出137，不能据此宣称优雅停机已验证�
 
 复验前先用`docker ps`确认18080空闲，或按README指定空闲WebPort并设置`HOTSHOP_DELIVERY_URL`。
 完整启动、测试命令见上方“复验命令”；在当前业务基线下专用套件预计仍以两项失败退出1。
-验证后使用Start打印的project执行`pwsh -NoProfile -File script/task21-demo.ps1 -Action Stop -ProjectName <实际项目名>`。
 本轮发现的下一步工作统一进入[按优先级排序的优化清单](../delivery/next-iteration.md)。
 
 最终`node script/verify-task21-docs.mjs`检查258个本地文件链接、在Chromium渲染10张Mermaid图，failures为空；

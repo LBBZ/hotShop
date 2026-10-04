@@ -1,7 +1,5 @@
 [CmdletBinding()]
-param(
-    [switch]$UseExistingPackages
-)
+param()
 
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -9,8 +7,7 @@ $generatedDirectory = Join-Path $repositoryRoot 'target\openapi'
 $baselineDirectory = Join-Path $repositoryRoot 'docs\api\openapi-baseline'
 
 & (Join-Path $PSScriptRoot 'generate-openapi.ps1') `
-    -OutputDirectory $generatedDirectory `
-    -UseExistingPackages:$UseExistingPackages
+    -OutputDirectory $generatedDirectory
 if ($LASTEXITCODE -ne 0) {
     throw 'Runtime OpenAPI generation failed; baseline was not changed'
 }

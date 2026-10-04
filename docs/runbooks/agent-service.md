@@ -23,30 +23,29 @@ DeepSeek 请求显式携带 `thinking={"type":"disabled"}`，返回中的 `reaso
 
 ## 2. 本地启动
 
-完整浏览器演示优先使用 [隔离启动入口](container-environment.md)。下方是从仓库根目录执行的组件
-手动启动参考；`.env.example` 中的凭据只适合本机一次性验证。先生成本地认证密钥：
+完整浏览器演示使用 [本地启动入口](container-environment.md)，复用已有配置和密钥：
 
 ```powershell
-.\script\generate-auth-keys.ps1
+pwsh -NoProfile -File ./script/demo.ps1 -Action Start
 ```
 
 启动 Java 应用和 Agent 使用两个 profile：
 
 ```powershell
-docker compose --env-file .env.example --profile app --profile agent up -d --build
+pwsh -NoProfile -File ./script/demo.ps1 -Action Start
 ```
 
 只启动 Agent 与其状态/知识依赖（用户工具仍需要 Java 后端）：
 
 ```powershell
-docker compose --env-file .env.example --profile agent up -d --build redis-cache qdrant agent-service
+pwsh -NoProfile -File ./script/demo.ps1 -Action Start
 ```
 
 首次启动或知识变更后执行原子索引：
 
 ```powershell
-docker compose --env-file .env.example --profile agent exec -T agent-service python -m hotshop_agent.index_cli validate
-docker compose --env-file .env.example --profile agent exec -T agent-service python -m hotshop_agent.index_cli rebuild
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent --profile agent exec -T agent-service python -m hotshop_agent.index_cli validate
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent --profile agent exec -T agent-service python -m hotshop_agent.index_cli rebuild
 ```
 
 健康检查：
@@ -122,13 +121,14 @@ thinking/analysis/system 标签。候选最多 4096 个 Unicode 字符；超限 
 ## 6. 验证命令
 
 ```powershell
-docker build --target test -t hotshop-agent:test -f agent/Dockerfile agent
-docker run --rm --entrypoint python hotshop-agent:test -m ruff check .
-docker run --rm --entrypoint python hotshop-agent:test -m ruff format --check .
-docker run --rm --entrypoint python hotshop-agent:test -m mypy --no-incremental src tests
-docker run --rm --network none -e AGENT_MODEL_PROVIDER=fake -e AGENT_EMBEDDING_PROVIDER=deterministic --entrypoint python hotshop-agent:test -m pytest -m 'not qdrant' -p pytest_asyncio.plugin -p no:cacheprovider
-docker compose --env-file .env.example config --quiet
-docker compose --env-file .env.example --profile agent config --quiet
+cd agent
+python -m venv .venv
+# Windows: .venv/Scripts/Activate.ps1; Linux/macOS: source .venv/bin/activate
+python -m pip install -r requirements.lock -r requirements-dev.lock -e . --no-deps
+python -m ruff check .
+python -m ruff format --check .
+python -m mypy --no-incremental src tests
+python -m pytest -m 'not qdrant and not redis' -p no:cacheprovider
 ```
 
 CI 必须保持 `AGENT_MODEL_PROVIDER=fake`；DeepSeek、Qwen 和 Bailian 测试只使用

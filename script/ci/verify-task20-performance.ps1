@@ -22,10 +22,12 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'hosted-runner.ps1')
+Assert-HotShopHostedRunner
 $PSNativeCommandUseErrorActionPreference = $true
-. (Join-Path $PSScriptRoot 'task20-common.ps1')
+. (Join-Path $PSScriptRoot '../task20-common.ps1')
 
-$root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$root = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 Set-Location $root
 
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { throw 'docker is required' }

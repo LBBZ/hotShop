@@ -9,15 +9,7 @@
 
 执行：
 
-```powershell
-docker run --rm `
-  -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal `
-  -v /var/run/docker.sock:/var/run/docker.sock `
-  --mount "type=bind,source=$((Get-Location).Path),target=/workspace" `
-  --mount "type=volume,source=hotshop-task05-m2,target=/root/.m2" `
-  --workdir /workspace eclipse-temurin:21-jdk `
-  sh -lc './mvnw -B clean verify'
-```
+[本地运行入口](../delivery/demo.md)
 
 TASK-05-RECONCILE-01 最终态复跑结果：`BUILD SUCCESS`，9 个 reactor 模块均成功，总耗时 03:15；
 14 个测试套件共 96 tests，
@@ -53,7 +45,7 @@ Testcontainers 在测试 JVM 退出并停止 Redis 后，Lettuce 后台线程会
 先由 `.\script\generate-auth-keys.ps1` 生成被忽略的本地 key set，再执行：
 
 ```powershell
-.\script\verify-task05-http.ps1
+.\script\ci\verify-task05-http.ps1
 ```
 
 脚本用随机名字创建隔离 Docker network、MySQL 8.0.46、Redis 8.8.1、Flyway 11.20.3，以及从当前

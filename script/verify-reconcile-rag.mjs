@@ -10,7 +10,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(path.join(root, "web/package.json"));
 const { chromium } = require("@playwright/test");
 const [project, baseURL = "http://127.0.0.1:18080"] = process.argv.slice(2);
-assert.match(project ?? "", /^hotshop-task21-[a-z0-9]{8,24}$/);
+assert.match(project ?? "", /^hotshop$/);
 assert.ok(existsSync(path.join(root, ".local/keys", project, ".env.demo")), "Require this worktree's demo project");
 assert.ok(["127.0.0.1", "localhost"].includes(new URL(baseURL).hostname));
 const docker = (...args) => execFileSync("docker", args, { encoding: "utf8", timeout: 60_000 }).trim();

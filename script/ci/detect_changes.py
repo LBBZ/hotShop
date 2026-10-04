@@ -86,8 +86,8 @@ def classify_paths(paths: list[str]) -> dict[str, bool]:
             "script/canonicalize_openapi.py",
             "script/check_openapi_compatibility.py",
             "script/generate-api-client.ps1",
-            "script/generate-agent-openapi.ps1",
-            "script/generate-openapi.ps1",
+            "script/ci/generate-agent-openapi.ps1",
+            "script/ci/generate-openapi.ps1",
             "script/update-openapi-baseline.ps1",
         }:
             selected.update({"openapi", "web"})

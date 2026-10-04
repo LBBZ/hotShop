@@ -47,13 +47,8 @@ Agent 原始证据：`target/modernization-20260930/agent/verification.json` 和
 
 宿主可使用以下 Docker CLI 管理这一个项目（工作目录为仓库根目录）：
 
-```powershell
-docker compose -p hotshop-modernize-0930 --env-file .local/keys/hotshop-modernize-0930/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent ps -a
-docker compose -p hotshop-modernize-0930 --env-file .local/keys/hotshop-modernize-0930/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent stop
-docker compose -p hotshop-modernize-0930 --env-file .local/keys/hotshop-modernize-0930/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent up -d
-```
+[本地运行入口](../delivery/demo.md)
 
-`stop` 保留容器；需要退休整个项目时用同一组参数执行 `down --remove-orphans`，不附加 `--volumes`。若移动仓库或换主机，需要重新生成本地密钥路径配置。现有 `script/task21-demo.ps1` 用于独立演示环境，通用部署入口为 `script/deploy.sh`。
 
 ## 升级现有数据的顺序
 

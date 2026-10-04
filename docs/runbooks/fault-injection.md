@@ -6,11 +6,7 @@
 
 ## 入口与证据
 
-```powershell
-./script/verify-task19-e2e.ps1
-./script/verify-task19-faults.ps1
-./script/verify-task19-security.ps1
-```
+隔离集成验证仅由 GitHub 托管 CI 执行，见 [CI 说明](../quality/ci.md)。
 
 三个入口使用 PowerShell 7、Docker 与 Compose；宿主无需 Java、Node 或 Python。应用、Maven、Python、pnpm、Playwright 和扫描器在构建或验证镜像中
 执行。原始大报告进入忽略的 `target/task19-*`；仓库只保存脚本、规则和摘要文档。所有等待由健康检查、

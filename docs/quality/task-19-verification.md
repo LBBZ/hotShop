@@ -22,9 +22,9 @@ TASK-19 不复制这些场景。
 
 | 入口 | 内容 | 资源边界 |
 |---|---|---|
-| `script/verify-task19-e2e.ps1` | 唯一 Compose stack、原有两组 real spec、新 Agent/security spec；可选被动 ZAP | 启动前快照与创建后 ID 的差集登记；project label 只用于碰撞检测，不授予所有权 |
-| `script/verify-task19-faults.ps1` | 上述真实浏览器故障 + 既有 Java Testcontainers commit-boundary suites | 继续执行各 gate 并写 `fault-matrix.json` |
-| `script/verify-task19-security.ps1` | Gitleaks、OSV、Trivy fs/images、Semgrep、Java/Agent/Web 回归、ZAP | 固定版本/digest；报告缺失或 scanner 失败即失败 |
+| `script/ci/verify-task19-e2e.ps1` | 唯一 Compose stack、原有两组 real spec、新 Agent/security spec；可选被动 ZAP | 启动前快照与创建后 ID 的差集登记；project label 只用于碰撞检测，不授予所有权 |
+| `script/ci/verify-task19-faults.ps1` | 上述真实浏览器故障 + 既有 Java Testcontainers commit-boundary suites | 继续执行各 gate 并写 `fault-matrix.json` |
+| `script/ci/verify-task19-security.ps1` | Gitleaks、OSV、Trivy fs/images、Semgrep、Java/Agent/Web 回归、ZAP | 固定版本/digest；报告缺失或 scanner 失败即失败 |
 
 ## 本工作树执行状态
 

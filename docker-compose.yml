@@ -143,7 +143,7 @@ services:
       dockerfile: docker/rabbitmq/Dockerfile
       args:
         RABBITMQ_IMAGE: ${RABBITMQ_IMAGE:-rabbitmq:4.3.6-management-alpine@sha256:95312f53d5b1115d410f1a56fba03a6325e3e03b4c60a845237bd345f341a097}
-    image: ${RABBITMQ_PROJECT_IMAGE:-hotshop-rabbitmq:4.3.6}
+    image: ${RABBITMQ_PROJECT_IMAGE:-hotshop-rabbitmq:local}
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-hotshop}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-change-me-local-rabbitmq}
@@ -633,17 +633,24 @@ services:
 
 volumes:
   portal_key_material:
+    name: ${HOTSHOP_DATA_PROJECT:-${COMPOSE_PROJECT_NAME:-hotshop}}_portal_key_material
   admin_key_material:
+    name: ${HOTSHOP_DATA_PROJECT:-${COMPOSE_PROJECT_NAME:-hotshop}}_admin_key_material
   mysql_data:
+    name: ${HOTSHOP_DATA_PROJECT:-${COMPOSE_PROJECT_NAME:-hotshop}}_mysql_data
   redis_cache_data:
+    name: ${HOTSHOP_DATA_PROJECT:-${COMPOSE_PROJECT_NAME:-hotshop}}_redis_cache_data
   redis_seckill_data:
+    name: ${HOTSHOP_DATA_PROJECT:-${COMPOSE_PROJECT_NAME:-hotshop}}_redis_seckill_data
   rabbitmq_data:
+    name: ${HOTSHOP_DATA_PROJECT:-${COMPOSE_PROJECT_NAME:-hotshop}}_rabbitmq_data
   prometheus_data:
   grafana_data:
   loki_data:
   tempo_data:
   alloy_data:
   qdrant_data:
+    name: ${HOTSHOP_DATA_PROJECT:-${COMPOSE_PROJECT_NAME:-hotshop}}_qdrant_data
 
 networks:
   hotShop-network:

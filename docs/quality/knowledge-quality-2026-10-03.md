@@ -34,18 +34,7 @@ Qdrant 仅 Stop/Start，未删除数据卷；恢复时 Agent 进程未重启。
 
 主要执行命令如下，测试容器通过独立内部网络访问 Qdrant；pytest 与 eval 串行执行：
 
-```text
-docker build --target test -t hotshop-knowledge-agent-tests:1003 -f agent/Dockerfile agent
-ruff check .
-ruff format --check .
-mypy --no-incremental src tests
-python -m pytest -p pytest_asyncio.plugin -p no:cacheprovider --junitxml=/reports/junit-release.xml
-python -m hotshop_agent.eval_runner --suite quick --output /reports/quick-v3.json
-python -m hotshop_agent.eval_runner --suite full --output /reports/full-v3.json
-node script/verify-reconcile-rag.mjs hotshop-task21-accept1002 http://127.0.0.1:18082
-node script/check-docs.mjs
-git diff --check
-```
+[本地运行入口](../delivery/demo.md)
 
 测试镜像使用仓库固定的 Python 3.12.14 与依赖锁；Qdrant 为
 `qdrant/qdrant:v1.19.1@sha256:12364fe851b9f17356fc88189fc06d1b521262e04659ec7345975b00c9246a10`。

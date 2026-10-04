@@ -28,9 +28,9 @@ docker compose version
 pwsh -NoProfile -File ./script/demo.ps1 -Action Start
 ```
 
-首次运行需要联网下载镜像和依赖、构建应用并初始化数据，耗时取决于网络、机器和缓存。等待终端显示 `Ready:` 后，打开 **http://127.0.0.1:18080**。记下终端打印的项目名，后续查看状态、停止和再次启动都会用到。
+首次运行需要联网下载镜像和依赖、构建应用并初始化数据，耗时取决于网络、机器和缓存。等待终端显示 `Ready:` 后，打开 **http://127.0.0.1:18080**。项目名固定为 `hotshop`；再次执行 Start 会复用配置、容器和数据，只构建缺失或构建输入已变化的服务。
 
-端口已占用时，在启动命令后追加 `-WebPort 18081`，随后访问相应端口。
+首次启动时端口已占用，可在启动命令后追加 `-WebPort 18081`，随后访问相应端口。
 
 ## 2. 体验购物流程
 
@@ -55,7 +55,7 @@ pwsh -NoProfile -File ./script/demo.ps1 -Action Start
 | `913002` | 已售罄              | 观察库存不足时的状态                               |
 | `913003` | 已结束              | 在后台查看；首页不会展示已经结束的活动             |
 
-这些状态是预设的演示数据。目录在全新项目首次启动时写入；已有项目的 Restart 不会追加商品、重置库存或更新图片。
+这些状态是预设的演示数据。目录只在数据库没有用户、商品或订单时写入；后续 Start 和 Restart 不会追加商品、重置库存或更新图片。
 
 1. 打开首页，进入「发现好物」中的收音机详情。
 2. 在登录页选择「注册」，创建自己的用户名和密码。注册成功后会自动登录；已有账号直接登录。
@@ -96,26 +96,25 @@ pwsh -NoProfile -File ./script/demo.ps1 -Action Start
 
 ## 5. 停止、继续与排障
 
-将下方变量替换为启动时打印的实际项目名。项目名保留 `hotshop-task21-` 前缀；这是脚本的资源命名约定。
+项目固定为 `hotshop`，按需执行：
 
 ```powershell
-$demoProject = 'hotshop-task21-xxxxxxxxxxxx'
-pwsh -NoProfile -File ./script/demo.ps1 -Action Status -ProjectName $demoProject
-pwsh -NoProfile -File ./script/demo.ps1 -Action Stop -ProjectName $demoProject
-pwsh -NoProfile -File ./script/demo.ps1 -Action Restart -ProjectName $demoProject
+pwsh -NoProfile -File ./script/demo.ps1 -Action Status
+pwsh -NoProfile -File ./script/demo.ps1 -Action Stop
+pwsh -NoProfile -File ./script/demo.ps1 -Action Start
+pwsh -NoProfile -File ./script/demo.ps1 -Action Restart
+pwsh -NoProfile -File ./script/demo.ps1 -Action Logs
 ```
 
-分别按需运行以上命令：`Status` 查看服务状态；`Stop` 只停止容器，保留数据和密钥；`Restart` 启动已有容器，不重建镜像、不重置数据或延长活动。再次启动后稍候访问页面，必要时用 `Status` 查看健康状态。
+`Stop` 保留数据、密钥、镜像和容器。`Start` 启动或更新同一套环境；`Restart` 停止并启动同一套服务。两者均不会重置库存、订单、用户或活动时间。活动过期后，在后台管理活动。
 
-需要全新数据时，先停止旧项目，再重新运行不带 `-ProjectName` 的 `Start` 命令。若要同时保留两个运行中的演示，为新项目指定其他 `-WebPort`。新项目不会覆盖旧项目的数据。
+配置和密钥存于 Git 忽略目录 `.local/keys/hotshop/`。初次生成后始终复用，不打印或提交其中的凭据。Web 端口由 `.env.demo` 中的 `WEB_DEMO_PORT` 管理。
 
-配置和密钥保存在 Git 忽略目录 `.local/keys/<项目名>/`。启动失败时也会保留资源，方便查看日志：
+需要显式构建某个服务时使用固定标签：
 
 ```powershell
-docker ps -a --filter "label=com.docker.compose.project=$demoProject"
-# 将变量替换为上一步列出的实际容器名
-$demoContainer = '替换为容器名'
-docker logs --tail 100 $demoContainer
+pwsh -NoProfile -File ./script/demo.ps1 -Action Build -Service portal-service
+pwsh -NoProfile -File ./script/demo.ps1 -Action Start
 ```
 
-优先检查 Docker 是否启动、端口是否占用，以及镜像下载或数据库迁移是否报错。已有项目名、资源或同名镜像会被拒绝，继续使用原项目应执行 `Restart`。手动配置与资源管理见[容器指南](../runbooks/container-environment.md)；自动化验证另见 [CI 说明](../quality/ci.md)。
+启动失败时保留资源，先查看 Status 与 Logs，再检查 Docker、端口、镜像下载和迁移状态。详细配置见 [容器指南](../runbooks/container-environment.md)，托管 CI 见 [CI 说明](../quality/ci.md)。

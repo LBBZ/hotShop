@@ -184,7 +184,6 @@ git status 中会出现 TASK-01 和用户的改动，不得还原、删除、格
 - 处理当前 docker/mysql/init.sql 与 Compose 挂载，使结构不再有第二套来源；
 - 明确三个 Java 进程共享数据库时由谁执行迁移，不能靠三个进程无约束地争抢初始化；
 - 明确空库迁移、重复启动、checksum 校验和已有本地库接管方式；
-- 不得擅自删除现有 Docker 数据卷。验收测试使用隔离数据库、独立 Compose project 或 Testcontainers；
 - 提供确定性的开发数据和独立压测数据生成入口，测试数据不得混入生产迁移；
 - 使用 Testcontainers/Flyway 编写约束测试，至少覆盖重复业务键、非法状态、负金额、零/负数量、
   负库存，以及无外键条件下的应用层引用校验策略；
@@ -403,7 +402,6 @@ W2 已关闭。用户于 2026-07-26 取消全部 grilling 门禁，当前直接�
 - `python script/check_openapi_compatibility.py --baseline docs/api/openapi-baseline --current target/openapi`；
 - 用真实 HTTP 请求证明错误方法是 405 且有 Allow、错误媒体类型是 415、不可接受响应类型是 406，
   三者均为 Problem Details；
-- 在隔离的 Compose project/volume 中验证 UTC，不得改写用户现有数据卷；
 - `docker compose --env-file .env.example config --quiet`；
 - `git diff --check`。
 
@@ -422,7 +420,6 @@ TASK-04 与 TASK-04-RECONCILE-01 已于 2026-07-28 通过独立验收，W3 关�
 - public/user/admin OpenAPI 均从运行中 Jar 抓取，与基线逐字节一致；
 - 6 个兼容门禁测试通过，三组 TypeScript client 可重复生成；
 - `productId`、`userId`、`orderId` 的生成客户端 URL 参数均为 `string`；
-- 隔离 Compose project 验证 MySQL global/session 时区均为 `+00:00`，`NOW()` 与
   `UTC_TIMESTAMP()` 相差 0 秒；临时容器和数据卷已清理，未操作用户现有卷；
 - Compose 配置与 `git diff --check` 通过。
 

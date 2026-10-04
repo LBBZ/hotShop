@@ -10,7 +10,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$projectRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'hosted-runner.ps1')
+Assert-HotShopHostedRunner
+$projectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 Set-Location $projectRoot
 $composeArguments = @("-p", $ProjectName, "--env-file", ".env.example")
 
@@ -77,7 +79,7 @@ if (-not $SkipStartup) {
         ForEach-Object { Join-Path $keyDirectory "$_-private.pem"; Join-Path $keyDirectory "$_-public.pem" }
     $presentKeys = @($expectedKeys | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
     if ($presentKeys.Count -eq 0) {
-        & "$PSScriptRoot/generate-auth-keys.ps1"
+        & "$PSScriptRoot/../generate-auth-keys.ps1"
         if ($LASTEXITCODE -ne 0) { throw "Authentication key generation failed" }
     } elseif ($presentKeys.Count -ne $expectedKeys.Count) {
         throw "Authentication key directory is incomplete; refusing to overwrite it"

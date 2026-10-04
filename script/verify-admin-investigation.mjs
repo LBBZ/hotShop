@@ -12,7 +12,7 @@ const require = createRequire(path.join(root, "web/package.json"));
 const { chromium, devices, expect: baseExpect } = require("@playwright/test");
 const expect = baseExpect.configure({ timeout: 15_000 });
 const [project, address] = process.argv.slice(2);
-assert.match(project ?? "", /^hotshop-task21-[a-z0-9]{8,24}$/);
+assert.match(project ?? "", /^hotshop$/);
 assert.ok(existsSync(path.join(root, ".local/keys", project, ".env.demo")));
 const url = new URL(address);
 assert.ok(["http:", "https:"].includes(url.protocol));

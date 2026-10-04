@@ -53,17 +53,7 @@ Java 属性、应用 YAML、Compose 和环境示例的阻塞默认值统一为 *
 本机采用 Java 21、缓存的 Maven Wrapper、Redis `8.8.3-alpine` 和 MySQL `8.4.11`。
 红测仅选择前两个新增测试类；绿测命令如下：
 
-```powershell
-docker run --rm --pull=never --name hotshop-poll-timeout-green --memory=2g --memory-swap=2g `
-  --mount type=bind,source=D:/Codex/Projects/hotShop,target=/workspace `
-  --mount type=volume,source=hotshop-modernize-maven-cache,target=/root/.m2 `
-  --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock `
-  -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal `
-  -e 'JAVA_TOOL_OPTIONS=-Xmx512m -XX:ActiveProcessorCount=4' `
-  -w /workspace eclipse-temurin:21-jdk sh ./mvnw -B -o -pl task -am `
-  '-Dtest=SeckillOrderPollingConfigurationTest,ReservationStreamPollingContainerTest,SeckillOrderReliabilityContainerTest,ReservationStreamLagTest,ReservationStreamConsumerObservationTest' `
-  '-Dsurefire.failIfNoSpecifiedTests=false' test
-```
+[本地运行入口](../delivery/demo.md)
 
 原始日志、红绿 Surefire XML、源码 SHA256 和汇总在本机忽略目录
 `.local/verification/stream-poll-timeout-20261004/`；含环境属性的原始 XML 不发布到仓库。

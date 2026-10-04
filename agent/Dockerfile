@@ -1,4 +1,5 @@
 FROM python:3.12.14-alpine@sha256:b64631e04e4920160c50fbe8d8df828f7f35f06f425cb44aa09bca53e708a35a AS base
+LABEL com.hotshop.project="hotshop"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -18,6 +19,7 @@ COPY requirements.lock ./
 RUN python -m pip install --requirement requirements.lock
 
 FROM base AS test-dependencies
+LABEL com.hotshop.project="hotshop"
 
 ENV MYPY_CACHE_DIR=/tmp/mypy-cache \
     RUFF_CACHE_DIR=/tmp/ruff-cache \
@@ -27,6 +29,7 @@ COPY requirements-dev.lock pyproject.toml ./
 RUN python -m pip install --requirement requirements-dev.lock
 
 FROM test-dependencies AS test
+LABEL com.hotshop.project="hotshop"
 
 COPY src ./src
 COPY knowledge ./knowledge
@@ -37,12 +40,15 @@ USER 10001:10001
 CMD ["python", "-m", "pytest", "-p", "pytest_asyncio.plugin", "-p", "no:cacheprovider"]
 
 FROM docker:28.3.3-cli@sha256:0135662b510037ea581d99c2e5929c5e01185139c0b86986a418bd4da0b98a44 AS docker-cli
+LABEL com.hotshop.project="hotshop"
 
 FROM test AS security-test
+LABEL com.hotshop.project="hotshop"
 
 COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 
 FROM base AS runtime
+LABEL com.hotshop.project="hotshop"
 
 COPY src ./src
 COPY knowledge ./knowledge

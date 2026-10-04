@@ -2,8 +2,10 @@
 param()
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'hosted-runner.ps1')
+Assert-HotShopHostedRunner
 $PSNativeCommandUseErrorActionPreference = $true
-$root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$root = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 Set-Location $root
 $staticPassword = [Guid]::NewGuid().ToString('N')
 
@@ -60,7 +62,7 @@ try {
     $tokens = $null
     $parseErrors = $null
     [System.Management.Automation.Language.Parser]::ParseFile(
-        (Join-Path $root 'script/verify-task20-performance.ps1'), [ref]$tokens, [ref]$parseErrors
+        (Join-Path $root 'script/ci/verify-task20-performance.ps1'), [ref]$tokens, [ref]$parseErrors
     ) | Out-Null
     if ($parseErrors.Count -ne 0) { throw 'TASK-20 PowerShell parser validation failed' }
     Write-Host 'TASK-20 Compose, host-port boundary, k6, idempotency, and PowerShell static validation passed.'

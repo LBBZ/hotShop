@@ -307,7 +307,7 @@ class PolicyTest(unittest.TestCase):
         self.addCleanup(directory.cleanup)
         root = Path(directory.name)
         paths = {
-            root / "script" / "verify-task16-compose.ps1": verification,
+            root / "script" / "ci" / "verify-task16-compose.ps1": verification,
             root / "script" / "ci" / "tests" / "test_native_cleanup.ps1": native_test,
             root
             / "script"

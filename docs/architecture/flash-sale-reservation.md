@@ -205,13 +205,13 @@ Invoke-RestMethod -Method Post `
 容器设置了 `REDISCLI_AUTH`，可查询：
 
 ```powershell
-docker compose --env-file .env.example exec -T redis-seckill redis-cli `
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent exec -T redis-seckill redis-cli `
   HGETALL 'hotshop:seckill:v1:{hotshop-seckill-v1}:activity:7001:meta'
-docker compose --env-file .env.example exec -T redis-seckill redis-cli `
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent exec -T redis-seckill redis-cli `
   GET 'hotshop:seckill:v1:{hotshop-seckill-v1}:activity:7001:stock'
-docker compose --env-file .env.example exec -T redis-seckill redis-cli `
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent exec -T redis-seckill redis-cli `
   XLEN 'hotshop:seckill:v1:{hotshop-seckill-v1}:activity:7001:reservations'
-docker compose --env-file .env.example exec -T redis-seckill redis-cli `
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent exec -T redis-seckill redis-cli `
   XRANGE 'hotshop:seckill:v1:{hotshop-seckill-v1}:activity:7001:reservations' - +
 ```
 
@@ -219,7 +219,7 @@ docker compose --env-file .env.example exec -T redis-seckill redis-cli `
 用于观察异步持久化总量，不应把“始终为零”作为预约成功断言：
 
 ```powershell
-docker compose --env-file .env.example exec -T mysql sh -c `
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent exec -T mysql sh -c `
   'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -N --user=root --database="$MYSQL_DATABASE" -e "SELECT (SELECT COUNT(*) FROM sale_reservation),(SELECT COUNT(*) FROM sales_order),(SELECT COUNT(*) FROM outbox_event)"'
 ```
 

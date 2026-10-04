@@ -41,7 +41,7 @@ Access Token 时，才可显式覆盖：
 不要在共享或生产环境使用 `-Force`。生成后先执行静态配置检查：
 
 ```powershell
-docker compose --env-file .env.example config --quiet
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent config --quiet
 ```
 
 ## 3. 零停机 Access key 轮换
@@ -87,7 +87,7 @@ Web Locks 要求安全上下文（HTTPS 或受信的本机地址）。不同源�
 - 服务端已提交轮换而响应丢失时，当前页面只尝试一次，重新登录后返回原页面。
 - 页面在轮换提交后关闭、且未收到新 Cookie 时，下一标签携带旧 Cookie 得到 401；重新登录创建新会话后可正常刷新，不恢复旧 family。
 
-从仓库根目录执行 `node script/verify-auth-browsers.mjs <项目名> <Web地址>` 可复验，前提是已启动独立本机演示并安装对应的 Playwright 浏览器。完整准备步骤见 [Web 验证入口](../../web/README.md#验证)，版本与 20 项结果见[跨浏览器验收](../quality/auth-browsers-2026-10-03.md)。这些结果只覆盖该轮同源本机环境；手机项目是模拟参数，跨源部署、没有 Web Locks 的浏览器以及 Safari / iOS 真机仍需独立验证。
+从仓库根目录执行 `node script/verify-auth-browsers.mjs <项目名> <Web地址>` 可复验，前提是已启动本机 `hotshop` 演示并安装对应的 Playwright 浏览器。完整准备步骤见 [Web 验证入口](../../web/README.md#验证)，版本与 20 项结果见[跨浏览器验收](../quality/auth-browsers-2026-10-03.md)。这些结果只覆盖该轮同源本机环境；手机项目是模拟参数，跨源部署、没有 Web Locks 的浏览器以及 Safari / iOS 真机仍需独立验证。
 
 ## 5. Redis 和数据库故障语义
 

@@ -1,6 +1,8 @@
 FROM docker:28.3.3-cli@sha256:0135662b510037ea581d99c2e5929c5e01185139c0b86986a418bd4da0b98a44 AS docker-cli
+LABEL com.hotshop.project="hotshop"
 
 FROM mcr.microsoft.com/playwright:v1.57.0-noble@sha256:3bed4b1a12f2338642f3d8cba28e291deef3c66bd4a964bbeb3e57bbff511dbd AS test
+LABEL com.hotshop.project="hotshop"
 
 ARG PNPM_VERSION=10.15.0
 
@@ -27,10 +29,12 @@ RUN test -s package.json && test -s src/main.tsx
 CMD ["pnpm", "test:e2e"]
 
 FROM test AS build
+LABEL com.hotshop.project="hotshop"
 
 RUN pnpm build
 
 FROM nginxinc/nginx-unprivileged:1.29-alpine@sha256:0c79d56aee561a1d81c63f00eee5fb5fe29279560cdc55e91425133104c7fbe6 AS runtime
+LABEL com.hotshop.project="hotshop"
 
 USER 0:0
 RUN apk add --no-cache --upgrade \

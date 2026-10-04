@@ -2,6 +2,8 @@
 param()
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot '../hosted-runner.ps1')
+Assert-HotShopHostedRunner
 $repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\.."))
 . (Join-Path $repositoryRoot "script\ci\native_cleanup.ps1")
 
@@ -13,7 +15,7 @@ if (-not (Test-Path -LiteralPath $currentPowerShell -PathType Leaf)) {
     throw "Cannot resolve the current PowerShell executable"
 }
 
-$verificationScript = Join-Path $repositoryRoot "script\verify-task16-compose.ps1"
+$verificationScript = Join-Path $repositoryRoot "script\ci\verify-task16-compose.ps1"
 $verificationSource = [System.IO.File]::ReadAllText($verificationScript)
 $finalCleanupMarker = [regex]::Match(
     $verificationSource, '(?m)^finally \{\r?\n    \$cleanupFailures'

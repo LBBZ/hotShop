@@ -320,18 +320,18 @@ hotshop.seckill.reconciliation.findings
 $stream = 'hotshop:seckill:v1:{hotshop-seckill-v1}:activity:7001:reservations'
 $registry = 'hotshop:seckill:v1:{hotshop-seckill-v1}:registry:reservation-streams'
 
-docker compose --env-file .env.example exec -T redis-seckill redis-cli SMEMBERS $registry
-docker compose --env-file .env.example exec -T redis-seckill redis-cli XINFO GROUPS $stream
-docker compose --env-file .env.example exec -T redis-seckill redis-cli XPENDING $stream hotshop-order-v1
-docker compose --env-file .env.example exec -T redis-seckill redis-cli `
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent exec -T redis-seckill redis-cli SMEMBERS $registry
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent exec -T redis-seckill redis-cli XINFO GROUPS $stream
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent exec -T redis-seckill redis-cli XPENDING $stream hotshop-order-v1
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent exec -T redis-seckill redis-cli `
   XPENDING $stream hotshop-order-v1 - + 100
-docker compose --env-file .env.example exec -T redis-seckill redis-cli XRANGE $stream - + COUNT 100
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent exec -T redis-seckill redis-cli XRANGE $stream - + COUNT 100
 ```
 
 处理账本、人工问题、Outbox 和 dry-run 结果：
 
 ```powershell
-docker compose --env-file .env.example exec -T mysql sh -c `
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent exec -T mysql sh -c `
   'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql --user=root --database="$MYSQL_DATABASE" --table -e "
    SELECT event_id,stream_entry_id,reservation_no,status,attempts,next_attempt_at,
           order_id,compensation_id,reason_code,updated_at

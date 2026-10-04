@@ -62,6 +62,9 @@ try {
         [Environment]::SetEnvironmentVariable($name,$null,'Process')
     }
     if ($Action -eq 'Start' -and -not (Test-Path -LiteralPath $demoEnv)) {
+        if ((Test-Path -LiteralPath $demoDir) -and @(Get-ChildItem -LiteralPath $demoDir -Force).Count) {
+            throw 'Demo configuration is missing but local state remains. Restore .env.demo before starting; credentials retained.'
+        }
         Invoke-Docker @('info','--format','{{.ServerVersion}}')
         foreach ($query in @(
             @('ps','-aq','--filter',"label=com.docker.compose.project=$ProjectName"),
@@ -128,23 +131,31 @@ try {
         }
         if ([Environment]::GetEnvironmentVariable($name,'Process') -cne $expected) { throw "Use the fixed local image tag $expected." }
     }
-    $stateFile = Join-Path $demoDir 'build-state.json'
-    $state = if (Test-Path -LiteralPath $stateFile) { Get-Content -Raw -LiteralPath $stateFile | ConvertFrom-Json -AsHashtable } else { @{} }
-    $tracked = @(& git -C $demoRoot ls-files --cached --others --exclude-standard)
-    if ($LASTEXITCODE -ne 0) { throw 'Cannot enumerate build inputs.' }
-    $configuration = (Invoke-Docker ($compose + @('config','--format','json')) | Out-String) | ConvertFrom-Json -AsHashtable
-    foreach ($entry in $images.GetEnumerator()) {
-        $buildDefinition = $configuration.services[$entry.Key].build | ConvertTo-Json -Depth 30 -Compress
-        $fingerprint = Get-BuildFingerprint $entry.Key $tracked $buildDefinition
-        $oldId = @(Invoke-Docker @('image','ls','-q','--no-trunc','--filter',"reference=$($entry.Value)"))
-        $record = $state[$entry.Key]
-        $changed = $oldId.Count -eq 0 -or -not $record -or $record.fingerprint -cne $fingerprint -or $record.image -cne $oldId[0]
-        if (($Action -eq 'Build' -and (-not $Service -or $Service -eq $entry.Key)) -or ($Action -eq 'Start' -and $changed)) {
-            Invoke-Docker ($compose + @('build',$entry.Key))
-            $newId = @(Invoke-Docker @('image','ls','-q','--no-trunc','--filter',"reference=$($entry.Value)"))
-            if ($newId.Count -ne 1) { throw 'Expected one built image.' }
-            $state[$entry.Key] = @{fingerprint=$fingerprint; image=$newId[0]}
-            $state | ConvertTo-Json | Set-Content -LiteralPath $stateFile -Encoding utf8
+    if ($Action -eq 'Restart') {
+        foreach ($entry in $images.GetEnumerator()) {
+            $imageIds = @(Invoke-Docker @('image','ls','-q','--no-trunc','--filter',"reference=$($entry.Value)"))
+            if ($imageIds.Count -ne 1) { throw "Restart requires $($entry.Value). Run Start to build missing images; running services retained." }
+        }
+    } else {
+        $stateFile = Join-Path $demoDir 'build-state.json'
+        $state = if (Test-Path -LiteralPath $stateFile) { Get-Content -Raw -LiteralPath $stateFile | ConvertFrom-Json -AsHashtable } else { @{} }
+        $tracked = @(& git -C $demoRoot ls-files --cached --others --exclude-standard)
+        if ($LASTEXITCODE -ne 0) { throw 'Cannot enumerate build inputs.' }
+        $configuration = (Invoke-Docker ($compose + @('config','--format','json')) | Out-String) | ConvertFrom-Json -AsHashtable
+        foreach ($entry in $images.GetEnumerator()) {
+            $buildDefinition = $configuration.services[$entry.Key].build | ConvertTo-Json -Depth 30 -Compress
+            $fingerprint = Get-BuildFingerprint $entry.Key $tracked $buildDefinition
+            $oldId = @(Invoke-Docker @('image','ls','-q','--no-trunc','--filter',"reference=$($entry.Value)"))
+            $record = $state[$entry.Key]
+            $changed = $oldId.Count -eq 0 -or -not $record -or $record.fingerprint -cne $fingerprint -or $record.image -cne $oldId[0]
+            if (($Action -eq 'Build' -and (-not $Service -or $Service -eq $entry.Key)) -or ($Action -eq 'Start' -and $changed)) {
+                Invoke-Docker ($compose + @('build',$entry.Key))
+                $newId = @(Invoke-Docker @('image','ls','-q','--no-trunc','--filter',"reference=$($entry.Value)"))
+                if ($newId.Count -ne 1) { throw 'Expected one built image.' }
+                $state[$entry.Key] = @{fingerprint=$fingerprint; image=$newId[0]}
+                $state | ConvertTo-Json | Set-Content -LiteralPath "$stateFile.tmp" -Encoding utf8
+                [IO.File]::Move("$stateFile.tmp", $stateFile, $true)
+            }
         }
     }
     if ($Action -eq 'Build') { return }

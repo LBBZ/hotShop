@@ -87,6 +87,29 @@ AGENT_MODEL_PROVIDER=fake
     if (@($global:DemoCalls | Where-Object { $_ -match ' build |--build|seed|index_cli' }).Count) { throw 'Repeated Start rebuilt or seeded existing data.' }
     if ($env:AGENT_MODEL_PROVIDER -cne 'restore-me') { throw 'Shell overrides were not restored.' }
     if (@($global:DemoCalls | Where-Object { $_ -like 'image rm *' }).Count -ne 1) { throw 'Cleanup tried to delete an image already removed with its child.' }
+    $stateFile = "$sandbox/.local/keys/hotshop/build-state.json"
+    $savedState = Get-Content -Raw $stateFile
+    '{broken' | Set-Content $stateFile
+    $global:DemoCalls.Clear()
+    & "$sandbox/script/demo.ps1" -Action Restart | Out-Null
+    if (@($global:DemoCalls | Where-Object { $_ -match ' build |config --format json' }).Count) { throw 'Restart consulted build inputs.' }
+    if (-not @($global:DemoCalls | Where-Object { $_ -match ' stop$' }).Count) { throw 'Restart did not restart services.' }
+    $savedImage = $global:DemoImages['hotshop-web:local']
+    $global:DemoImages.Remove('hotshop-web:local')
+    $global:DemoCalls.Clear()
+    try { & "$sandbox/script/demo.ps1" -Action Restart | Out-Null; throw 'Missing image accepted.' }
+    catch { if ($_.Exception.Message -notlike '*Restart requires hotshop-web:local*') { throw } }
+    if (@($global:DemoCalls | Where-Object { $_ -match ' stop$| up | build ' }).Count) { throw 'Missing image interrupted running services.' }
+    $global:DemoImages['hotshop-web:local'] = $savedImage
+    $savedState | Set-Content $stateFile
+    $envFile = "$sandbox/.local/keys/hotshop/.env.demo"
+    $savedConfig = Get-Content -Raw $envFile
+    Remove-Item $envFile
+    $global:DemoCalls.Clear()
+    try { & "$sandbox/script/demo.ps1" -Action Start | Out-Null; throw 'Missing configuration accepted.' }
+    catch { if ($_.Exception.Message -notlike '*local state remains*') { throw } }
+    if ($global:DemoCalls.Count -or (Test-Path $envFile)) { throw 'Missing configuration created a new environment.' }
+    $savedConfig | Set-Content $envFile
     'agent-v2' | Set-Content "$sandbox/agent/source.py"
     $global:DemoCalls.Clear()
     & "$sandbox/script/demo.ps1" -Action Start | Out-Null

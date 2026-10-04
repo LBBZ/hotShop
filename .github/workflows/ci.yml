@@ -75,6 +75,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           & ./script/tests/test_demo.ps1
+          & ./script/tests/test_auth_keys.ps1
           & ./script/ci/tests/test_native_cleanup.ps1
           & ./script/ci/tests/test_task19_native_preference.ps1
           & ./script/ci/tests/test_compose_cleanup_ownership.ps1

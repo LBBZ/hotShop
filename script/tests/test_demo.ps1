@@ -8,6 +8,11 @@ $global:DemoMigrationExit = '0'
 $global:DemoMigratorMode = 'one'
 $global:DemoUnusedImages = @()
 $global:DemoBuildOption = 'v1'
+$global:DemoReceipt = '0'
+$global:DemoCount = '0'
+$global:DemoSeedFails = $false
+$global:DemoIndexFails = $false
+$global:DemoSeedCalls = 0
 function docker {
     $global:LASTEXITCODE = 0
     $call = $args -join ' '
@@ -34,7 +39,15 @@ function docker {
         } elseif ($call -like '*ps -a -q database-migrator') {
             switch ($global:DemoMigratorMode) { 'missing' { }; 'ambiguous' { 'one'; 'two' }; default { 'migrator' } }
         }
-        elseif ($call -like '*SELECT*COUNT*') { '12' }
+        elseif ($call -like '*CREATE TABLE IF NOT EXISTS local_demo_initialization*') { $global:DemoReceipt }
+        elseif ($call -like '*SELECT*COUNT*') { $global:DemoCount }
+        elseif ($call -like '*mysql --default-character-set*') {
+            $sql = @($input) -join "`n"
+            if ([regex]::Matches($sql, '(?im)^START TRANSACTION;').Count -ne 1 -or [regex]::Matches($sql, '(?im)^COMMIT;').Count -ne 1 -or $sql -notmatch 'INSERT INTO local_demo_initialization') { throw 'Seed must have one transaction including its receipt.' }
+            $global:DemoSeedCalls++
+            if ($global:DemoSeedFails) { $global:LASTEXITCODE = 1 } else { $global:DemoReceipt = '1'; $global:DemoCount = '12' }
+        }
+        elseif ($call -like '*index_cli rebuild' -and $global:DemoIndexFails) { $global:LASTEXITCODE = 1 }
         return
     }
     if ($args[0] -eq 'wait') { $global:DemoMigrationExit; return }
@@ -44,6 +57,7 @@ function docker {
 }
 function git { $global:LASTEXITCODE = 0; 'agent/source.py'; 'portal/source.java'; 'infrastructure/source.java' }
 function Invoke-WebRequest { }
+function Invoke-RestMethod { @{accessToken='test-token'} }
 $savedProvider = $env:AGENT_MODEL_PROVIDER
 try {
     New-Item -ItemType Directory -Force "$sandbox/script","$sandbox/agent","$sandbox/portal","$sandbox/infrastructure","$sandbox/.local/keys/hotshop" | Out-Null
@@ -105,6 +119,47 @@ AGENT_MODEL_PROVIDER=fake
         }
         if (-not $failed) { throw "Migrator $mode accepted." }
     }
+    $global:DemoMigratorMode = 'one'
+    # Existing empty databases have no bootstrap intent and must remain empty.
+    if ($global:DemoSeedCalls -ne 0) { throw 'Existing empty database was seeded.' }
+    New-Item -ItemType Directory -Force "$sandbox/web/scripts","$sandbox/database/data" | Out-Null
+    Copy-Item "$root/web/scripts/task-13-e2e-seed.sql" "$sandbox/web/scripts/"
+    Copy-Item "$root/database/data/demo-catalog.sql" "$sandbox/database/data/"
+    $pending = "$sandbox/.local/keys/hotshop/bootstrap-pending"
+    'database' | Set-Content $pending
+    $global:DemoSeedFails = $true
+    try { & "$sandbox/script/demo.ps1" -Action Start | Out-Null; throw 'Seed failure accepted.' }
+    catch { if ($_.Exception.Message -notlike '*Demo seed failed*') { throw } }
+    if (-not (Test-Path $pending) -or $global:DemoReceipt -ne '0') { throw 'Failed seed lost recovery state.' }
+    $global:DemoSeedFails = $false
+    $global:DemoIndexFails = $true
+    try { & "$sandbox/script/demo.ps1" -Action Start | Out-Null; throw 'Index failure accepted.' }
+    catch { if ($_.Exception.Message -notlike '*Docker command failed*') { throw } }
+    $seedCalls = $global:DemoSeedCalls
+    $global:DemoIndexFails = $false
+    & "$sandbox/script/demo.ps1" -Action Start | Out-Null
+    if ($global:DemoSeedCalls -ne $seedCalls -or (Test-Path $pending)) { throw 'Post-commit recovery repeated seed or stayed pending.' }
+    'database' | Set-Content $pending
+    $global:DemoReceipt = '0'
+    try { & "$sandbox/script/demo.ps1" -Action Start | Out-Null; throw 'Existing data accepted for bootstrap.' }
+    catch { if ($_.Exception.Message -notlike '*refusing to seed*') { throw } }
+    Remove-Item $pending
+    # A failed first key generation must retry with the same configuration.
+    @'
+param($OutputDirectory, [switch]$Resume)
+if (-not $Resume) { throw 'Bootstrap must resume rather than rotate keys.' }
+if ($global:DemoKeysFail) { throw 'Simulated key interruption.' }
+'@ | Set-Content "$sandbox/script/generate-auth-keys.ps1"
+    $configHash = (Get-FileHash "$sandbox/.local/keys/hotshop/.env.demo").Hash
+    'keys' | Set-Content $pending
+    $global:DemoKeysFail = $true
+    try { & "$sandbox/script/demo.ps1" -Action Start | Out-Null; throw 'Key failure accepted.' }
+    catch { if ($_.Exception.Message -notlike '*Simulated key interruption*') { throw } }
+    if ((Get-Content -Raw $pending).Trim() -ne 'keys') { throw 'Key failure advanced bootstrap state.' }
+    $global:DemoKeysFail = $false
+    $global:DemoReceipt = '1'
+    & "$sandbox/script/demo.ps1" -Action Start | Out-Null
+    if ((Test-Path $pending) -or (Get-FileHash "$sandbox/.local/keys/hotshop/.env.demo").Hash -cne $configHash) { throw 'Key recovery lost progress or rotated configuration secrets.' }
     $lock = [IO.File]::Open((Join-Path $sandbox '.local/demo.lock'), [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
     try {
         $global:DemoCalls.Clear()

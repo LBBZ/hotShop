@@ -549,7 +549,7 @@ try {
 
     if (-not (Test-Path '.local/keys/hotshop/user-private.pem')) {
         & (Join-Path $root 'script/generate-auth-keys.ps1')
-        Record-Command 'pwsh -File script/generate-auth-keys.ps1' $LASTEXITCODE
+        Record-Command 'pwsh -File script/generate-auth-keys.ps1' 0
     }
     $profiles = @('--profile','app','--profile','observability')
     if ($Profile -eq 'agent-isolation') { $profiles += @('--profile','agent') }

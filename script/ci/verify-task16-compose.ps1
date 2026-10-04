@@ -894,9 +894,6 @@ try {
     # remove a partially or fully created directory immediately before key generation.
     $resourceOwnership.keyDirectory = $true
     & "$PSScriptRoot/../generate-auth-keys.ps1" -OutputDirectory $keyRoot
-    if ($LASTEXITCODE -ne 0) {
-        throw "Authentication key generation failed"
-    }
     $hostAgentPrivateKey = Join-Path $keyRoot "agent-service-private.pem"
     $hostUserPrivateKey = Join-Path $keyRoot "user-private.pem"
     $hostDelegationPrivateKey = Join-Path $keyRoot "agent-delegation-private.pem"

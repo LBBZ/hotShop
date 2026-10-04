@@ -27,7 +27,7 @@ HotShop 是一个可在本地运行的全栈商城项目。React 商城、Java �
 
 ## 快速开始
 
-准备好 [Git](https://git-scm.com/downloads)、[Docker](https://docs.docker.com/get-started/get-docker/)（Linux 容器，Compose **2.24.4+**）和 [PowerShell 7+](https://learn.microsoft.com/powershell/scripting/install/installing-powershell)。启动 Docker 后执行：
+准备好 [Git](https://git-scm.com/downloads)、[Docker](https://docs.docker.com/get-started/get-docker/)（Linux 容器，Compose **2.24.4+**）和 [PowerShell 7.2+](https://learn.microsoft.com/powershell/scripting/install/installing-powershell)。启动 Docker 后执行：
 
 ```powershell
 git clone https://github.com/LBBZ/hotShop.git

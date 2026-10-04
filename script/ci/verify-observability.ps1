@@ -80,7 +80,6 @@ if (-not $SkipStartup) {
     $presentKeys = @($expectedKeys | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
     if ($presentKeys.Count -eq 0) {
         & "$PSScriptRoot/../generate-auth-keys.ps1"
-        if ($LASTEXITCODE -ne 0) { throw "Authentication key generation failed" }
     } elseif ($presentKeys.Count -ne $expectedKeys.Count) {
         throw "Authentication key directory is incomplete; refusing to overwrite it"
     }

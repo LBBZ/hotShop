@@ -1,64 +1,75 @@
+#requires -Version 7.2
 [CmdletBinding()]
 param(
     [string]$OutputDirectory,
-    [string]$DockerOutputDirectory = "",
-    [switch]$Force,
-    [string]$OpenSslImage = 'alpine/openssl:3.5.4@sha256:42c7389ef077aed0eb4e96d0abbd094083d701bbaff1313073b061c0c9cd8278'
+    [switch]$Resume,
+    [switch]$Force
 )
-
 $ErrorActionPreference = 'Stop'
-$repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+if ($Resume -and $Force) { throw 'Resume and Force are mutually exclusive.' }
 if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
-    $OutputDirectory = Join-Path $repositoryRoot '.local\keys\hotshop'
+    $OutputDirectory = Join-Path $PSScriptRoot '../.local/keys/hotshop'
 }
-$OutputDirectory = [System.IO.Path]::GetFullPath($OutputDirectory)
-if ([string]::IsNullOrWhiteSpace($DockerOutputDirectory)) {
-    $DockerOutputDirectory = $OutputDirectory
-}
+$OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)
 New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
-
 $names = @('user', 'administrator', 'agent-delegation', 'agent-service')
-$targets = foreach ($name in $names) {
-    Join-Path $OutputDirectory "$name-private.pem"
-    Join-Path $OutputDirectory "$name-public.pem"
-}
-$existing = @($targets | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
-if ($existing.Count -gt 0 -and -not $Force) {
-    throw "Refusing to overwrite existing authentication keys. Re-run with -Force only after explicit confirmation. Existing: $($existing -join ', ')"
-}
-if ($Force) {
-    foreach ($target in $existing) {
-        Remove-Item -LiteralPath $target -Force
-    }
-}
-
-docker info --format '{{.ServerVersion}}' | Out-Null
-if ($LASTEXITCODE -ne 0) {
-    throw 'Docker Desktop is not available'
-}
-
+$writes = [ordered]@{}
+# Validate every existing pair before writing anything. Resume is only for an
+# interrupted first initialization; it never replaces an existing private key.
 foreach ($name in $names) {
-    docker run --rm `
-        --mount "type=bind,source=$DockerOutputDirectory,target=/keys" `
-        $OpenSslImage `
-        genpkey -quiet -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out "/keys/$name-private.pem"
-    if ($LASTEXITCODE -ne 0) {
-        throw "Could not generate the $name private key"
+    $private = Join-Path $OutputDirectory "$name-private.pem"
+    $public = Join-Path $OutputDirectory "$name-public.pem"
+    $hasPrivate = Test-Path -LiteralPath $private
+    $hasPublic = Test-Path -LiteralPath $public
+    if (($hasPrivate -or $hasPublic) -and -not ($Force -or $Resume)) {
+        throw 'Refusing to overwrite existing authentication keys.'
     }
-    docker run --rm `
-        --mount "type=bind,source=$DockerOutputDirectory,target=/keys" `
-        $OpenSslImage `
-        pkey -in "/keys/$name-private.pem" -pubout -out "/keys/$name-public.pem"
-    if ($LASTEXITCODE -ne 0) {
-        throw "Could not derive the $name public key"
+    $rsa = [Security.Cryptography.RSA]::Create(3072)
+    try {
+        if ($Resume -and $hasPublic -and -not $hasPrivate) { throw "Missing private key for $name; restore the original key." }
+        if ($Resume -and $hasPrivate) {
+            $rsa.ImportFromPem([IO.File]::ReadAllText($private))
+            # Exporting private parameters rejects a public-only file.
+            $null = $rsa.ExportParameters($true)
+            if ($rsa.KeySize -lt 3072) { throw "Invalid key size for $name." }
+        } else {
+            $writes[$private] = $rsa.ExportPkcs8PrivateKeyPem() + "`n"
+        }
+        if ($Resume -and $hasPublic) {
+            $verifier = [Security.Cryptography.RSA]::Create()
+            try {
+                $verifier.ImportFromPem([IO.File]::ReadAllText($public))
+                if ([Convert]::ToBase64String($verifier.ExportSubjectPublicKeyInfo()) -cne [Convert]::ToBase64String($rsa.ExportSubjectPublicKeyInfo())) {
+                    throw "Mismatched authentication key pair: $name"
+                }
+            } finally { $verifier.Dispose() }
+        } else {
+            $writes[$public] = $rsa.ExportSubjectPublicKeyInfoPem() + "`n"
+        }
+    } finally { $rsa.Dispose() }
+}
+foreach ($entry in $writes.GetEnumerator()) {
+    $temporary = $entry.Key + '.' + [Guid]::NewGuid().ToString('N') + '.tmp'
+    try {
+        $options = [IO.FileStreamOptions]::new()
+        $options.Mode = [IO.FileMode]::CreateNew
+        $options.Access = [IO.FileAccess]::Write
+        if (-not $IsWindows) { $options.UnixCreateMode = [IO.UnixFileMode]::UserRead -bor [IO.UnixFileMode]::UserWrite }
+        if (-not $IsWindows -and $entry.Key.EndsWith('-public.pem')) {
+            $options.UnixCreateMode = $options.UnixCreateMode -bor [IO.UnixFileMode]::GroupRead -bor [IO.UnixFileMode]::OtherRead
+        }
+        $stream = [IO.File]::Open($temporary, $options)
+        try {
+            $bytes = [Text.Encoding]::UTF8.GetBytes($entry.Value)
+            $stream.Write($bytes)
+            $stream.Flush($true)
+        } finally { $stream.Dispose() }
+        if (-not $IsWindows -and $entry.Key.EndsWith('-public.pem')) {
+            [IO.File]::SetUnixFileMode($temporary, [IO.UnixFileMode]::UserRead -bor [IO.UnixFileMode]::UserWrite -bor [IO.UnixFileMode]::GroupRead -bor [IO.UnixFileMode]::OtherRead)
+        }
+        [IO.File]::Move($temporary, $entry.Key, [bool]$Force)
+    } finally {
+        if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary }
     }
 }
-
-foreach ($target in $targets) {
-    if (-not (Test-Path -LiteralPath $target -PathType Leaf)) {
-        throw "Expected key was not generated: $target"
-    }
-}
-
-Write-Output "Generated four isolated RSA key pairs under: $OutputDirectory"
-Write-Output 'Keep all *-private.pem files outside Git. The Java token-exchange boundary receives only agent-service-public.pem.'
+Write-Output "Authentication keys ready under: $OutputDirectory"

@@ -1,4 +1,4 @@
-#requires -Version 7.0
+#requires -Version 7.2
 [CmdletBinding()]
 param(
     [ValidateSet('Start','Status','Stop','Restart','Build','Logs','Config')][string]$Action = 'Start',
@@ -13,6 +13,7 @@ $demoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $ProjectName = 'hotshop'
 $demoDir = Join-Path $demoRoot ".local/keys/$ProjectName"
 $demoEnv = Join-Path $demoDir '.env.demo'
+$bootstrapFile = Join-Path $demoDir 'bootstrap-pending'
 function Invoke-Docker([string[]]$Arguments) {
     & docker @Arguments
     if ($LASTEXITCODE -ne 0) { throw "Docker command failed ($LASTEXITCODE). Resources retained; project: $ProjectName" }
@@ -84,8 +85,9 @@ try {
             WEB_DEMO_IMAGE="hotshop-web:local"; WEB_DEMO_PORT="$WebPort"
         }
         New-Item -ItemType Directory -Force -Path $demoDir | Out-Null
-        $values.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" } | Set-Content -LiteralPath $demoEnv -Encoding utf8
-        & (Join-Path $PSScriptRoot 'generate-auth-keys.ps1') -OutputDirectory $demoDir
+        Set-Content -LiteralPath $bootstrapFile -Value 'keys' -Encoding utf8
+        $values.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" } | Set-Content -LiteralPath "$demoEnv.tmp" -Encoding utf8
+        [IO.File]::Move("$demoEnv.tmp", $demoEnv, $false)
     }
     if (-not (Test-Path -LiteralPath $demoEnv)) { throw 'No owned demo configuration found.' }
     # Explicit env file values win over inherited shell values; restore shell after execution.
@@ -100,6 +102,17 @@ try {
     if ($Action -eq 'Logs') { Invoke-Docker ($compose + @('logs','--tail','100')); return }
     Invoke-Docker ($compose + @('config','--quiet'))
     if ($Action -eq 'Config') { return }
+    if ((Test-Path -LiteralPath $bootstrapFile) -and (Get-Content -Raw $bootstrapFile).Trim() -notin @('keys','database')) {
+        throw 'Invalid bootstrap state; resources retained.'
+    }
+    if ($Action -ne 'Start' -and (Test-Path -LiteralPath $bootstrapFile) -and (Get-Content -Raw $bootstrapFile).Trim() -eq 'keys') {
+        throw 'Incomplete bootstrap keys; run Start to resume.'
+    }
+    if ($Action -eq 'Start' -and (Test-Path -LiteralPath $bootstrapFile) -and (Get-Content -Raw $bootstrapFile).Trim() -eq 'keys') {
+        & (Join-Path $PSScriptRoot 'generate-auth-keys.ps1') -OutputDirectory $demoDir -Resume
+        Set-Content -LiteralPath "$bootstrapFile.tmp" -Value 'database' -Encoding utf8
+        [IO.File]::Move("$bootstrapFile.tmp", $bootstrapFile, $true)
+    }
     if ($env:COMPOSE_PROJECT_NAME -cne 'hotshop') { throw 'Local project must be hotshop.' }
     $images = [ordered]@{
         'admin-service'='hotshop-admin:local'; 'portal-service'='hotshop-portal:local'
@@ -158,27 +171,31 @@ try {
         } catch { Start-Sleep -Seconds 2 }
     } while (-not $ready -and [DateTime]::UtcNow -lt $deadline)
     if (-not $ready) { throw "Readiness timeout. Use Status and docker compose logs with project $ProjectName." }
-    $counts = @(Invoke-Docker ($compose + @('exec','-T','mysql','sh','-lc',
-        'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql --batch --skip-column-names --protocol=TCP --host=127.0.0.1 --user=root --database="$MYSQL_DATABASE" --execute="SELECT (SELECT COUNT(*) FROM app_user)+(SELECT COUNT(*) FROM catalog_product)+(SELECT COUNT(*) FROM sales_order)"')))
-    if ($counts.Count -ne 1 -or $counts[0] -notmatch '^\d+$') { throw 'Cannot determine database initialization state.' }
-    $initializationPending = Join-Path $demoDir 'initialization-pending'
-    if ([long]$counts[0] -eq 0) {
-        Set-Content -LiteralPath $initializationPending -Value 'pending' -Encoding utf8
-        $seed = Get-Content (Join-Path $demoRoot 'web/scripts/task-13-e2e-seed.sql') -Raw -Encoding utf8
-        # Keep the live demonstration window open for one day from first seed.
-        $seed = $seed.Replace('INTERVAL 30 MINUTE','INTERVAL 1 DAY')
-        $seed += "`n" + (Get-Content (Join-Path $demoRoot 'database/data/demo-catalog.sql') -Raw -Encoding utf8)
-        $seed = "START TRANSACTION;`n$seed`nCOMMIT;"
-        $seed | & docker @compose exec -T mysql sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql --default-character-set=utf8mb4 --protocol=TCP --host=127.0.0.1 --user=root --database="$MYSQL_DATABASE"'
-        if ($LASTEXITCODE -ne 0) { throw 'Demo seed failed; resources retained.' }
-    }
-    if (Test-Path -LiteralPath $initializationPending) {
+    if (Test-Path -LiteralPath $bootstrapFile) {
+        if ((Get-Content -Raw $bootstrapFile).Trim() -ne 'database') { throw 'Incomplete bootstrap keys; run Start to resume.' }
+        # The receipt commits with the seed. A crash after COMMIT must never seed again.
+        $receipt = @(Invoke-Docker ($compose + @('exec','-T','mysql','sh','-lc',
+            'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql --batch --skip-column-names --protocol=TCP --host=127.0.0.1 --user=root --database="$MYSQL_DATABASE" --execute="CREATE TABLE IF NOT EXISTS local_demo_initialization (id INT PRIMARY KEY) ENGINE=InnoDB; SELECT COUNT(*) FROM local_demo_initialization WHERE id=1"')))
+        if ($receipt.Count -ne 1 -or $receipt[0] -notmatch '^[01]$') { throw 'Cannot determine bootstrap receipt.' }
+        if ($receipt[0] -eq '0') {
+            $counts = @(Invoke-Docker ($compose + @('exec','-T','mysql','sh','-lc',
+            'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql --batch --skip-column-names --protocol=TCP --host=127.0.0.1 --user=root --database="$MYSQL_DATABASE" --execute="SELECT (SELECT COUNT(*) FROM app_user)+(SELECT COUNT(*) FROM catalog_product)+(SELECT COUNT(*) FROM sales_order)"')))
+            if ($counts.Count -ne 1 -or $counts[0] -notmatch '^\d+$') { throw 'Cannot determine database initialization state.' }
+            if ([long]$counts[0] -ne 0) { throw 'Bootstrap found existing business data; refusing to seed.' }
+            $seed = Get-Content (Join-Path $demoRoot 'web/scripts/task-13-e2e-seed.sql') -Raw -Encoding utf8
+            # Keep the live demonstration window open for one day from first seed.
+            $seed = $seed.Replace('INTERVAL 30 MINUTE','INTERVAL 1 DAY')
+            $seed += "`n" + (Get-Content (Join-Path $demoRoot 'database/data/demo-catalog.sql') -Raw -Encoding utf8)
+            $seed = "START TRANSACTION;`n$seed`nINSERT INTO local_demo_initialization (id) VALUES (1);`nCOMMIT;"
+            $seed | & docker @compose exec -T mysql sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql --default-character-set=utf8mb4 --protocol=TCP --host=127.0.0.1 --user=root --database="$MYSQL_DATABASE"'
+            if ($LASTEXITCODE -ne 0) { throw 'Demo seed failed; resources retained.' }
+        }
         Invoke-Docker ($compose + @('exec','-T','agent-service','python','-m','hotshop_agent.index_cli','rebuild'))
         $admin = Invoke-RestMethod "$demoUrl/admin/api/v1/auth/login" -Method Post -ContentType 'application/json' -Body (@{username='task13-admin';password='Task13Admin!2026'} | ConvertTo-Json)
         foreach ($activity in @(913001,913002,913003)) {
             Invoke-RestMethod "$demoUrl/admin/api/v1/flash-sales/$activity/load" -Method Post -ContentType 'application/json' -Headers @{Authorization="Bearer $($admin.accessToken)"} -Body '{"reason":"Local demo initialization"}' | Out-Null
         }
-        Remove-Item -LiteralPath $initializationPending
+        Remove-Item -LiteralPath $bootstrapFile
     }
     Write-Host "Ready: $demoUrl"
     Write-Host 'Admin: task13-admin / Task13Admin!2026 (public local demo account). Create your User account via the registration screen.'

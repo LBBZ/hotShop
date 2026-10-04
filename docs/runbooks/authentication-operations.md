@@ -24,7 +24,7 @@ HTTP，必须新增独立 Service Identity issuer/audience/key set，不能复�
 
 ## 2. 可重复本地密钥生成
 
-脚本使用 Docker 中固定的 OpenSSL 镜像，不要求宿主安装 OpenSSL，也不要求复制粘贴 PEM：
+脚本使用 PowerShell 7.2+ 的原生 .NET RSA 实现，不需要 Docker 或 OpenSSL：
 
 ```powershell
 .\script\generate-auth-keys.ps1

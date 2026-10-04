@@ -210,9 +210,7 @@ try {
     }
 
     if (-not $OwnershipTestMode) {
-    & (Join-Path $PSScriptRoot "../generate-auth-keys.ps1") -OutputDirectory $keyDirectory `
-        -DockerOutputDirectory $dockerKeyDirectory
-    if ($LASTEXITCODE -ne 0) { throw "TASK-19 key generation failed" }
+    & (Join-Path $PSScriptRoot "../generate-auth-keys.ps1") -OutputDirectory $keyDirectory
     [void](Invoke-Compose --profile app --profile agent config --quiet)
     $startup = Invoke-Task19Docker -Arguments @(
         "compose", "-p", $ProjectName, "--env-file", (Join-Path $Task19Root ".env.example"),

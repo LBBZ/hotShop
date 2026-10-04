@@ -9,7 +9,7 @@
 准备以下工具，并启动 Docker：
 
 - Git，用于获取项目。
-- [PowerShell 7+](https://learn.microsoft.com/powershell/scripting/install/install-powershell)，Windows、macOS 和 Linux 均可安装；启动命令为 `pwsh`。
+- [PowerShell 7.2+](https://learn.microsoft.com/powershell/scripting/install/install-powershell)，Windows、macOS 和 Linux 均可安装；启动命令为 `pwsh`。
 - [Docker Engine / Docker Desktop](https://docs.docker.com/get-started/get-docker/)，使用 Linux 容器，并确保 Docker Compose 为 2.24.4 或更新版本。
 
 在终端获取项目并检查环境：
@@ -28,7 +28,7 @@ docker compose version
 pwsh -NoProfile -File ./script/demo.ps1 -Action Start
 ```
 
-首次运行需要联网下载镜像和依赖、构建应用并初始化数据，耗时取决于网络、机器和缓存。等待终端显示 `Ready:` 后，打开 **http://127.0.0.1:18080**。项目名固定为 `hotshop`；再次执行 Start 会复用配置、容器和数据，只构建缺失或构建输入已变化的服务。
+首次运行需要联网下载镜像和依赖、构建应用并初始化数据，耗时取决于网络、机器和缓存。等待终端显示 `Ready:` 后，打开 **http://127.0.0.1:18080**。首次初始化中断后，再次 Start 会保留已生成的密钥并继续；种子数据与完成凭据在同一事务提交，后续索引失败不会重灌数据。已有环境即使业务表为空也不会自动填充。项目名固定为 `hotshop`；再次执行 Start 会复用配置、容器和数据，只构建缺失或构建输入已变化的服务。
 
 首次启动时端口已占用，可在启动命令后追加 `-WebPort 18081`，随后访问相应端口。
 

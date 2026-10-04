@@ -4,6 +4,7 @@
 
 - Maintain exactly one local Compose project: `hotshop`. Each service has its own container. Use `pwsh -NoProfile -File script/demo.ps1` for its lifecycle.
 - Reuse `.local/keys/hotshop/.env.demo`, existing authentication keys and data volumes. Never reseed an existing database or regenerate credentials on Start.
+- Generate authentication keys with the host PowerShell/.NET implementation. Resume missing key material only during an explicitly recorded first initialization; never launch a key-generation container.
 - Application image tags are fixed: `hotshop-admin:local`, `hotshop-portal:local`, `hotshop-task:local`, `hotshop-agent:local`, `hotshop-web:local`, `hotshop-rabbitmq:local`. Do not create task, date, branch, worktree or verification variants, duplicate environments or a second frontend Compose project.
 - Start builds only missing images or services whose build inputs changed. Rebuild the affected service under the same tag. Remove superseded project image IDs only after no container references them.
 - Run local checks with installed tools. Disposable upstream tool containers may use `--rm`; they must not build project test images or create another application environment. Prefer mocks for lifecycle tests.

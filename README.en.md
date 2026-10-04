@@ -27,7 +27,7 @@ The interface supports mobile layouts, keyboard navigation, and reduced motion. 
 
 ## Quick start
 
-Install [Git](https://git-scm.com/downloads), [Docker](https://docs.docker.com/get-started/get-docker/) with Linux containers and Compose **2.24.4+**, and [PowerShell 7+](https://learn.microsoft.com/powershell/scripting/install/installing-powershell). Start Docker, then run:
+Install [Git](https://git-scm.com/downloads), [Docker](https://docs.docker.com/get-started/get-docker/) with Linux containers and Compose **2.24.4+**, and [PowerShell 7.2+](https://learn.microsoft.com/powershell/scripting/install/installing-powershell). Start Docker, then run:
 
 ```powershell
 git clone https://github.com/LBBZ/hotShop.git

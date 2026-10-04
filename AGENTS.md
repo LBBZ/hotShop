@@ -1,5 +1,10 @@
 # Working in HotShop
 
+## Workspace
+
+- Keep exactly one HotShop project directory: the existing repository root. Work on branches in this checkout; do not create additional Git worktrees, project clones, or sibling review, task, merge or backup directories.
+- Keep necessary local evidence and backups under the ignored `.local/verification/` directory inside this repository; active credentials stay in `.local/keys/`. Preserve unique files before removing obsolete directories; disposable build outputs and dependency caches can be deleted.
+
 ## Local Docker environment
 
 - Maintain exactly one local Compose project: `hotshop`. Each service has its own container. Use `pwsh -NoProfile -File script/demo.ps1` for its lifecycle.

@@ -29,31 +29,21 @@ DeepSeek 请求显式携带 `thinking={"type":"disabled"}`，返回中的 `reaso
 pwsh -NoProfile -File ./script/demo.ps1 -Action Start
 ```
 
-启动 Java 应用和 Agent 使用两个 profile：
-
-```powershell
-pwsh -NoProfile -File ./script/demo.ps1 -Action Start
-```
-
-只启动 Agent 与其状态/知识依赖（用户工具仍需要 Java 后端）：
-
-```powershell
-pwsh -NoProfile -File ./script/demo.ps1 -Action Start
-```
+启动入口统一运行 Java、Agent 和所需基础设施。配置与密钥复用 `.local/keys/hotshop/`，模型及检索设置修改该目录中的 `.env.demo`。
 
 首次启动或知识变更后执行原子索引：
 
 ```powershell
-docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent --profile agent exec -T agent-service python -m hotshop_agent.index_cli validate
-docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent --profile agent exec -T agent-service python -m hotshop_agent.index_cli rebuild
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent exec -T agent-service python -m hotshop_agent.index_cli validate
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent exec -T agent-service python -m hotshop_agent.index_cli rebuild
 ```
 
 健康检查：
 
 ```powershell
-Invoke-RestMethod http://localhost:8090/health/live
-Invoke-RestMethod http://localhost:8090/health/ready
-Invoke-WebRequest http://localhost:8090/metrics
+Invoke-RestMethod http://127.0.0.1:18080/agent-api/health/live
+Invoke-RestMethod http://127.0.0.1:18080/agent-api/health/ready
+Invoke-WebRequest http://127.0.0.1:18080/agent-api/metrics
 ```
 
 `/health/live` 仅证明进程事件循环存活。`/health/ready` 只检查状态存储；Redis 不可用时返回 503。

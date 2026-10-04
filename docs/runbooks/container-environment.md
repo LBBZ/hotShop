@@ -27,12 +27,14 @@ Stop 不删除资源。清理前逐项核对项目标签、镜像 ID 和容器�
 
 ## 3. 服务用途与端口
 
-| 服务 | 宿主机默认端口 | 数据策略 | 持久卷 |
+本地后端端口由 Docker 分配，使用 `script/demo.ps1 -Action Status` 查询实际 loopback 地址。下表列出容器内部端口。
+
+| 服务 | 容器内部端口 | 数据策略 | 持久卷 |
 | --- | --- | --- | --- |
-| MySQL 8.4.11 | `4306` | `utf8mb4`、UTC (`+00:00`)、慢查询日志、Performance Schema | `mysql_data` |
-| `redis-cache` | `7379` | 仅 DB 0，`allkeys-lfu`，RDB，可重建 | `redis_cache_data` |
-| `redis-seckill` | `7380` | 仅 DB 0，`noeviction`，AOF everysec + RDB | `redis_seckill_data` |
-| RabbitMQ Management | `6672` / `15673` | 官方 management 镜像；不安装 delayed-message 插件 | `rabbitmq_data` |
+| MySQL 8.4.11 | `3306` | `utf8mb4`、UTC (`+00:00`)、慢查询日志、Performance Schema | `mysql_data` |
+| `redis-cache` | `6379` | 仅 DB 0，`allkeys-lfu`，RDB，可重建 | `redis_cache_data` |
+| `redis-seckill` | `6379` | 仅 DB 0，`noeviction`，AOF everysec + RDB | `redis_seckill_data` |
+| RabbitMQ Management | `5672` / `15672` | 官方 management 镜像；不安装 delayed-message 插件 | `rabbitmq_data` |
 
 MySQL 默认限制为 1 GiB/1.5 CPU，两个 Redis 和 RabbitMQ 也有内存上限；可在 env 文件中覆盖。
 MySQL 不再挂载 `/docker-entrypoint-initdb.d` 结构脚本。`database-migrator` 只读挂载生产迁移目录，
@@ -155,8 +157,8 @@ docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-com
 普通停止与恢复不会删除持久卷：
 
 ```powershell
-docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent stop
-docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent up -d --wait
+pwsh -NoProfile -File ./script/demo.ps1 -Action Stop
+pwsh -NoProfile -File ./script/demo.ps1 -Action Start
 ```
 
 持久性与隔离验证优先运行版本化脚本，并查看对应报告；不要对共享数据卷直接运行初始化或重置命令。

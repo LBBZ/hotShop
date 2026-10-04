@@ -21,16 +21,13 @@ empty表示请求成功但无合格候选；unavailable按embedding_failure、qd
 ## Start and index
 
 The default Qdrant image is `qdrant/qdrant:v1.19.1` (overridable through `QDRANT_IMAGE`). It has its own persistent volume, health check, CPU/memory
-limits, configurable host port, and the existing `hotShop-network`. Agent containers use
-`http://qdrant:6333`; host tools may use `QDRANT_PORT`. Run these commands from the repository root
-after preparing the local auth keys described in [Agent setup](agent-service.md). The isolated
-[demo entry point](container-environment.md) handles keys, startup and the initial index automatically.
+limits and the existing `hotShop-network`. Agent containers use `http://qdrant:6333`. Use `script/demo.ps1 -Action Status` to discover the loopback port assigned to Qdrant. The [local entry point](container-environment.md) handles authentication keys, startup and the initial index in the single `hotshop` environment.
 
 ```powershell
 pwsh -NoProfile -File ./script/demo.ps1 -Action Start
-docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent --profile agent exec -T agent-service python -m hotshop_agent.index_cli validate
-docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent --profile agent exec -T agent-service python -m hotshop_agent.index_cli rebuild
-docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent --profile agent exec -T agent-service python -m hotshop_agent.index_cli status
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent exec -T agent-service python -m hotshop_agent.index_cli validate
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent exec -T agent-service python -m hotshop_agent.index_cli rebuild
+docker compose -p hotshop --env-file .local/keys/hotshop/.env.demo -f docker-compose.yml -f docker-compose.demo.yml --profile app --profile agent exec -T agent-service python -m hotshop_agent.index_cli status
 ```
 
 `validate` needs no Qdrant call. `rebuild` is idempotent and switches the alias only after exact

@@ -1,0 +1,49 @@
+{
+  "date": "2026-10-04",
+  "baselineCommit": "827f493e4ece255e6f2a44c7ce8d45fb593e7218",
+  "implementationCommit": "763f9d3f1ecc68fcc91d8288dec419452efd5809",
+  "configuration": {
+    "defaultReadBlock": "1s",
+    "defaultCommandTimeout": "2s",
+    "minimumReadBlock": "1ms",
+    "minimumResponseMargin": "1s",
+    "timeoutSource": "actual LettuceConnectionFactory client configuration",
+    "legacyExplicitTwoSecondPair": "rejected at consumer startup"
+  },
+  "baselineWithAddedRegressionTests": {
+    "tests": 13,
+    "passed": 6,
+    "failures": 7,
+    "errors": 0,
+    "skipped": 0,
+    "finishedAt": "2026-10-03T23:46:58Z",
+    "observedFailuresAfterTwoIdlePolls": 2
+  },
+  "verification": {
+    "tests": 48,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "finishedAt": "2026-10-03T23:51:14Z",
+    "suites": {
+      "SeckillOrderPollingConfigurationTest": 10,
+      "ReservationStreamPollingContainerTest": 3,
+      "SeckillOrderReliabilityContainerTest": 31,
+      "ReservationStreamLagTest": 3,
+      "ReservationStreamConsumerObservationTest": 1
+    },
+    "transportFixtures": "real Redis with mocked order processing and reservation proof services",
+    "businessRegressionFixtures": "existing real MySQL and Redis reliability tests",
+    "composeDefaults": {"readBlock": "1s", "commandTimeout": "2s"}
+  },
+  "localEvidenceDirectory": ".local/verification/stream-poll-timeout-20261004/",
+  "stressTestsRun": false,
+  "demoServicesStarted": false,
+  "demoContainersRedeployed": false,
+  "existingVolumesRemoved": false,
+  "limitations": [
+    "The response margin is configuration policy, not a guarantee against outages or long pauses.",
+    "Existing demo containers retain their prior images and settings until recreated.",
+    "No throughput, capacity or long-duration workload was measured."
+  ]
+}

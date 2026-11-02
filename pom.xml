@@ -6,7 +6,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.1.1</version>
+        <version>4.1.2</version>
         <relativePath/>
     </parent>
 
@@ -47,7 +47,7 @@
         <rabbit-amqp-client.version>5.36.0</rabbit-amqp-client.version>
         <mybatis-spring-boot.version>4.1.0</mybatis-spring-boot.version>
         <pagehelper-spring-boot.version>4.1.1</pagehelper-spring-boot.version>
-        <springdoc-openapi.version>3.1.1</springdoc-openapi.version>
+        <springdoc-openapi.version>3.2.0</springdoc-openapi.version>
         <jackson-bom.version>3.1.7</jackson-bom.version>
         <!-- JJWT and Swagger internals retain a separate Jackson 2 runtime. -->
         <jackson-2-bom.version>2.21.7</jackson-2-bom.version>
@@ -61,7 +61,7 @@
         <maven-failsafe-plugin.version>3.5.4</maven-failsafe-plugin.version>
         <jacoco-maven-plugin.version>0.8.13</jacoco-maven-plugin.version>
         <maven-resources-plugin.version>3.3.1</maven-resources-plugin.version>
-        <maven-surefire-plugin.version>3.5.4</maven-surefire-plugin.version>
+        <maven-surefire-plugin.version>3.6.1</maven-surefire-plugin.version>
     </properties>
 
     <dependencyManagement>
